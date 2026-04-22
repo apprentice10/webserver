@@ -13,6 +13,7 @@ Responsabilità:
 - Scrittura row_log e audit_log
 """
 
+import re
 import json
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
@@ -44,6 +45,26 @@ SYSTEM_COLUMN_DEFS = [
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _slugify(text: str) -> str:
+    text = text.lower().strip()
+    text = re.sub(r"[^\w\s-]", "", text)
+    text = re.sub(r"[\s_]+", "-", text)
+    text = re.sub(r"-+", "-", text)
+    return text.strip("-") or "tool"
+
+
+def _unique_slug(db: Session, project_id: int, base_slug: str) -> str:
+    slug = base_slug
+    counter = 1
+    while db.query(Tool).filter(
+        Tool.project_id == project_id,
+        Tool.slug == slug
+    ).first():
+        counter += 1
+        slug = f"{base_slug}-{counter}"
+    return slug
 
 
 def _format_log_entry(rev: str, field: str, old_val, new_val) -> str:
@@ -151,21 +172,26 @@ def create_tool(
     db: Session,
     project_id: int,
     name: str,
-    slug: str,
+    slug: str = None,
     default_columns: list[dict] = None,
-    icon: str = None
+    icon: str = None,
+    tool_type: str = None
 ) -> Tool:
     """
     Crea un nuovo tool per il progetto con le colonne di sistema
     e le colonne default fornite.
 
-    default_columns: lista di dict con keys:
-        name, slug, col_type, width, position
+    Se slug non è fornito viene auto-generato dal nome con suffisso
+    numerico per garantire unicità nel progetto.
     """
+    if not slug:
+        slug = _unique_slug(db, project_id, _slugify(name))
+
     tool = Tool(
         project_id=project_id,
         name=name,
         slug=slug,
+        tool_type=tool_type,
         current_rev="A",
         icon=icon or "📄"
     )

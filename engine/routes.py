@@ -35,6 +35,7 @@ import sqlalchemy
 
 from database import get_db
 from engine import service
+from engine.catalog import TOOL_CATALOG
 
 router = APIRouter(prefix="/api/tools", tags=["engine"])
 
@@ -45,7 +46,8 @@ router = APIRouter(prefix="/api/tools", tags=["engine"])
 
 class ToolCreate(BaseModel):
     name:            str
-    slug:            str
+    slug:            Optional[str] = None
+    tool_type:       Optional[str] = None
     icon:            Optional[str] = "📄"
     default_columns: Optional[list[dict]] = None
 
@@ -63,6 +65,7 @@ class ToolResponse(BaseModel):
     project_id:  int
     name:        str
     slug:        str
+    tool_type:   Optional[str]
     current_rev: str
     note:        Optional[str]
     icon:        Optional[str]
@@ -124,6 +127,16 @@ class SqlQuery(BaseModel):
 
 
 # ============================================================
+# ROUTE — CATALOGO TIPI TOOL
+# ============================================================
+
+@router.get("/types")
+def get_tool_types():
+    """Restituisce il catalogo dei tipi di tool disponibili."""
+    return TOOL_CATALOG
+
+
+# ============================================================
 # ROUTE — TOOL
 # ============================================================
 
@@ -141,6 +154,7 @@ def create_tool(project_id: int, data: ToolCreate, db: Session = Depends(get_db)
         project_id=project_id,
         name=data.name,
         slug=data.slug,
+        tool_type=data.tool_type,
         icon=data.icon,
         default_columns=data.default_columns
     )

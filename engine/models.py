@@ -39,6 +39,9 @@ class Tool(Base):
     # Slug URL-safe (es. "instrument-list", "cable-list")
     slug       = Column(String(200), nullable=False)
 
+    # Tipo di tool — slug del catalogo (es. "instrument-list")
+    tool_type  = Column(String(100), nullable=True)
+
     # Configurazione Power Query in JSON
     # Es: {"source_tool_id": 2, "filters": [...], "joins": [...]}
     query_config = Column(Text, nullable=True)

@@ -176,6 +176,95 @@ html, body {
     margin-top: auto;
 }
 
+.sidebar-actions {
+    padding: 8px 12px 4px;
+}
+
+.sidebar-new-btn {
+    width: 100%;
+    padding: 7px 10px;
+    background: transparent;
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius);
+    color: var(--color-text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all var(--transition);
+    text-align: left;
+    font-family: var(--font-main);
+}
+
+.sidebar-new-btn:hover:not(.disabled) {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    background: rgba(233, 69, 96, 0.06);
+}
+
+.sidebar-new-btn.disabled {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+.sidebar-empty {
+    padding: 10px 16px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+/* ============================================================
+   CATALOG TOOL MODAL
+   ============================================================ */
+.modal-lg {
+    max-width: 580px;
+}
+
+.catalog-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+}
+
+.catalog-card {
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    padding: 18px 14px 14px;
+    cursor: pointer;
+    transition: border-color var(--transition), background var(--transition);
+    text-align: center;
+    background: var(--color-bg);
+    user-select: none;
+}
+
+.catalog-card:hover {
+    border-color: var(--color-accent);
+    background: rgba(233, 69, 96, 0.05);
+}
+
+.catalog-card.selected {
+    border-color: var(--color-accent);
+    background: rgba(233, 69, 96, 0.10);
+}
+
+.catalog-card-icon {
+    font-size: 30px;
+    margin-bottom: 8px;
+    line-height: 1;
+}
+
+.catalog-card-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: 5px;
+}
+
+.catalog-card-desc {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    line-height: 1.4;
+}
+
 /* ============================================================
    AREA CENTRALE
    ============================================================ */

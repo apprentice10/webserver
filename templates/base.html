@@ -31,28 +31,13 @@
             <div class="sidebar-section">
                 <div class="sidebar-section-title">TOOLS</div>
                 <nav class="sidebar-nav" id="tools-nav">
-                    <a href="#" class="sidebar-item disabled"
-                       data-tool="instrument-list"
-                       id="sidebar-tool-instrument-list"
-                       onclick="openTool('instrument-list')">
-                        <span class="sidebar-icon" id="sidebar-icon-instrument-list">📋</span>
-                        <span id="sidebar-name-instrument-list">Instrument List</span>
-                    </a>
-                    <a href="#" class="sidebar-item disabled"
-                       data-tool="io-list"
-                       id="sidebar-tool-io-list"
-                       onclick="openTool('io-list')">
-                        <span class="sidebar-icon" id="sidebar-icon-io-list">🔌</span>
-                        <span id="sidebar-name-io-list">I/O List</span>
-                    </a>
-                    <a href="#" class="sidebar-item disabled"
-                       data-tool="cable-list"
-                       id="sidebar-tool-cable-list"
-                       onclick="openTool('cable-list')">
-                        <span class="sidebar-icon" id="sidebar-icon-cable-list">🔧</span>
-                        <span id="sidebar-name-cable-list">Cable List</span>
-                    </a>
+                    <!-- Popolato dinamicamente da main.js -->
                 </nav>
+                <div class="sidebar-actions">
+                    <button class="sidebar-new-btn disabled" id="btn-new-tool" onclick="newTool()">
+                        + Nuovo Tool
+                    </button>
+                </div>
             </div>
 
             <div class="sidebar-section sidebar-bottom">
@@ -114,6 +99,33 @@
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeModal('modal-open-project')">Chiudi</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL NUOVO TOOL -->
+<div class="modal-overlay" id="modal-new-tool">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <h2>Nuovo Tool</h2>
+            <button class="modal-close" onclick="closeModal('modal-new-tool')">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Tipo di tool</label>
+                <div class="catalog-grid" id="catalog-grid">
+                    <p class="text-muted">Caricamento...</p>
+                </div>
+            </div>
+            <div class="form-group" id="tool-name-group" style="display:none">
+                <label for="input-tool-name">Nome</label>
+                <input type="text" id="input-tool-name" placeholder="Es. Strumenti Fase 1"
+                       onkeydown="if(event.key==='Enter') submitNewTool()">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('modal-new-tool')">Annulla</button>
+            <button class="btn btn-primary" id="btn-create-tool" onclick="submitNewTool()" disabled>Crea</button>
         </div>
     </div>
 </div>

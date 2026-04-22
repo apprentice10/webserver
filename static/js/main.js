@@ -198,37 +198,54 @@ function setActiveProject(project) {
 function clearActiveProject() {
     App.currentProject = null;
     document.getElementById("project-name").textContent = "Nessun progetto aperto";
-    document.querySelectorAll(".sidebar-item[data-tool]")
-        .forEach(el => el.classList.add("disabled"));
+    const nav = document.getElementById("tools-nav");
+    if (nav) nav.innerHTML = "";
+    const btn = document.getElementById("btn-new-tool");
+    if (btn) btn.classList.add("disabled");
 }
 
 /**
- * Applica il progetto all'UI — chiamato sia al set
- * che al ripristino da sessionStorage al cambio pagina.
- * Carica anche i tool dal DB per aggiornare icone e nomi nella sidebar.
+ * Applica il progetto all'UI: aggiorna nome, abilita pulsanti
+ * e popola la sidebar con i tool del progetto.
  */
 async function _applyProjectToUI(project) {
     const nameEl = document.getElementById("project-name");
     if (nameEl) nameEl.textContent = project.name;
 
-    document.querySelectorAll(".sidebar-item.disabled")
-        .forEach(el => el.classList.remove("disabled"));
-
-    const _defaultIcons = { "instrument-list": "📋", "io-list": "🔌", "cable-list": "🔧" };
+    const btn = document.getElementById("btn-new-tool");
+    if (btn) btn.classList.remove("disabled");
 
     try {
         const tools = await fetch(`/api/tools/project/${project.id}`).then(r => r.json());
-        tools.forEach(tool => {
-            const iconEl = document.getElementById(`sidebar-icon-${tool.slug}`);
-            const labelEl = document.getElementById(`sidebar-name-${tool.slug}`);
-            if (iconEl) iconEl.textContent = (tool.icon && tool.icon !== "📄")
-                ? tool.icon
-                : (_defaultIcons[tool.slug] || "📄");
-            if (labelEl) labelEl.textContent = tool.name;
-        });
+        _renderSidebarTools(tools, project.id);
     } catch (_) {
-        // Se il fetch fallisce, la sidebar mantiene i valori hardcoded
+        // Se il fetch fallisce la sidebar rimane vuota
     }
+}
+
+/**
+ * Genera dinamicamente i link nella sidebar per ogni tool del progetto.
+ * Se TOOL_ID è definito (pagina tool view) marca il tool corrente come attivo.
+ */
+function _renderSidebarTools(tools, projectId) {
+    const nav = document.getElementById("tools-nav");
+    if (!nav) return;
+
+    if (tools.length === 0) {
+        nav.innerHTML = '<div class="sidebar-empty">Nessun tool — creane uno!</div>';
+        return;
+    }
+
+    const currentToolId = (typeof TOOL_ID !== "undefined") ? TOOL_ID : null;
+
+    nav.innerHTML = tools.map(tool => `
+        <a href="#" class="sidebar-item${tool.id === currentToolId ? " active" : ""}"
+           data-tool-id="${tool.id}"
+           onclick="openToolById(${tool.id}, ${projectId}); return false;">
+            <span class="sidebar-icon">${escapeHtml(tool.icon || "📄")}</span>
+            <span>${escapeHtml(tool.name)}</span>
+        </a>
+    `).join("");
 }
 
 
@@ -236,71 +253,128 @@ async function _applyProjectToUI(project) {
 // NAVIGAZIONE TOOL
 // ============================================================
 
-async function openTool(toolName) {
+function openToolById(toolId, projectId) {
+    window.location.href = `/tool/${projectId}/${toolId}`;
+}
+
+
+// ============================================================
+// NUOVO TOOL — modal catalogo
+// ============================================================
+
+let _selectedCatalogType = null;
+
+async function newTool() {
     const project = App.currentProject;
-    if (!project) {
-        alert("Apri un progetto prima di accedere ai tool.");
+    if (!project) return;
+
+    _selectedCatalogType = null;
+
+    // Reset modal
+    const nameGroup = document.getElementById("tool-name-group");
+    if (nameGroup) nameGroup.style.display = "none";
+    const createBtn = document.getElementById("btn-create-tool");
+    if (createBtn) createBtn.disabled = true;
+    const nameInput = document.getElementById("input-tool-name");
+    if (nameInput) nameInput.value = "";
+
+    openModal("modal-new-tool");
+    await _loadToolCatalog();
+}
+
+async function _loadToolCatalog() {
+    const grid = document.getElementById("catalog-grid");
+    if (!grid) return;
+
+    grid.innerHTML = "<p class='text-muted'>Caricamento...</p>";
+
+    try {
+        const types = await fetch("/api/tools/types").then(r => r.json());
+
+        if (types.length === 0) {
+            grid.innerHTML = "<p class='text-muted'>Nessun tipo di tool disponibile.</p>";
+            return;
+        }
+
+        grid.innerHTML = types.map(t => `
+            <div class="catalog-card" data-type-slug="${escapeHtml(t.type_slug)}"
+                 onclick="selectCatalogType('${escapeHtml(t.type_slug)}', '${escapeHtml(t.name)}', '${escapeHtml(t.icon)}')">
+                <div class="catalog-card-icon">${escapeHtml(t.icon)}</div>
+                <div class="catalog-card-name">${escapeHtml(t.name)}</div>
+                <div class="catalog-card-desc">${escapeHtml(t.description)}</div>
+            </div>
+        `).join("");
+
+    } catch (err) {
+        grid.innerHTML = "<p class='text-error'>Errore caricamento catalogo.</p>";
+    }
+}
+
+function selectCatalogType(typeSlug, typeName, typeIcon) {
+    _selectedCatalogType = { typeSlug, typeName, typeIcon };
+
+    // Evidenzia la card selezionata
+    document.querySelectorAll(".catalog-card").forEach(el => {
+        el.classList.toggle("selected", el.dataset.typeSlug === typeSlug);
+    });
+
+    // Mostra il campo nome e pre-compila con il nome del tipo
+    const nameGroup = document.getElementById("tool-name-group");
+    if (nameGroup) nameGroup.style.display = "flex";
+
+    const nameInput = document.getElementById("input-tool-name");
+    if (nameInput && !nameInput.value) {
+        nameInput.value = typeName;
+    }
+    if (nameInput) nameInput.focus();
+
+    const createBtn = document.getElementById("btn-create-tool");
+    if (createBtn) createBtn.disabled = false;
+}
+
+async function submitNewTool() {
+    if (!_selectedCatalogType) return;
+
+    const project = App.currentProject;
+    if (!project) return;
+
+    const nameInput = document.getElementById("input-tool-name");
+    const name = nameInput ? nameInput.value.trim() : _selectedCatalogType.typeName;
+
+    if (!name) {
+        alert("Il nome del tool è obbligatorio.");
         return;
     }
 
-    const toolDefs = {
-        "instrument-list": { name: "Instrument List", slug: "instrument-list", icon: "📋" },
-        "io-list":         { name: "I/O List",        slug: "io-list",         icon: "🔌" },
-        "cable-list":      { name: "Cable List",       slug: "cable-list",      icon: "🔧" }
-    };
-
-    const toolDef = toolDefs[toolName];
-    if (!toolDef) return;
+    const createBtn = document.getElementById("btn-create-tool");
+    if (createBtn) createBtn.disabled = true;
 
     try {
-        // Cerca il tool esistente per questo progetto
-        const tools = await fetch(
-            `/api/tools/project/${project.id}`
-        ).then(r => r.json());
+        const response = await fetch(`/api/tools/project/${project.id}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                name,
+                tool_type: _selectedCatalogType.typeSlug,
+                icon: _selectedCatalogType.typeIcon
+            })
+        });
 
-        let tool = tools.find(t => t.slug === toolName);
-
-        // Se non esiste, lo crea con le colonne default
-        if (!tool) {
-            tool = await _createDefaultTool(project.id, toolDef);
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || "Errore creazione tool");
         }
 
-        // Naviga alla pagina del tool
+        const tool = await response.json();
+        closeModal("modal-new-tool");
+
+        // Naviga direttamente al nuovo tool
         window.location.href = `/tool/${project.id}/${tool.id}`;
 
     } catch (err) {
-        alert("Errore apertura tool: " + err.message);
+        alert("Errore: " + err.message);
+        if (createBtn) createBtn.disabled = false;
     }
-}
-
-async function _createDefaultTool(projectId, toolDef) {
-    // Importa le colonne default in base allo slug
-    const defaultColumns = await _getDefaultColumns(toolDef.slug);
-
-    const response = await fetch(`/api/tools/project/${projectId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            name: toolDef.name,
-            slug: toolDef.slug,
-            icon: toolDef.icon,
-            default_columns: defaultColumns
-        })
-    });
-
-    if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.detail || "Errore creazione tool");
-    }
-
-    return response.json();
-}
-
-async function _getDefaultColumns(slug) {
-    // Le colonne vengono definite esclusivamente dall'ETL Editor.
-    // Al momento della creazione il tool ha solo TAG, REV e LOG
-    // che sono colonne di sistema create automaticamente dal backend.
-    return [];
 }
 
 
