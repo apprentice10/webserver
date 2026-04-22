@@ -43,3 +43,6 @@ logs/
 dist/
 build/
 *.egg-info/
+
+# Legacy / archived code (pre-refactoring, do not read or index)
+_legacy/
