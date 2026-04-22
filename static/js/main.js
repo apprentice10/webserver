@@ -205,13 +205,26 @@ function clearActiveProject() {
 /**
  * Applica il progetto all'UI — chiamato sia al set
  * che al ripristino da sessionStorage al cambio pagina.
+ * Carica anche i tool dal DB per aggiornare icone e nomi nella sidebar.
  */
-function _applyProjectToUI(project) {
+async function _applyProjectToUI(project) {
     const nameEl = document.getElementById("project-name");
     if (nameEl) nameEl.textContent = project.name;
 
     document.querySelectorAll(".sidebar-item.disabled")
         .forEach(el => el.classList.remove("disabled"));
+
+    try {
+        const tools = await fetch(`/api/tools/project/${project.id}`).then(r => r.json());
+        tools.forEach(tool => {
+            const iconEl = document.getElementById(`sidebar-icon-${tool.slug}`);
+            const labelEl = document.getElementById(`sidebar-name-${tool.slug}`);
+            if (iconEl) iconEl.textContent = tool.icon || "📄";
+            if (labelEl) labelEl.textContent = tool.name;
+        });
+    } catch (_) {
+        // Se il fetch fallisce, la sidebar mantiene i valori hardcoded
+    }
 }
 
 
