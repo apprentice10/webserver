@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+
+{% block title %}Tool — Instrument Manager{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/engine/css/table.css">
+{% endblock %}
+
+{% block topbar_actions %}
+<div class="topbar-tool-actions" id="topbar-tool-actions">
+    <span class="rev-badge" id="rev-badge">REV —</span>
+    <button class="btn btn-secondary btn-sm" onclick="ToolbarManager.changeRev()">Cambia REV</button>
+    <button class="btn btn-secondary btn-sm" onclick="ToolbarManager.exportExcel()">Export Excel</button>
+    <button class="btn btn-secondary btn-sm" onclick="ToolbarManager.openSettings()">⚙ Settings</button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="tool-container" id="tool-container">
+
+    <!-- TOOLBAR SECONDARIA -->
+    <div class="tool-toolbar">
+        <div class="tool-toolbar-left">
+            <a href="/" class="btn btn-ghost btn-sm back-btn">← Progetti</a>
+            <div class="toolbar-separator"></div>
+            <input
+                type="text"
+                id="search-input"
+                class="search-input"
+                placeholder="Cerca..."
+                oninput="GridManager.search(this.value)"
+            >
+        </div>
+        <div class="tool-toolbar-right">
+            <button
+                class="btn btn-ghost btn-sm"
+                id="btn-show-deleted"
+                onclick="GridManager.toggleDeleted()"
+            >Mostra eliminati</button>
+            <button
+                class="btn btn-ghost btn-sm"
+                onclick="GridManager.toggleLog()"
+            >📋 LOG</button>
+            <button
+                class="btn btn-ghost btn-sm"
+                onclick="SqlEditor.toggle()"
+            >⚡ SQL</button>
+            <button
+                class="btn btn-ghost btn-sm"
+                onclick="ToolbarManager.addColumn()"
+            >+ Colonna</button>
+        </div>
+    </div>
+
+    <!-- GRIGLIA PRINCIPALE -->
+    <div class="grid-wrapper" id="grid-wrapper">
+        <div class="grid-scroll-container" id="grid-scroll-container">
+            <table class="data-grid" id="data-grid">
+                <thead>
+                    <tr id="grid-header-row"></tr>
+                </thead>
+                <tbody id="grid-body">
+                    <tr class="grid-loading">
+                        <td colspan="20">Caricamento...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- NOTA DEL TOOL -->
+    <div class="tool-note-area">
+        <div class="tool-note-label">NOTE GENERALI</div>
+        <textarea
+            id="tool-note"
+            class="tool-note-input"
+            placeholder="Note generali per questo documento..."
+            onblur="ToolbarManager.saveNote(this.value)"
+        ></textarea>
+    </div>
+
+    <!-- SQL EDITOR -->
+    <div class="sql-editor-panel" id="sql-editor-panel" style="display:none">
+        <div class="sql-editor-header">
+            <span>⚡ Power SQL Editor</span>
+            <button class="btn btn-ghost btn-sm" onclick="SqlEditor.toggle()">✕</button>
+        </div>
+        <div class="sql-editor-body">
+            <textarea
+                id="sql-input"
+                class="sql-input"
+                placeholder="SELECT * FROM tool_rows WHERE tool_id = ..."
+                spellcheck="false"
+            ></textarea>
+            <div class="sql-editor-actions">
+                <button class="btn btn-primary btn-sm" onclick="SqlEditor.run()">▶ Esegui</button>
+                <button class="btn btn-ghost btn-sm" onclick="SqlEditor.clear()">Pulisci</button>
+            </div>
+        </div>
+        <div class="sql-results" id="sql-results"></div>
+    </div>
+
+</div>
+
+<!-- MODAL SETTINGS TOOL -->
+<div class="modal-overlay" id="modal-settings">
+    <div class="modal modal-settings-wide">
+        <div class="modal-header">
+            <h2>Impostazioni Tool</h2>
+            <button class="modal-close" onclick="closeModal('modal-settings')">✕</button>
+        </div>
+
+        <!-- TAB BAR -->
+        <div class="settings-tabs">
+            <button class="settings-tab active"
+                    onclick="ToolbarManager.switchTab('generale')">
+                Generale
+            </button>
+            <button class="settings-tab"
+                    onclick="ToolbarManager.switchTab('etl')">
+                ⚡ ETL Editor
+            </button>
+        </div>
+
+        <!-- TAB GENERALE -->
+        <div class="settings-tab-content" id="tab-generale">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Nome Tool</label>
+                    <input type="text" id="settings-name"
+                           placeholder="Es. Instrument List">
+                </div>
+                <div class="form-group">
+                    <label>Icona Tool</label>
+                    <div class="icon-picker" id="icon-picker"></div>
+                    <input type="hidden" id="settings-icon">
+                </div>
+                <div class="form-group">
+                    <label>Revisione attiva</label>
+                    <input type="text" id="settings-rev"
+                           placeholder="Es. A, B, 00, 01">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary"
+                        onclick="closeModal('modal-settings')">
+                    Annulla
+                </button>
+                <button class="btn btn-primary"
+                        onclick="ToolbarManager.saveSettings()">
+                    Salva
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB ETL -->
+        <div class="settings-tab-content" id="tab-etl" style="display:none">
+            <div class="etl-layout">
+
+                <!-- COLONNA SINISTRA: editor + preview -->
+                <div class="etl-main">
+                    <div class="etl-editor-area">
+                        <div class="etl-editor-header">
+                            <span class="etl-editor-title">Query SQL</span>
+                            <span class="etl-hint">Ctrl+Enter per Preview</span>
+                        </div>
+                        <textarea
+                            id="etl-sql-input"
+                            class="etl-sql-input"
+                            spellcheck="false"
+                            placeholder="-- Esempio:
+SELECT
+    il.tag,
+    il.servizio,
+    il.tipo
+FROM tool_rows tr
+JOIN tool_cells il ON il.row_id = tr.id
+WHERE tr.tool_id = 1
+  AND tr.is_deleted = 0"
+                        ></textarea>
+                        <div class="etl-editor-actions">
+                            <button class="btn btn-primary btn-sm"
+                                    onclick="EtlEditor.preview()">
+                                ▶ Preview
+                            </button>
+                            <button class="btn btn-accent btn-sm"
+                                    onclick="EtlEditor.apply()">
+                                ⚡ Apply
+                            </button>
+                            <button class="btn btn-ghost btn-sm"
+                                    onclick="EtlEditor.saveVersion()">
+                                💾 Salva versione
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- PREVIEW RISULTATI -->
+                    <div class="etl-preview-area">
+                        <div class="etl-preview-header">Anteprima risultati</div>
+                        <div id="etl-preview-container" class="etl-preview-container">
+                            <div class="etl-empty">
+                                Esegui una Preview per vedere i risultati.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COLONNA DESTRA: schema browser + storico -->
+                <div class="etl-sidebar">
+
+                    <!-- SCHEMA BROWSER -->
+                    <div class="etl-sidebar-header">
+                        📊 Schema DB
+                        <button class="etl-schema-refresh" onclick="EtlEditor.refreshSchema()" title="Aggiorna">↻</button>
+                    </div>
+                    <div id="etl-schema-browser" class="etl-schema-browser">
+                        <div class="etl-empty">Caricamento...</div>
+                    </div>
+
+                    <!-- STORICO VERSIONI -->
+                    <div class="etl-sidebar-header etl-sidebar-header-secondary">
+                        🕐 Storico versioni
+                    </div>
+                    <div id="etl-history-list" class="etl-history-list">
+                        <div class="etl-empty">Nessuna versione salvata.</div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- MODAL AGGIUNGI COLONNA -->
+<div class="modal-overlay" id="modal-add-column">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Aggiungi Colonna</h2>
+            <button class="modal-close" onclick="closeModal('modal-add-column')">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Nome colonna *</label>
+                <input type="text" id="col-name" placeholder="Es. Fornitore">
+            </div>
+            <div class="form-group">
+                <label>Slug interno *</label>
+                <input type="text" id="col-slug" placeholder="Es. fornitore">
+                <small style="color:var(--color-text-muted);font-size:11px">
+                    Identificatore interno, solo lettere minuscole e trattini
+                </small>
+            </div>
+            <div class="form-group">
+                <label>Tipo</label>
+                <select id="col-type" class="form-select">
+                    <option value="text">Testo</option>
+                    <option value="number">Numero</option>
+                    <option value="date">Data</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('modal-add-column')">Annulla</button>
+            <button class="btn btn-primary" onclick="ColumnsManager.submitAddColumn()">Aggiungi</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL LOG RIGA -->
+<div class="modal-overlay" id="modal-row-log">
+    <div class="modal modal-wide">
+        <div class="modal-header">
+            <h2>LOG — <span id="modal-log-tag"></span></h2>
+            <button class="modal-close" onclick="closeModal('modal-row-log')">✕</button>
+        </div>
+        <div class="modal-body" id="modal-log-content"></div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('modal-row-log')">Chiudi</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Variabili globali iniettate da Jinja2
+    const PROJECT_ID = {{ project_id }};
+    const TOOL_ID    = {{ tool_id }};
+</script>
+<script src="/static/engine/js/api.js"></script>
+<script src="/static/engine/js/columns.js"></script>
+<script src="/static/engine/js/resize.js"></script>
+<script src="/static/engine/js/paste.js"></script>
+<script src="/static/engine/js/grid.js"></script>
+<script src="/static/engine/js/toolbar.js"></script>
+<script src="/static/engine/js/sql_editor.js"></script>
+<script src="/static/engine/js/etl_editor.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", async () => {
+        await ToolbarManager.init();
+        await GridManager.init();
+        await EtlEditor.init();
+    });
+</script>
+{% endblock %}

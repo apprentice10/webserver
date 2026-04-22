@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — Instrument Manager{% endblock %}
+
+{% block content %}
+<div class="welcome-screen">
+    <div class="welcome-card">
+        <div class="welcome-icon">⚙</div>
+        <h1>Instrument Manager</h1>
+        <p class="welcome-subtitle">Web application per la progettazione elettro-strumentale di impianti farmaceutici</p>
+        <div class="welcome-actions">
+            <button class="btn btn-primary" onclick="newProject()">+ Nuovo Progetto</button>
+            <button class="btn btn-secondary" onclick="openProject()">Apri Progetto</button>
+        </div>
+        <div class="welcome-version">v0.1.0 — Fase 1</div>
+    </div>
+</div>
+{% endblock %}

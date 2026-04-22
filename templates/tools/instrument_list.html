@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Instrument List — Instrument Manager{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/tools/instrument_list/css/instrument_list.css">
+{% endblock %}
+
+{% block topbar_actions %}
+<div class="topbar-tool-actions">
+    <span class="rev-badge" id="rev-badge">REV —</span>
+    <button class="btn btn-secondary btn-sm" onclick="ToolbarManager.changeRev()">Cambia REV</button>
+    <button class="btn btn-secondary btn-sm" onclick="ToolbarManager.exportExcel()">Export Excel</button>
+    <button class="btn btn-accent btn-sm" onclick="ToolbarManager.addRow()">+ Riga</button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="tool-container" id="instrument-list-container">
+
+    <!-- TOOLBAR SECONDARIA -->
+    <div class="tool-toolbar">
+        <div class="tool-toolbar-left">
+            <input
+                type="text"
+                id="search-input"
+                class="search-input"
+                placeholder="Cerca per TAG, servizio, tipo..."
+                oninput="GridManager.search(this.value)"
+            >
+        </div>
+        <div class="tool-toolbar-right">
+            <button class="btn btn-ghost btn-sm" onclick="SqlEditor.toggle()">⚡ SQL Editor</button>
+            <button class="btn btn-ghost btn-sm" onclick="GridManager.toggleLog()">📋 Mostra LOG</button>
+        </div>
+    </div>
+
+    <!-- GRIGLIA PRINCIPALE -->
+    <div class="grid-wrapper" id="grid-wrapper">
+        <table class="data-grid" id="data-grid">
+            <thead>
+                <tr id="grid-header">
+                    <th class="col-actions"></th>
+                    <th class="col-rev">REV</th>
+                    <th class="col-fase">FASE</th>
+                    <th class="col-pid">P&ID</th>
+                    <th class="col-tag">TAG</th>
+                    <th class="col-servizio">SERVIZIO</th>
+                    <th class="col-tipo">TIPO</th>
+                    <th class="col-standard">STANDARD</th>
+                    <th class="col-classe">CLASSE</th>
+                    <th class="col-attacco">ATTACCO</th>
+                    <th class="col-range">RANGE</th>
+                    <th class="col-note">NOTE</th>
+                    <th class="col-log" id="col-log-header" style="display:none">LOG</th>
+                </tr>
+            </thead>
+            <tbody id="grid-body">
+                <tr class="grid-loading">
+                    <td colspan="13">Caricamento...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- NOTA DEL TOOL -->
+    <div class="tool-note-area">
+        <div class="tool-note-label">NOTE GENERALI</div>
+        <textarea
+            id="tool-note"
+            class="tool-note-input"
+            placeholder="Note generali per questo documento..."
+            onblur="ApiClient.saveNote(this.value)"
+        ></textarea>
+    </div>
+
+    <!-- SQL EDITOR -->
+    <div class="sql-editor-panel" id="sql-editor-panel" style="display:none">
+        <div class="sql-editor-header">
+            <span>⚡ Power SQL Editor</span>
+            <button class="btn btn-ghost btn-sm" onclick="SqlEditor.toggle()">✕ Chiudi</button>
+        </div>
+        <div class="sql-editor-body">
+            <textarea
+                id="sql-input"
+                class="sql-input"
+                placeholder="SELECT * FROM instrument_list_rows WHERE project_id = ..."
+                spellcheck="false"
+            ></textarea>
+            <div class="sql-editor-actions">
+                <button class="btn btn-primary btn-sm" onclick="SqlEditor.run()">▶ Esegui</button>
+                <button class="btn btn-ghost btn-sm" onclick="SqlEditor.clear()">Pulisci</button>
+            </div>
+        </div>
+        <div class="sql-results" id="sql-results"></div>
+    </div>
+
+</div>
+
+<!-- MODAL LOG STRUMENTO -->
+<div class="modal-overlay" id="modal-row-log">
+    <div class="modal modal-wide">
+        <div class="modal-header">
+            <h2>LOG Strumento — <span id="modal-log-tag"></span></h2>
+            <button class="modal-close" onclick="closeModal('modal-row-log')">✕</button>
+        </div>
+        <div class="modal-body" id="modal-log-content">
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('modal-row-log')">Chiudi</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Rende il project_id disponibile ai moduli JS
+    const PROJECT_ID = {{ project_id }};
+</script>
+<script src="/static/tools/instrument_list/js/api.js"></script>
+<script src="/static/tools/instrument_list/js/grid.js"></script>
+<script src="/static/tools/instrument_list/js/toolbar.js"></script>
+<script src="/static/tools/instrument_list/js/sql_editor.js"></script>
+<script>
+    // Inizializza i moduli al caricamento della pagina
+    document.addEventListener("DOMContentLoaded", async () => {
+        await ToolbarManager.init();
+        await GridManager.init();
+
+        // Carica la nota del tool
+        try {
+            const note = await ApiClient.loadNote();
+            document.getElementById("tool-note").value = note.content || "";
+        } catch (err) {
+            console.error("Errore caricamento nota:", err.message);
+        }
+    });
+</script>
+{% endblock %}

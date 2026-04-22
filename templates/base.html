@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Instrument Manager{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+    <!-- TOP BAR -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <span class="app-logo">⚙</span>
+            <span class="app-name">Instrument Manager</span>
+        </div>
+        <div class="topbar-center">
+            <span class="project-name" id="project-name">Nessun progetto aperto</span>
+        </div>
+        <div class="topbar-right">
+            {% block topbar_actions %}{% endblock %}
+        </div>
+    </header>
+
+    <!-- LAYOUT PRINCIPALE -->
+    <div class="main-layout">
+
+        <!-- SIDEBAR SINISTRA -->
+        <aside class="sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">TOOLS</div>
+                <nav class="sidebar-nav" id="tools-nav">
+                    <a href="#" class="sidebar-item disabled"
+                       data-tool="instrument-list"
+                       id="sidebar-tool-instrument-list"
+                       onclick="openTool('instrument-list')">
+                        <span class="sidebar-icon" id="sidebar-icon-instrument-list">📋</span>
+                        <span id="sidebar-name-instrument-list">Instrument List</span>
+                    </a>
+                    <a href="#" class="sidebar-item disabled"
+                       data-tool="io-list"
+                       id="sidebar-tool-io-list"
+                       onclick="openTool('io-list')">
+                        <span class="sidebar-icon" id="sidebar-icon-io-list">🔌</span>
+                        <span id="sidebar-name-io-list">I/O List</span>
+                    </a>
+                    <a href="#" class="sidebar-item disabled"
+                       data-tool="cable-list"
+                       id="sidebar-tool-cable-list"
+                       onclick="openTool('cable-list')">
+                        <span class="sidebar-icon" id="sidebar-icon-cable-list">🔧</span>
+                        <span id="sidebar-name-cable-list">Cable List</span>
+                    </a>
+                </nav>
+            </div>
+
+            <div class="sidebar-section sidebar-bottom">
+                <div class="sidebar-section-title">PROGETTO</div>
+                <nav class="sidebar-nav">
+                    <a href="#" class="sidebar-item">
+                        <span class="sidebar-icon">⚙</span>
+                        <span>Impostazioni</span>
+                    </a>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- AREA CENTRALE -->
+        <main class="content-area">
+            {% block content %}{% endblock %}
+        </main>
+
+    </div>
+<!-- MODAL NUOVO PROGETTO -->
+<div class="modal-overlay" id="modal-new-project">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Nuovo Progetto</h2>
+            <button class="modal-close" onclick="closeModal('modal-new-project')">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="input-project-name">Nome progetto *</label>
+                <input type="text" id="input-project-name" placeholder="Es. Impianto Produzione Linea A">
+            </div>
+            <div class="form-group">
+                <label for="input-project-client">Cliente</label>
+                <input type="text" id="input-project-client" placeholder="Es. Pharma S.p.A.">
+            </div>
+            <div class="form-group">
+                <label for="input-project-description">Descrizione</label>
+                <textarea id="input-project-description" rows="3" placeholder="Descrizione opzionale del progetto"></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('modal-new-project')">Annulla</button>
+            <button class="btn btn-primary" onclick="submitNewProject()">Crea Progetto</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL APRI PROGETTO -->
+<div class="modal-overlay" id="modal-open-project">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Apri Progetto</h2>
+            <button class="modal-close" onclick="closeModal('modal-open-project')">✕</button>
+        </div>
+        <div class="modal-body">
+            <div id="projects-list">
+                <p class="text-muted">Caricamento...</p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('modal-open-project')">Chiudi</button>
+        </div>
+    </div>
+</div>
+
+    <script src="/static/js/main.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

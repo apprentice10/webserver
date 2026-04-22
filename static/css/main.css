@@ -1,0 +1,466 @@
+/* ============================================================
+   VARIABILI E RESET
+   ============================================================ */
+:root {
+    --color-bg: #1a1a2e;
+    --color-surface: #16213e;
+    --color-surface-2: #0f3460;
+    --color-accent: #e94560;
+    --color-accent-hover: #c73652;
+    --color-text: #eaeaea;
+    --color-text-muted: #8892a4;
+    --color-border: #2a2a4a;
+    --color-sidebar-bg: #12122a;
+    --color-topbar-bg: #0d0d1a;
+    --color-success: #2ecc71;
+    --color-warning: #f39c12;
+    --color-danger: #e74c3c;
+
+    --topbar-height: 52px;
+    --sidebar-width: 220px;
+    --font-main: 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'Consolas', 'Courier New', monospace;
+    --radius: 6px;
+    --transition: 0.18s ease;
+}
+
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+    font-family: var(--font-main);
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: 14px;
+}
+
+/* ============================================================
+   TOP BAR
+   ============================================================ */
+.topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--topbar-height);
+    background: var(--color-topbar-bg);
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    z-index: 100;
+}
+
+.topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: var(--sidebar-width);
+}
+
+.app-logo {
+    font-size: 20px;
+}
+
+.app-name {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: var(--color-accent);
+}
+
+.topbar-center {
+    flex: 1;
+    text-align: center;
+}
+
+.project-name {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: var(--sidebar-width);
+    justify-content: flex-end;
+}
+
+/* ============================================================
+   LAYOUT PRINCIPALE
+   ============================================================ */
+.main-layout {
+    display: flex;
+    height: 100vh;
+    padding-top: var(--topbar-height);
+}
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+.sidebar {
+    width: var(--sidebar-width);
+    background: var(--color-sidebar-bg);
+    border-right: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow-y: auto;
+    flex-shrink: 0;
+}
+
+.sidebar-section {
+    padding: 12px 0;
+}
+
+.sidebar-section-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: var(--color-text-muted);
+    padding: 0 16px 8px;
+    text-transform: uppercase;
+}
+
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 16px;
+    color: var(--color-text);
+    text-decoration: none;
+    transition: background var(--transition);
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    font-size: 13px;
+}
+
+.sidebar-item:hover {
+    background: var(--color-surface);
+    border-left-color: var(--color-accent);
+}
+
+.sidebar-item.active {
+    background: var(--color-surface);
+    border-left-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.sidebar-item.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.sidebar-icon {
+    font-size: 15px;
+    width: 20px;
+    text-align: center;
+}
+
+.sidebar-bottom {
+    border-top: 1px solid var(--color-border);
+    margin-top: auto;
+}
+
+/* ============================================================
+   AREA CENTRALE
+   ============================================================ */
+.content-area {
+    flex: 1;
+    overflow: auto;
+    background: var(--color-bg);
+    display: flex;
+    flex-direction: column;
+}
+
+/* ============================================================
+   WELCOME SCREEN
+   ============================================================ */
+.welcome-screen {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+}
+
+.welcome-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 48px 56px;
+    text-align: center;
+    max-width: 480px;
+    width: 100%;
+}
+
+.welcome-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+.welcome-card h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-accent);
+    margin-bottom: 10px;
+}
+
+.welcome-subtitle {
+    color: var(--color-text-muted);
+    font-size: 13px;
+    line-height: 1.6;
+    margin-bottom: 32px;
+}
+
+.welcome-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-bottom: 24px;
+}
+
+.welcome-version {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+}
+
+/* ============================================================
+   BOTTONI
+   ============================================================ */
+.btn {
+    padding: 9px 20px;
+    border-radius: var(--radius);
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition), transform var(--transition);
+    font-family: var(--font-main);
+}
+
+.btn:active {
+    transform: scale(0.97);
+}
+
+.btn-primary {
+    background: var(--color-accent);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: var(--color-accent-hover);
+}
+
+.btn-secondary {
+    background: var(--color-surface-2);
+    color: var(--color-text);
+}
+
+.btn-secondary:hover {
+    background: var(--color-border);
+}
+
+/* ============================================================
+   MODAL
+   ============================================================ */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    width: 100%;
+    max-width: 480px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    animation: modal-in 0.18s ease;
+}
+
+@keyframes modal-in {
+    from { opacity: 0; transform: translateY(-12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.modal-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: var(--radius);
+    transition: background var(--transition);
+}
+
+.modal-close:hover {
+    background: var(--color-border);
+    color: var(--color-text);
+}
+
+.modal-body {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 24px;
+    border-top: 1px solid var(--color-border);
+}
+
+/* ============================================================
+   FORM
+   ============================================================ */
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-group label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.form-group input,
+.form-group textarea {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    color: var(--color-text);
+    font-family: var(--font-main);
+    font-size: 13px;
+    padding: 9px 12px;
+    transition: border-color var(--transition);
+    resize: vertical;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.form-group input::placeholder,
+.form-group textarea::placeholder {
+    color: var(--color-text-muted);
+}
+
+/* ============================================================
+   LISTA PROGETTI
+   ============================================================ */
+.project-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: background var(--transition), border-color var(--transition);
+}
+
+.project-list-item:hover {
+    background: var(--color-surface-2);
+    border-color: var(--color-accent);
+}
+
+.project-list-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.project-list-name {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.project-list-client {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.project-list-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.btn-icon {
+    background: none;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    border-radius: var(--radius);
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background var(--transition), color var(--transition);
+}
+
+.btn-icon:hover {
+    background: var(--color-danger);
+    border-color: var(--color-danger);
+    color: white;
+}
+
+.text-muted {
+    color: var(--color-text-muted);
+    font-size: 13px;
+    text-align: center;
+    padding: 16px 0;
+}
+
+.text-error {
+    color: var(--color-danger);
+    font-size: 13px;
+    text-align: center;
+    padding: 16px 0;
+}
