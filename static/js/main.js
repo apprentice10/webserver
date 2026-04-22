@@ -214,12 +214,16 @@ async function _applyProjectToUI(project) {
     document.querySelectorAll(".sidebar-item.disabled")
         .forEach(el => el.classList.remove("disabled"));
 
+    const _defaultIcons = { "instrument-list": "📋", "io-list": "🔌", "cable-list": "🔧" };
+
     try {
         const tools = await fetch(`/api/tools/project/${project.id}`).then(r => r.json());
         tools.forEach(tool => {
             const iconEl = document.getElementById(`sidebar-icon-${tool.slug}`);
             const labelEl = document.getElementById(`sidebar-name-${tool.slug}`);
-            if (iconEl) iconEl.textContent = tool.icon || "📄";
+            if (iconEl) iconEl.textContent = (tool.icon && tool.icon !== "📄")
+                ? tool.icon
+                : (_defaultIcons[tool.slug] || "📄");
             if (labelEl) labelEl.textContent = tool.name;
         });
     } catch (_) {
@@ -240,18 +244,9 @@ async function openTool(toolName) {
     }
 
     const toolDefs = {
-        "instrument-list": {
-            name: "Instrument List",
-            slug: "instrument-list"
-        },
-        "io-list": {
-            name: "I/O List",
-            slug: "io-list"
-        },
-        "cable-list": {
-            name: "Cable List",
-            slug: "cable-list"
-        }
+        "instrument-list": { name: "Instrument List", slug: "instrument-list", icon: "📋" },
+        "io-list":         { name: "I/O List",        slug: "io-list",         icon: "🔌" },
+        "cable-list":      { name: "Cable List",       slug: "cable-list",      icon: "🔧" }
     };
 
     const toolDef = toolDefs[toolName];
@@ -288,6 +283,7 @@ async function _createDefaultTool(projectId, toolDef) {
         body: JSON.stringify({
             name: toolDef.name,
             slug: toolDef.slug,
+            icon: toolDef.icon,
             default_columns: defaultColumns
         })
     });
