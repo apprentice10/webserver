@@ -100,15 +100,32 @@ const EtlEditor = (() => {
         const arrowOpen = defaultOpen ? "open" : "";
         const colsOpen  = defaultOpen ? "open" : "";
 
+        const isToolGroup = cssClass === "tool-group";
+        const toolId      = isToolGroup ? name.replace("tool_", "") : null;
+
         const colsHtml = columns.map(col => {
             const sysTag = col.is_system
                 ? `<span class="schema-col-system">sys</span>`
                 : "";
+
+            // Genera lo snippet da inserire in base al contesto
+            let snippet, snippetTitle;
+            if (isToolGroup) {
+                // Colonna EAV — inserisce subquery completa con riferimento esplicito al tool
+                snippet = `(SELECT tc.value FROM tool_cells tc JOIN tool_columns tcol ON tcol.id = tc.column_id WHERE tc.row_id = tr.id AND tcol.tool_id = ${toolId} AND tcol.slug = '${col.name}') AS ${col.name}`;
+                snippetTitle = `Inserisce subquery per ${label}.${col.name}`;
+            } else {
+                // Tabella nativa — inserisce table.colonna
+                snippet = `${name}.${col.name}`;
+                snippetTitle = `Inserisce ${snippet}`;
+            }
+
             return `
                 <div class="schema-col-item"
-                     onclick="EtlEditor.insertColumn('${_escAttr(col.name)}')"
-                     title="Click per inserire nel editor">
-                    <span class="schema-col-name">${_esc(col.name)}</span>
+                     data-snippet="${_escAttr(snippet)}"
+                     onclick="EtlEditor.insertColumn(this.dataset.snippet)"
+                     title="${_escAttr(snippetTitle)}">
+                    <span class="schema-col-name">${_esc(col.label || col.name)}</span>
                     <span class="schema-col-type">${_esc(col.type || "")}</span>
                     ${sysTag}
                 </div>`;
@@ -130,24 +147,23 @@ const EtlEditor = (() => {
     }
 
     /**
-     * Inserisce il nome di una colonna nel editor SQL
+     * Inserisce un testo (nome colonna o snippet SQL) nell'editor
      * alla posizione del cursore.
      */
-    function insertColumn(colName) {
+    function insertColumn(text) {
         const editor = document.getElementById("etl-sql-input");
         if (!editor) return;
 
-        const start = editor.selectionStart;
-        const end   = editor.selectionEnd;
-        const text  = editor.value;
+        const start   = editor.selectionStart;
+        const end     = editor.selectionEnd;
+        const content = editor.value;
 
         editor.value =
-            text.substring(0, start) +
-            colName +
-            text.substring(end);
+            content.substring(0, start) +
+            text +
+            content.substring(end);
 
-        // Riposiziona cursore dopo l'inserimento
-        const newPos = start + colName.length;
+        const newPos = start + text.length;
         editor.setSelectionRange(newPos, newPos);
         editor.focus();
     }
@@ -157,10 +173,11 @@ const EtlEditor = (() => {
     // STATO INTERNO
     // --------------------------------------------------------
 
-    let _currentSql  = "";
-    let _history     = [];
-    let _previewData = null;
-    let _schemaLoaded = false;
+    let _currentSql      = "";
+    let _history         = [];
+    let _previewData     = null;
+    let _schemaLoaded    = false;
+    let _cachedTemplates = [];
 
 
     // --------------------------------------------------------
@@ -511,8 +528,91 @@ const EtlEditor = (() => {
                 etl_sql: sql
             });
             showToast("Template salvato.", "success");
+            await refreshTemplates();
         } catch (err) {
             showToast("Errore salvataggio template: " + err.message, "error");
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // PANNELLO TEMPLATES
+    // --------------------------------------------------------
+
+    async function refreshTemplates() {
+        const container = document.getElementById("etl-templates-list");
+        if (!container) return;
+
+        const typeSlug = ToolbarManager.getToolType();
+        if (!typeSlug) {
+            container.innerHTML = '<div class="etl-empty">Tipo tool non definito.</div>';
+            return;
+        }
+
+        try {
+            _cachedTemplates = await fetch(
+                `/api/tools/templates?type_slug=${encodeURIComponent(typeSlug)}`
+            ).then(r => r.json());
+
+            _renderTemplatesList(container);
+        } catch (err) {
+            container.innerHTML =
+                `<div class="etl-empty" style="color:var(--color-danger)">Errore: ${_esc(err.message)}</div>`;
+        }
+    }
+
+    function _renderTemplatesList(container) {
+        if (!_cachedTemplates || _cachedTemplates.length === 0) {
+            container.innerHTML = '<div class="etl-empty">Nessun template salvato.</div>';
+            return;
+        }
+
+        container.innerHTML = _cachedTemplates.map(t => `
+            <div class="etl-history-item">
+                <div class="etl-history-label" title="${_escAttr(t.name)}">${_esc(t.name)}</div>
+                <div class="etl-history-actions">
+                    <button class="etl-history-btn" onclick="EtlEditor.loadTemplate(${t.id})"
+                            title="Carica nel editor">↩</button>
+                    <button class="etl-history-btn etl-history-btn-danger"
+                            onclick="EtlEditor.deleteTemplate(${t.id})"
+                            title="Elimina template">✕</button>
+                </div>
+            </div>
+        `).join("");
+    }
+
+    async function loadTemplate(templateId) {
+        const template = _cachedTemplates.find(t => t.id === templateId);
+        if (!template) return;
+
+        const currentSql = _getSql();
+        if (currentSql && currentSql.trim() !== template.etl_sql.trim()) {
+            if (!confirm(`Sostituire la query corrente con il template "${template.name}"?`)) {
+                return;
+            }
+        }
+
+        const editor = document.getElementById("etl-sql-input");
+        if (editor) {
+            editor.value = template.etl_sql;
+            _currentSql  = template.etl_sql;
+        }
+
+        showToast(`Template "${template.name}" caricato.`, "success");
+    }
+
+    async function deleteTemplate(templateId) {
+        const template = _cachedTemplates.find(t => t.id === templateId);
+        if (!template) return;
+
+        if (!confirm(`Eliminare il template "${template.name}"?`)) return;
+
+        try {
+            await ApiClient.deleteTemplate(templateId);
+            showToast("Template eliminato.", "success");
+            await refreshTemplates();
+        } catch (err) {
+            showToast("Errore eliminazione: " + err.message, "error");
         }
     }
 
@@ -529,6 +629,9 @@ const EtlEditor = (() => {
         saveAsTemplate,
         loadVersion,
         refreshSchema,
+        refreshTemplates,
+        loadTemplate,
+        deleteTemplate,
         insertColumn,
         get _schemaLoaded() { return _schemaLoaded; }
     };

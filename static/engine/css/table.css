@@ -875,6 +875,36 @@ tr:hover .btn-row-action {
     font-family: var(--font-mono);
 }
 
+.etl-history-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 5px;
+}
+
+.etl-history-btn {
+    background: none;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 2px 7px;
+    border-radius: 3px;
+    transition: all var(--transition);
+    font-family: var(--font-main);
+    line-height: 1.6;
+}
+
+.etl-history-btn:hover {
+    background: var(--color-surface-2);
+    color: var(--color-text);
+}
+
+.etl-history-btn-danger:hover {
+    background: rgba(231, 76, 60, 0.12);
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+}
+
 /* ------------------------------------------------------------
    ETL SCHEMA BROWSER
    ------------------------------------------------------------ */

@@ -195,9 +195,12 @@ const ToolbarManager = (() => {
         document.getElementById("tab-etl").style.display =
             tabName === "etl" ? "flex" : "none";
 
-        // Carica schema la prima volta che si apre il tab ETL
+        // Carica schema e template la prima volta che si apre il tab ETL
         if (tabName === "etl" && !EtlEditor._schemaLoaded) {
-            setTimeout(() => EtlEditor.refreshSchema(), 100);
+            setTimeout(() => {
+                EtlEditor.refreshSchema();
+                EtlEditor.refreshTemplates();
+            }, 100);
         }
     }
 

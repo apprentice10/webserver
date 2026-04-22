@@ -222,6 +222,15 @@ WHERE tr.tool_id = 1
                         <div class="etl-empty">Caricamento...</div>
                     </div>
 
+                    <!-- TEMPLATES -->
+                    <div class="etl-sidebar-header etl-sidebar-header-secondary">
+                        🔖 Templates
+                        <button class="etl-schema-refresh" onclick="EtlEditor.refreshTemplates()" title="Aggiorna">↻</button>
+                    </div>
+                    <div id="etl-templates-list" class="etl-history-list">
+                        <div class="etl-empty">Nessun template.</div>
+                    </div>
+
                     <!-- STORICO VERSIONI -->
                     <div class="etl-sidebar-header etl-sidebar-header-secondary">
                         🕐 Storico versioni
