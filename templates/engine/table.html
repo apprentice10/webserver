@@ -45,6 +45,11 @@
                 class="btn btn-ghost btn-sm"
                 onclick="SqlEditor.toggle()"
             >⚡ SQL</button>
+            <a
+                class="btn btn-ghost btn-sm"
+                id="btn-etl-editor"
+                href="/tool/{{ project_id }}/{{ tool_id }}/etl"
+            >⚙ ETL</a>
             <button
                 class="btn btn-ghost btn-sm"
                 onclick="ToolbarManager.addColumn()"
@@ -110,19 +115,7 @@
             <button class="modal-close" onclick="closeModal('modal-settings')">✕</button>
         </div>
 
-        <!-- TAB BAR -->
-        <div class="settings-tabs">
-            <button class="settings-tab active"
-                    onclick="ToolbarManager.switchTab('generale')">
-                Generale
-            </button>
-            <button class="settings-tab"
-                    onclick="ToolbarManager.switchTab('etl')">
-                ⚡ ETL Editor
-            </button>
-        </div>
-
-        <!-- TAB GENERALE -->
+        <!-- SETTINGS CONTENT -->
         <div class="settings-tab-content" id="tab-generale">
             <div class="modal-body">
                 <div class="form-group">
@@ -150,97 +143,6 @@
                         onclick="ToolbarManager.saveSettings()">
                     Salva
                 </button>
-            </div>
-        </div>
-
-        <!-- TAB ETL -->
-        <div class="settings-tab-content" id="tab-etl" style="display:none">
-            <div class="etl-layout">
-
-                <!-- COLONNA SINISTRA: editor + preview -->
-                <div class="etl-main">
-                    <div class="etl-editor-area">
-                        <div class="etl-editor-header">
-                            <span class="etl-editor-title">Query SQL</span>
-                            <span class="etl-hint">Ctrl+Enter per Preview</span>
-                        </div>
-                        <textarea
-                            id="etl-sql-input"
-                            class="etl-sql-input"
-                            spellcheck="false"
-                            placeholder="-- Esempio:
-SELECT
-    il.tag,
-    il.servizio,
-    il.tipo
-FROM tool_rows tr
-JOIN tool_cells il ON il.row_id = tr.id
-WHERE tr.tool_id = 1
-  AND tr.is_deleted = 0"
-                        ></textarea>
-                        <div class="etl-editor-actions">
-                            <button class="btn btn-primary btn-sm"
-                                    onclick="EtlEditor.preview()">
-                                ▶ Preview
-                            </button>
-                            <button class="btn btn-accent btn-sm"
-                                    onclick="EtlEditor.apply()">
-                                ⚡ Apply
-                            </button>
-                            <button class="btn btn-ghost btn-sm"
-                                    onclick="EtlEditor.saveVersion()">
-                                💾 Salva versione
-                            </button>
-                            <button class="btn btn-ghost btn-sm"
-                                    onclick="EtlEditor.saveAsTemplate()"
-                                    title="Salva la query corrente come template riutilizzabile">
-                                🔖 Salva template
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- PREVIEW RISULTATI -->
-                    <div class="etl-preview-area">
-                        <div class="etl-preview-header">Anteprima risultati</div>
-                        <div id="etl-preview-container" class="etl-preview-container">
-                            <div class="etl-empty">
-                                Esegui una Preview per vedere i risultati.
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- COLONNA DESTRA: schema browser + storico -->
-                <div class="etl-sidebar">
-
-                    <!-- SCHEMA BROWSER -->
-                    <div class="etl-sidebar-header">
-                        📊 Schema DB
-                        <button class="etl-schema-refresh" onclick="EtlEditor.refreshSchema()" title="Aggiorna">↻</button>
-                    </div>
-                    <div id="etl-schema-browser" class="etl-schema-browser">
-                        <div class="etl-empty">Caricamento...</div>
-                    </div>
-
-                    <!-- TEMPLATES -->
-                    <div class="etl-sidebar-header etl-sidebar-header-secondary">
-                        🔖 Templates
-                        <button class="etl-schema-refresh" onclick="EtlEditor.refreshTemplates()" title="Aggiorna">↻</button>
-                    </div>
-                    <div id="etl-templates-list" class="etl-history-list">
-                        <div class="etl-empty">Nessun template.</div>
-                    </div>
-
-                    <!-- STORICO VERSIONI -->
-                    <div class="etl-sidebar-header etl-sidebar-header-secondary">
-                        🕐 Storico versioni
-                    </div>
-                    <div id="etl-history-list" class="etl-history-list">
-                        <div class="etl-empty">Nessuna versione salvata.</div>
-                    </div>
-
-                </div>
-
             </div>
         </div>
 
@@ -311,12 +213,10 @@ WHERE tr.tool_id = 1
 <script src="/static/engine/js/grid.js"></script>
 <script src="/static/engine/js/toolbar.js"></script>
 <script src="/static/engine/js/sql_editor.js"></script>
-<script src="/static/engine/js/etl_editor.js"></script>
 <script>
     document.addEventListener("DOMContentLoaded", async () => {
         await ToolbarManager.init();
         await GridManager.init();
-        await EtlEditor.init();
     });
 </script>
 {% endblock %}

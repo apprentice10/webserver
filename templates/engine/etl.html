@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+
+{% block title %}ETL Editor — Instrument Manager{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/engine/css/table.css">
+<style>
+.etl-page-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.etl-page-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+    flex-shrink: 0;
+}
+
+.etl-page-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.etl-page-tool-name {
+    font-size: 13px;
+    color: var(--color-text-muted);
+}
+
+.etl-page-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.etl-page-main {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.etl-page-sidebar {
+    width: 280px;
+    flex-shrink: 0;
+    border-left: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--color-surface-subtle);
+}
+
+.etl-editor-area {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    padding: 12px;
+    gap: 8px;
+}
+
+.etl-sql-input {
+    flex: 1;
+    min-height: 0;
+    resize: none;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    outline: none;
+    tab-size: 2;
+}
+.etl-sql-input:focus { border-color: var(--color-accent); }
+
+.etl-editor-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.etl-preview-area {
+    flex-shrink: 0;
+    height: 220px;
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.etl-preview-header {
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    background: var(--color-surface);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.etl-preview-container {
+    flex: 1;
+    overflow: auto;
+    padding: 8px 12px;
+}
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<div class="topbar-tool-actions">
+    <span class="rev-badge" id="rev-badge">REV —</span>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="etl-page-layout">
+
+    <!-- TOPBAR INTERNA -->
+    <div class="etl-page-topbar">
+        <a href="/tool/{{ project_id }}/{{ tool_id }}"
+           class="btn btn-ghost btn-sm">← Torna alla tabella</a>
+        <div class="toolbar-separator"></div>
+        <span class="etl-page-title">ETL Editor</span>
+        <span class="etl-page-tool-name" id="etl-tool-name">—</span>
+    </div>
+
+    <div class="etl-page-body">
+
+        <!-- COLONNA PRINCIPALE: editor + preview -->
+        <div class="etl-page-main">
+            <div class="etl-editor-area">
+                <div class="etl-editor-header">
+                    <span class="etl-editor-title">Query SQL</span>
+                    <span class="etl-hint">Ctrl+Enter per Preview</span>
+                </div>
+                <textarea
+                    id="etl-sql-input"
+                    class="etl-sql-input"
+                    spellcheck="false"
+                    placeholder="-- Riferisci le colonne come: tool_slug.colonna
+-- Esempio:
+SELECT
+    il.tag,
+    il.servizio,
+    il.tipo
+FROM instrument_list il
+WHERE 1=1"
+                ></textarea>
+                <div class="etl-editor-actions">
+                    <button class="btn btn-primary btn-sm"
+                            onclick="EtlEditor.preview()">
+                        ▶ Preview
+                    </button>
+                    <button class="btn btn-accent btn-sm"
+                            onclick="EtlEditor.apply()">
+                        ⚡ Apply
+                    </button>
+                    <button class="btn btn-ghost btn-sm"
+                            onclick="EtlEditor.saveVersion()">
+                        💾 Salva versione
+                    </button>
+                    <button class="btn btn-ghost btn-sm"
+                            onclick="EtlEditor.saveAsTemplate()"
+                            title="Salva come template riutilizzabile">
+                        🔖 Template
+                    </button>
+                </div>
+            </div>
+
+            <!-- PREVIEW RISULTATI -->
+            <div class="etl-preview-area">
+                <div class="etl-preview-header">Anteprima risultati</div>
+                <div id="etl-preview-container" class="etl-preview-container">
+                    <div class="etl-empty">Esegui una Preview per vedere i risultati.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SIDEBAR DESTRA -->
+        <div class="etl-page-sidebar">
+
+            <!-- SCHEMA BROWSER -->
+            <div class="etl-sidebar-header">
+                📊 Schema DB
+                <button class="etl-schema-refresh"
+                        onclick="EtlEditor.refreshSchema()"
+                        title="Aggiorna">↻</button>
+            </div>
+            <div id="etl-schema-browser" class="etl-schema-browser" style="flex:1;overflow-y:auto">
+                <div class="etl-empty">Caricamento...</div>
+            </div>
+
+            <!-- TEMPLATES -->
+            <div class="etl-sidebar-header etl-sidebar-header-secondary">
+                🔖 Templates
+                <button class="etl-schema-refresh"
+                        onclick="EtlEditor.refreshTemplates()"
+                        title="Aggiorna">↻</button>
+            </div>
+            <div id="etl-templates-list" class="etl-history-list"
+                 style="max-height:160px;overflow-y:auto">
+                <div class="etl-empty">Nessun template.</div>
+            </div>
+
+            <!-- STORICO VERSIONI -->
+            <div class="etl-sidebar-header etl-sidebar-header-secondary">
+                🕐 Storico versioni
+            </div>
+            <div id="etl-history-list" class="etl-history-list"
+                 style="max-height:200px;overflow-y:auto">
+                <div class="etl-empty">Nessuna versione salvata.</div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const PROJECT_ID = {{ project_id }};
+    const TOOL_ID    = {{ tool_id }};
+</script>
+<script src="/static/engine/js/api.js"></script>
+<script src="/static/engine/js/etl_editor.js"></script>
+<script>
+    // Funzione showToast minima (non c'è toolbar.js qui)
+    function showToast(message, type = "info") {
+        const colors = {
+            info: "#4a9eff", success: "#22c55e",
+            error: "#ef4444", warning: "#f59e0b"
+        };
+        const toast = document.createElement("div");
+        toast.style.cssText = `
+            position:fixed;bottom:24px;right:24px;z-index:9999;
+            padding:10px 18px;border-radius:6px;font-size:13px;
+            background:${colors[type]||colors.info};color:#fff;
+            box-shadow:0 4px 12px rgba(0,0,0,.3);
+            animation:fadeIn .2s ease;
+        `;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3500);
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+        // Carica nome tool
+        try {
+            const tool = await ApiClient.loadTool();
+            document.getElementById("etl-tool-name").textContent = `— ${tool.name}`;
+            document.getElementById("rev-badge").textContent = `REV ${tool.current_rev}`;
+            document.title = `ETL — ${tool.name}`;
+        } catch (e) {}
+
+        await EtlEditor.init();
+    });
+</script>
+{% endblock %}

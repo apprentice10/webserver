@@ -1,12 +1,16 @@
+from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-DATABASE_URL = "sqlite:///./instrument_manager.db"
+DATA_DIR = Path("data")
+DATA_DIR.mkdir(exist_ok=True)
+
+DATABASE_URL = f"sqlite:///{DATA_DIR / 'registry.db'}"
 
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False}  # Necessario solo per SQLite
+    connect_args={"check_same_thread": False}
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -15,10 +19,6 @@ Base = declarative_base()
 
 
 def get_db():
-    """
-    Dependency FastAPI: apre una sessione DB per ogni richiesta
-    e la chiude automaticamente al termine, anche in caso di errore.
-    """
     db = SessionLocal()
     try:
         yield db

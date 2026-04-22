@@ -180,30 +180,6 @@ const ToolbarManager = (() => {
         showToast("Export Excel — disponibile nella prossima fase.", "info");
     }
 
-    function switchTab(tabName) {
-        // Aggiorna pulsanti tab
-        document.querySelectorAll(".settings-tab").forEach(btn => {
-            btn.classList.toggle(
-                "active",
-                btn.textContent.trim().toLowerCase().includes(tabName)
-            );
-        });
-
-        // Mostra/nasconde contenuto tab
-        document.getElementById("tab-generale").style.display =
-            tabName === "generale" ? "flex" : "none";
-        document.getElementById("tab-etl").style.display =
-            tabName === "etl" ? "flex" : "none";
-
-        // Carica schema e template la prima volta che si apre il tab ETL
-        if (tabName === "etl" && !EtlEditor._schemaLoaded) {
-            setTimeout(() => {
-                EtlEditor.refreshSchema();
-                EtlEditor.refreshTemplates();
-            }, 100);
-        }
-    }
-
     // --------------------------------------------------------
     // API PUBBLICA
     // --------------------------------------------------------
@@ -221,7 +197,6 @@ const ToolbarManager = (() => {
         addColumn,
         exportExcel,
         selectIcon,
-        switchTab,
         getToolType
     };
 

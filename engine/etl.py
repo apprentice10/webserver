@@ -1,54 +1,34 @@
 """
 engine/etl.py
 --------------
-Motore ETL per il Table Engine.
+Motore ETL per flat tables.
 
-Responsabilità:
-- Esecuzione query SQL ETL
-- Preview risultati
-- Apply: merge risultati ETL con dati esistenti
-- Rispetta is_overridden per le celle modificate manualmente
-- Salvataggio storico versioni query
+Con la nuova architettura i tool sono tabelle SQLite native, quindi
+le query ETL sono SQL diretto — nessun parsing speciale.
+I tool si referenziano come: SELECT il.tag FROM instrument_list il
 """
 
 import json
+import sqlite3
 from datetime import datetime, timezone
-from sqlalchemy.orm import Session
-from sqlalchemy import text
 from fastapi import HTTPException
 
-from engine.models import Tool, ToolColumn, ToolRow, ToolCell
-from engine.service import (
-    get_tool, get_columns, serialize_row,
-    _get_column_map, _find_tag, _now,
-    SYSTEM_COLUMNS
+from engine.project_db import (
+    add_column_to_table, audit, SYSTEM_COLUMN_DEFS
 )
-from core.audit import write_log
+from engine.service import get_tool, get_columns
+
+
+SYSTEM_SLUGS = {"tag", "rev", "log"}
+INTERNAL_COLS = {"__id", "__position", "__log", "__created_at"}
 
 
 # ============================================================
-# PREVIEW — esegue query e restituisce risultati grezzi
+# PREVIEW
 # ============================================================
 
-def etl_preview(
-    db: Session,
-    tool_id: int,
-    project_id: int,
-    sql: str
-) -> dict:
-    """
-    Esegue la query ETL e restituisce un'anteprima
-    dei risultati senza modificare nulla nel database.
-
-    Restituisce:
-    {
-        "columns": [...],
-        "rows": [...],
-        "row_count": N,
-        "warnings": [...]
-    }
-    """
-    get_tool(db, tool_id, project_id)
+def etl_preview(conn: sqlite3.Connection, tool_id: int, sql: str) -> dict:
+    get_tool(conn, tool_id)
 
     sql = sql.strip()
     if not sql:
@@ -57,20 +37,15 @@ def etl_preview(
     _check_sql_safety(sql)
 
     try:
-        result = db.execute(text(sql))
-        columns = list(result.keys())
-        rows    = [dict(zip(columns, row)) for row in result.fetchall()]
+        cur = conn.execute(sql)
+        columns = [d[0].lower() for d in cur.description]
+        rows    = [dict(zip(columns, row)) for row in cur.fetchall()]
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Errore SQL: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Errore SQL: {e}")
 
     warnings = []
-
-    # Verifica presenza colonna TAG
-    if "tag" not in [c.lower() for c in columns]:
-        warnings.append(
-            "La query non include una colonna 'tag'. "
-            "Il TAG è necessario per il merge con i dati esistenti."
-        )
+    if "tag" not in columns:
+        warnings.append("La query non include 'tag' — necessario per il merge.")
 
     return {
         "columns":   columns,
@@ -81,283 +56,169 @@ def etl_preview(
 
 
 # ============================================================
-# APPLY — merge ETL con dati esistenti
+# APPLY
 # ============================================================
 
-def etl_apply(
-    db: Session,
-    tool_id: int,
-    project_id: int,
-    sql: str
-) -> dict:
-    """
-    Esegue la query ETL e fa il merge con i dati esistenti.
+def etl_apply(conn: sqlite3.Connection, tool_id: int, sql: str) -> dict:
+    tool     = get_tool(conn, tool_id)
+    slug     = tool["slug"]
+    rev      = tool["rev"]
+    preview  = etl_preview(conn, tool_id, sql)
+    etl_rows = preview["rows"]
+    etl_cols = [c for c in preview["columns"] if c != "log"]
 
-    Logica:
-    1. Crea automaticamente le colonne mancanti dai risultati SQL
-       (escluse le colonne di sistema: tag, rev, log)
-    2. Merge per ogni riga risultato basato su TAG:
-       - Se TAG esiste già: aggiorna celle non-overridden
-       - Se TAG non esiste: crea nuova riga
+    # --------------------------------------------------------
+    # Crea colonne mancanti
+    # --------------------------------------------------------
+    existing_slugs = {c["slug"] for c in get_columns(conn, tool_id)}
+    cols_created   = 0
 
-    Restituisce:
-    {
-        "columns_created": N,  ← colonne create automaticamente
-        "created": N,
-        "updated": N,
-        "skipped_cells": N,
-        "errors": [...]
-    }
-    """
-    tool    = get_tool(db, tool_id, project_id)
-
-    # Esegui query
-    preview     = etl_preview(db, tool_id, project_id, sql)
-    etl_rows    = preview["rows"]
-    etl_columns = [c.lower() for c in preview["columns"]]
-
-    # ----------------------------------------------------------
-    # STEP 1 — Crea automaticamente le colonne mancanti
-    # ----------------------------------------------------------
-    columns_created = 0
-    for idx, col_slug in enumerate(etl_columns):
-        if col_slug in SYSTEM_COLUMNS:
+    for col_slug in etl_cols:
+        if col_slug in SYSTEM_SLUGS or col_slug in INTERNAL_COLS:
             continue
+        if col_slug not in existing_slugs:
+            last_pos = conn.execute("""
+                SELECT MAX(position) FROM _columns
+                WHERE tool_id = ? AND is_system = 0
+            """, (tool_id,)).fetchone()[0]
+            new_pos = (last_pos or 1) + 1
 
-        # Verifica se la colonna esiste già
-        existing_col = db.query(ToolColumn).filter(
-            ToolColumn.tool_id == tool_id,
-            ToolColumn.slug    == col_slug
-        ).first()
+            conn.execute("""
+                INSERT INTO _columns (tool_id, tool_slug, slug, name, col_type, width, position, is_system)
+                VALUES (?, ?, ?, ?, 'text', 120, ?, 0)
+            """, (tool_id, slug, col_slug,
+                  col_slug.upper().replace("_", " "), new_pos))
 
-        if not existing_col:
-            # Calcola posizione: dopo le colonne esistenti non-system
-            last_non_system = db.query(ToolColumn).filter(
-                ToolColumn.tool_id   == tool_id,
-                ToolColumn.is_system == False
-            ).order_by(ToolColumn.position.desc()).first()
+            add_column_to_table(conn, slug, col_slug)
+            cols_created += 1
 
-            position = (last_non_system.position + 1) if last_non_system else 2
+    # --------------------------------------------------------
+    # Merge righe
+    # --------------------------------------------------------
+    created = 0
+    updated = 0
+    skipped = 0
+    errors  = []
 
-            new_col = ToolColumn(
-                tool_id   = tool_id,
-                name      = col_slug.upper().replace("_", " "),
-                slug      = col_slug,
-                col_type  = "text",
-                width     = 120,
-                position  = position,
-                is_system = False
-            )
-            db.add(new_col)
-            columns_created += 1
-
-    if columns_created > 0:
-        db.flush()  # Rende le nuove colonne disponibili per il merge
-
-    # Ricarica la mappa colonne aggiornata
-    col_map = _get_column_map(db, tool_id)
-
-    created       = 0
-    updated       = 0
-    skipped_cells = 0
-    errors        = []
-
-    # Posizione per nuove righe
-    last_row = db.query(ToolRow).filter(
-        ToolRow.tool_id == tool_id
-    ).order_by(ToolRow.position.desc()).first()
-    next_pos = (last_row.position + 1) if last_row else 0
+    max_pos = conn.execute(
+        f'SELECT MAX(__position) FROM "{slug}"'
+    ).fetchone()[0]
+    next_pos = (max_pos or -1) + 1
 
     for etl_row in etl_rows:
-        # Normalizza chiavi in lowercase
-        normalized = {k.lower(): v for k, v in etl_row.items()}
-        tag_value  = str(normalized.get("tag", "")).strip()
-
-        if not tag_value:
+        tag_val = str(etl_row.get("tag", "")).strip()
+        if not tag_val:
             errors.append("Riga senza TAG — saltata")
             continue
 
         try:
-            # Cerca riga esistente per TAG
-            existing_cell = _find_tag(db, tool_id, tag_value)
+            existing = conn.execute(
+                f'SELECT __id FROM "{slug}" WHERE tag = ?', (tag_val,)
+            ).fetchone()
 
-            if existing_cell:
-                # UPDATE — riga esistente
-                row = db.query(ToolRow).filter(
-                    ToolRow.id == existing_cell.row_id
-                ).first()
+            if existing:
+                row_id = existing[0]
+                for col_slug, val in etl_row.items():
+                    if col_slug in SYSTEM_SLUGS or col_slug in INTERNAL_COLS:
+                        continue
+                    override = conn.execute("""
+                        SELECT 1 FROM _overrides
+                        WHERE tool_slug=? AND row_tag=? AND col_slug=?
+                    """, (slug, tag_val, col_slug)).fetchone()
 
-                if not row:
-                    continue
-
-                for col_slug, value in normalized.items():
-                    if col_slug in SYSTEM_COLUMNS:
+                    if override:
+                        skipped += 1
                         continue
 
-                    col = col_map.get(col_slug)
-                    if not col:
-                        continue
-
-                    str_value = str(value).strip() if value is not None else None
-
-                    # Cerca cella esistente
-                    cell = db.query(ToolCell).filter(
-                        ToolCell.row_id == row.id,
-                        ToolCell.column_id == col.id
-                    ).first()
-
-                    if cell and cell.is_overridden:
-                        # Cella modificata manualmente — non toccare
-                        skipped_cells += 1
-                        continue
-
-                    if cell:
-                        cell.value = str_value
-                    else:
-                        cell = ToolCell(
-                            row_id=row.id,
-                            column_id=col.id,
-                            value=str_value,
-                            is_overridden=False
-                        )
-                        db.add(cell)
-
+                    str_val = str(val).strip() if val is not None else None
+                    conn.execute(
+                        f'UPDATE "{slug}" SET "{col_slug}"=? WHERE __id=?',
+                        (str_val, row_id)
+                    )
                 updated += 1
 
             else:
-                # INSERT — nuova riga
-                row = ToolRow(
-                    tool_id=tool_id,
-                    project_id=project_id,
-                    position=next_pos,
-                    rev=tool.current_rev,
-                    is_deleted=False
-                )
-                db.add(row)
-                db.flush()
-
-                for col_slug, value in normalized.items():
-                    if col_slug in SYSTEM_COLUMNS:
+                insert_data = {
+                    "tag":        tag_val,
+                    "rev":        rev,
+                    "__position": next_pos
+                }
+                for col_slug, val in etl_row.items():
+                    if col_slug in SYSTEM_SLUGS or col_slug in INTERNAL_COLS:
                         continue
-                    col = col_map.get(col_slug)
-                    if not col:
-                        continue
-                    str_value = str(value).strip() if value is not None else None
-                    cell = ToolCell(
-                        row_id=row.id,
-                        column_id=col.id,
-                        value=str_value,
-                        is_overridden=False
-                    )
-                    db.add(cell)
+                    insert_data[col_slug] = str(val).strip() if val is not None else None
 
-                # Crea anche la cella TAG
-                tag_col = col_map.get("tag")
-                if tag_col:
-                    tag_cell = ToolCell(
-                        row_id=row.id,
-                        column_id=tag_col.id,
-                        value=tag_value,
-                        is_overridden=False
-                    )
-                    db.add(tag_cell)
-
-                write_log(
-                    db=db,
-                    project_id=project_id,
-                    tool=tool.slug,
-                    action="ETL_INSERT",
-                    row_id=row.id,
-                    new_value=tag_value
+                cols_str = ", ".join(f'"{c}"' for c in insert_data)
+                placeholders = ", ".join("?" * len(insert_data))
+                conn.execute(
+                    f'INSERT INTO "{slug}" ({cols_str}) VALUES ({placeholders})',
+                    list(insert_data.values())
                 )
-
+                audit(conn, slug, "ETL_INSERT", row_tag=tag_val, new_val=tag_val)
                 next_pos += 1
                 created  += 1
 
-            db.flush()
-
         except Exception as e:
-            errors.append(f"TAG '{tag_value}': {str(e)}")
-            db.rollback()
+            errors.append(f"TAG '{tag_val}': {e}")
             continue
 
-    db.commit()
+    conn.commit()
 
     return {
-        "columns_created": columns_created,
+        "columns_created": cols_created,
         "created":         created,
         "updated":         updated,
-        "skipped_cells":   skipped_cells,
+        "skipped_cells":   skipped,
         "errors":          errors
     }
 
 
 # ============================================================
-# STORICO VERSIONI QUERY
+# STORICO VERSIONI
 # ============================================================
 
 def save_etl_version(
-    db: Session,
+    conn: sqlite3.Connection,
     tool_id: int,
-    project_id: int,
     sql: str,
     label: str = None
 ) -> dict:
-    """
-    Salva una versione della query ETL nello storico.
-    Le versioni sono salvate nel campo query_config del tool
-    come lista JSON.
-
-    Mantiene le ultime 20 versioni.
-    """
-    tool = get_tool(db, tool_id, project_id)
+    tool = get_tool(conn, tool_id)
 
     config = {}
-    if tool.query_config:
+    if tool.get("query_config"):
         try:
-            config = json.loads(tool.query_config)
+            config = json.loads(tool["query_config"])
         except Exception:
             config = {}
 
     history = config.get("etl_history", [])
-
-    # Aggiunge nuova versione
     history.insert(0, {
         "sql":       sql,
         "label":     label or f"Versione {len(history) + 1}",
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
-
-    # Mantiene solo le ultime 20
     history = history[:20]
 
     config["etl_sql"]     = sql
     config["etl_history"] = history
-    tool.query_config     = json.dumps(config)
 
-    db.commit()
+    conn.execute(
+        "UPDATE _tools SET query_config = ? WHERE id = ?",
+        (json.dumps(config), tool_id)
+    )
+    conn.commit()
 
-    return {
-        "saved":   True,
-        "history": history
-    }
+    return {"saved": True, "history": history}
 
 
-def get_etl_config(
-    db: Session,
-    tool_id: int,
-    project_id: int
-) -> dict:
-    """
-    Restituisce la configurazione ETL corrente del tool:
-    query attiva e storico versioni.
-    """
-    tool = get_tool(db, tool_id, project_id)
+def get_etl_config(conn: sqlite3.Connection, tool_id: int) -> dict:
+    tool = get_tool(conn, tool_id)
 
     config = {}
-    if tool.query_config:
+    if tool.get("query_config"):
         try:
-            config = json.loads(tool.query_config)
+            config = json.loads(tool["query_config"])
         except Exception:
             config = {}
 
@@ -367,12 +228,46 @@ def get_etl_config(
     }
 
 
+def get_etl_schema(conn: sqlite3.Connection, tool_id: int) -> dict:
+    """
+    Restituisce schema dei tool del progetto per lo schema browser.
+    Ogni tool è una flat table — click su colonna inserisce tool_slug.col_slug
+    """
+    tools = conn.execute("SELECT * FROM _tools ORDER BY id").fetchall()
+    result = []
+    for t in tools:
+        t = dict(t)
+        cols = conn.execute("""
+            SELECT slug, name, col_type, is_system
+            FROM _columns
+            WHERE tool_slug = ?
+            ORDER BY position, id
+        """, (t["slug"],)).fetchall()
+
+        result.append({
+            "slug":       t["slug"],
+            "name":       t["name"],
+            "icon":       t.get("icon", "📄"),
+            "is_current": t["id"] == tool_id,
+            "columns": [
+                {
+                    "slug":      c["slug"],
+                    "name":      c["name"],
+                    "type":      c["col_type"],
+                    "is_system": bool(c["is_system"])
+                }
+                for c in cols
+            ]
+        })
+
+    return {"tools": result}
+
+
 # ============================================================
 # UTILITY
 # ============================================================
 
 def _check_sql_safety(sql: str):
-    """Blocca operazioni DDL pericolose."""
     forbidden = ["drop ", "alter ", "truncate ", "attach ", "detach ", "pragma "]
     sql_lower = sql.lower()
     for keyword in forbidden:

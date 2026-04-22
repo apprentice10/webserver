@@ -1,815 +1,599 @@
 """
 engine/service.py
 ------------------
-Business logic universale del Table Engine.
+Business logic del Table Engine — flat tables su sqlite3.
 
-Responsabilità:
-- CRUD tool (creazione, configurazione, settings)
-- CRUD colonne dinamiche
-- CRUD righe con soft delete
-- Lettura/scrittura celle (modello EAV)
-- Validazione unicità TAG per progetto
-- Gestione revisione attiva
-- Scrittura row_log e audit_log
+Ogni tool è una tabella SQLite nel DB per-progetto.
+Colonne interne (prefisso __) non sono visibili all'utente.
+Le righe cancellate vivono in _trash (soft delete).
+Gli override ETL vivono in _overrides.
 """
 
 import re
 import json
-from datetime import datetime, timezone
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
+from datetime import datetime
+from typing import Optional
+import sqlite3
 from fastapi import HTTPException
 
-from core.audit import write_log
-from engine.models import Tool, ToolColumn, ToolRow, ToolCell, ToolTemplate
+from engine.project_db import (
+    SYSTEM_COLUMNS, SYSTEM_COLUMN_DEFS,
+    create_tool_table, add_column_to_table, audit,
+    serialize_active_row, serialize_trash_row
+)
+from engine.models import ToolTemplate
+from sqlalchemy.orm import Session
 
 
 # ============================================================
-# COSTANTI
+# UTILITY
 # ============================================================
 
-# Colonne di sistema — non eliminabili né rinominabili
-SYSTEM_COLUMNS = ["tag", "rev", "log"]
-
-# Colonne di sistema con configurazione default
-SYSTEM_COLUMN_DEFS = [
-    {"name": "TAG", "slug": "tag", "col_type": "text",   "width": 110, "position": 0, "is_system": True},
-    {"name": "REV", "slug": "rev", "col_type": "text",   "width": 60,  "position": 1, "is_system": True},
-    {"name": "LOG", "slug": "log", "col_type": "log",    "width": 260, "position": 999, "is_system": True},
-]
-
-
-# ============================================================
-# UTILITY INTERNE
-# ============================================================
-
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
+def _now_str() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _slugify(text: str) -> str:
     text = text.lower().strip()
-    text = re.sub(r"[^\w\s-]", "", text)
-    text = re.sub(r"[\s_]+", "-", text)
-    text = re.sub(r"-+", "-", text)
-    return text.strip("-") or "tool"
+    text = re.sub(r"[^\w\s]", "", text)
+    text = re.sub(r"[\s]+", "_", text)
+    text = re.sub(r"_+", "_", text)
+    return text.strip("_") or "tool"
 
 
-def _unique_slug(db: Session, project_id: int, base_slug: str) -> str:
+def _unique_slug(conn: sqlite3.Connection, base_slug: str) -> str:
     slug = base_slug
     counter = 1
-    while db.query(Tool).filter(
-        Tool.project_id == project_id,
-        Tool.slug == slug
-    ).first():
+    while conn.execute("SELECT 1 FROM _tools WHERE slug = ?", (slug,)).fetchone():
         counter += 1
-        slug = f"{base_slug}-{counter}"
+        slug = f"{base_slug}_{counter}"
     return slug
 
 
 def _format_log_entry(rev: str, field: str, old_val, new_val) -> str:
-    """Formatta una riga di log leggibile per l'utente."""
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-    old_display = f"'{old_val}'" if old_val else "—"
-    new_display = f"'{new_val}'" if new_val else "—"
-    return f"[{ts} REV {rev}] {field.upper()}: {old_display} → {new_display}"
+    old = f"'{old_val}'" if old_val else "—"
+    new = f"'{new_val}'" if new_val else "—"
+    return f"[{ts} REV {rev}] {field.upper()}: {old} → {new}"
 
 
-def _append_row_log(existing: str, new_entry: str) -> str:
-    """Aggiunge una voce in cima al log esistente."""
-    if existing:
-        return new_entry + "\n" + existing
-    return new_entry
-
-
-def _get_cell_map(db: Session, row_id: int) -> dict:
-    """
-    Restituisce un dizionario {column_id: ToolCell}
-    per una riga, per accesso rapido alle celle.
-    """
-    cells = db.query(ToolCell).filter(ToolCell.row_id == row_id).all()
-    return {c.column_id: c for c in cells}
-
-
-def _get_column_map(db: Session, tool_id: int) -> dict:
-    """
-    Restituisce un dizionario {slug: ToolColumn}
-    per un tool, per accesso rapido alle colonne.
-    """
-    columns = db.query(ToolColumn).filter(
-        ToolColumn.tool_id == tool_id
-    ).all()
-    return {c.slug: c for c in columns}
-
-
-# ============================================================
-# SERIALIZZAZIONE — riga → dizionario piatto
-# ============================================================
-
-def serialize_row(row: ToolRow, columns: list[ToolColumn]) -> dict:
-    """
-    Converte una ToolRow + celle in un dizionario piatto
-    pronto per essere serializzato come JSON.
-
-    Formato output:
-    {
-        "id": 1,
-        "tool_id": 1,
-        "project_id": 1,
-        "position": 0,
-        "rev": "A",
-        "is_deleted": false,
-        "row_log": "...",
-        "tag": "PT-101",
-        "servizio": "Acqua PW",
-        ...
-    }
-    """
-    cell_map = {c.column_id: c.value for c in row.cells}
-
-    result = {
-        "id":         row.id,
-        "tool_id":    row.tool_id,
-        "project_id": row.project_id,
-        "position":   row.position,
-        "rev":        row.rev,
-        "is_deleted": row.is_deleted,
-        "row_log":    row.row_log,
-        "created_at": row.created_at.isoformat() if row.created_at else None,
-        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-    }
-
-    # Aggiunge i valori delle celle come campi flat
-    for col in columns:
-        result[col.slug] = cell_map.get(col.id, "")
-
-    return result
+def _append_log(existing: Optional[str], entry: str) -> str:
+    return entry + "\n" + existing if existing else entry
 
 
 # ============================================================
 # TOOL — CRUD
 # ============================================================
 
-def get_tools_for_project(db: Session, project_id: int) -> list[Tool]:
-    """Restituisce tutti i tool di un progetto."""
-    return db.query(Tool).filter(
-        Tool.project_id == project_id
-    ).order_by(Tool.id).all()
-
-
-def get_tool(db: Session, tool_id: int, project_id: int) -> Tool:
-    """Restituisce un tool per id. Solleva 404 se non trovato."""
-    tool = db.query(Tool).filter(
-        Tool.id == tool_id,
-        Tool.project_id == project_id
-    ).first()
-    if not tool:
+def get_tool(conn: sqlite3.Connection, tool_id: int) -> dict:
+    row = conn.execute("SELECT * FROM _tools WHERE id = ?", (tool_id,)).fetchone()
+    if not row:
         raise HTTPException(status_code=404, detail="Tool non trovato")
-    return tool
+    return dict(row)
+
+
+def get_tools_for_project(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute("SELECT * FROM _tools ORDER BY id").fetchall()
+    return [dict(r) for r in rows]
 
 
 def create_tool(
-    db: Session,
-    project_id: int,
+    conn: sqlite3.Connection,
     name: str,
     slug: str = None,
-    default_columns: list[dict] = None,
-    icon: str = None,
     tool_type: str = None,
-    template_id: int = None
-) -> Tool:
-    """
-    Crea un nuovo tool per il progetto con le colonne di sistema
-    e le colonne default fornite.
-
-    Se slug non è fornito viene auto-generato dal nome con suffisso
-    numerico per garantire unicità nel progetto.
-    Se template_id è fornito, il query_config viene pre-caricato
-    dalla query ETL del template.
-    """
+    icon: str = "📄",
+    template_id: int = None,
+    default_columns: list[dict] = None,
+    registry_db: Session = None
+) -> dict:
     if not slug:
-        slug = _unique_slug(db, project_id, _slugify(name))
+        slug = _unique_slug(conn, _slugify(name))
 
-    # Carica query_config dal template se fornito
     query_config = None
-    if template_id:
-        template = db.query(ToolTemplate).filter(
+    if template_id and registry_db:
+        tmpl = registry_db.query(ToolTemplate).filter(
             ToolTemplate.id == template_id
         ).first()
-        if template:
-            query_config = json.dumps({
-                "etl_sql": template.etl_sql,
-                "etl_history": []
-            })
+        if tmpl:
+            query_config = json.dumps({"etl_sql": tmpl.etl_sql, "etl_history": []})
 
-    tool = Tool(
-        project_id=project_id,
-        name=name,
-        slug=slug,
-        tool_type=tool_type,
-        current_rev="A",
-        icon=icon or "📄",
-        query_config=query_config
-    )
-    db.add(tool)
+    conn.execute("""
+        INSERT INTO _tools (slug, name, tool_type, icon, rev, query_config)
+        VALUES (?, ?, ?, ?, 'A', ?)
+    """, (slug, name, tool_type, icon or "📄", query_config))
 
-    try:
-        db.flush()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=f"Tool '{slug}' già esistente in questo progetto"
-        )
+    tool_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-    # Crea colonne di sistema (TAG, REV, LOG)
+    # Crea la tabella flat del tool
+    create_tool_table(conn, slug)
+
+    # Crea colonne di sistema in _columns
     for col_def in SYSTEM_COLUMN_DEFS:
-        col = ToolColumn(tool_id=tool.id, **col_def)
-        db.add(col)
+        conn.execute("""
+            INSERT INTO _columns (tool_id, tool_slug, slug, name, col_type, width, position, is_system)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (tool_id, slug, col_def["slug"], col_def["name"],
+              col_def["col_type"], col_def["width"], col_def["position"], col_def["is_system"]))
 
-    # Crea colonne default specifiche del tool
+    # Colonne default del tipo di tool
     if default_columns:
         for col_def in default_columns:
-            col = ToolColumn(tool_id=tool.id, **col_def)
-            db.add(col)
+            conn.execute("""
+                INSERT OR IGNORE INTO _columns
+                (tool_id, tool_slug, slug, name, col_type, width, position, is_system)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+            """, (tool_id, slug, col_def["slug"], col_def["name"],
+                  col_def.get("col_type", "text"), col_def.get("width", 120),
+                  col_def.get("position", 2)))
+            add_column_to_table(conn, slug, col_def["slug"])
 
-    db.commit()
-    db.refresh(tool)
-    return tool
+    conn.commit()
+    return get_tool(conn, tool_id)
 
 
-def update_tool_settings(
-    db: Session,
-    tool_id: int,
-    project_id: int,
-    data: dict
-) -> Tool:
-    """
-    Aggiorna le impostazioni di un tool:
-    name, current_rev, note, query_config.
-    """
-    tool = get_tool(db, tool_id, project_id)
+def update_tool_settings(conn: sqlite3.Connection, tool_id: int, data: dict) -> dict:
+    get_tool(conn, tool_id)
 
-    allowed = ["name", "current_rev", "note", "query_config", "icon"]
+    allowed = ["name", "rev", "note", "query_config", "icon"]
+    sets = []
+    vals = []
     for field in allowed:
         if field in data:
-            value = data[field]
-            # query_config viene salvato come JSON string
-            if field == "query_config" and isinstance(value, dict):
-                value = json.dumps(value)
-            setattr(tool, field, value)
+            val = data[field]
+            if field == "query_config" and isinstance(val, dict):
+                val = json.dumps(val)
+            sets.append(f"{field} = ?")
+            vals.append(val)
 
-    db.commit()
-    db.refresh(tool)
-    return tool
+    if sets:
+        vals.append(tool_id)
+        conn.execute(f"UPDATE _tools SET {', '.join(sets)} WHERE id = ?", vals)
+        conn.commit()
+
+    return get_tool(conn, tool_id)
 
 
 # ============================================================
 # COLONNE — CRUD
 # ============================================================
 
-def get_columns(db: Session, tool_id: int) -> list[ToolColumn]:
-    """Restituisce le colonne di un tool ordinate per posizione."""
-    return db.query(ToolColumn).filter(
-        ToolColumn.tool_id == tool_id
-    ).order_by(ToolColumn.position).all()
+def get_columns(conn: sqlite3.Connection, tool_id: int) -> list[dict]:
+    rows = conn.execute("""
+        SELECT * FROM _columns WHERE tool_id = ? ORDER BY position, id
+    """, (tool_id,)).fetchall()
+    return [dict(r) for r in rows]
 
 
 def add_column(
-    db: Session,
+    conn: sqlite3.Connection,
     tool_id: int,
-    project_id: int,
     name: str,
     slug: str,
     col_type: str = "text",
     width: int = 120,
     position: int = None
-) -> ToolColumn:
-    """
-    Aggiunge una nuova colonna a un tool esistente.
-    Se position non è specificato, la aggiunge in fondo
-    (prima della colonna LOG di sistema).
-    """
-    # Verifica che il tool appartenga al progetto
-    get_tool(db, tool_id, project_id)
+) -> dict:
+    tool = get_tool(conn, tool_id)
+    tool_slug = tool["slug"]
 
-    # Blocca slug di sistema
     if slug.lower() in SYSTEM_COLUMNS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"'{slug}' è una colonna di sistema e non può essere aggiunta"
-        )
+        raise HTTPException(status_code=400,
+            detail=f"'{slug}' è una colonna di sistema")
 
-    # Calcola posizione automatica se non fornita
+    if conn.execute(
+        "SELECT 1 FROM _columns WHERE tool_id = ? AND slug = ?", (tool_id, slug)
+    ).fetchone():
+        raise HTTPException(status_code=409,
+            detail=f"Colonna '{slug}' già esistente")
+
     if position is None:
-        last = db.query(ToolColumn).filter(
-            ToolColumn.tool_id == tool_id,
-            ToolColumn.is_system == False
-        ).order_by(ToolColumn.position.desc()).first()
-        position = (last.position + 1) if last else 2
+        last = conn.execute("""
+            SELECT MAX(position) FROM _columns WHERE tool_id = ? AND is_system = 0
+        """, (tool_id,)).fetchone()[0]
+        position = (last or 1) + 1
 
-    col = ToolColumn(
-        tool_id=tool_id,
-        name=name,
-        slug=slug,
-        col_type=col_type,
-        width=width,
-        position=position,
-        is_system=False
-    )
-    db.add(col)
+    conn.execute("""
+        INSERT INTO _columns (tool_id, tool_slug, slug, name, col_type, width, position, is_system)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+    """, (tool_id, tool_slug, slug, name, col_type, width, position))
 
-    try:
-        db.flush()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=f"Colonna '{slug}' già esistente in questo tool"
-        )
+    col_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-    db.commit()
-    db.refresh(col)
-    return col
+    add_column_to_table(conn, tool_slug, slug)
+    conn.commit()
+
+    return dict(conn.execute(
+        "SELECT * FROM _columns WHERE id = ?", (col_id,)
+    ).fetchone())
 
 
-def update_column(
-    db: Session,
-    tool_id: int,
-    column_id: int,
-    project_id: int,
-    data: dict
-) -> ToolColumn:
-    """
-    Aggiorna una colonna esistente.
-    Le colonne di sistema non possono essere modificate.
-    """
-    col = db.query(ToolColumn).filter(
-        ToolColumn.id == column_id,
-        ToolColumn.tool_id == tool_id
-    ).first()
-
+def update_column(conn: sqlite3.Connection, tool_id: int, column_id: int, data: dict) -> dict:
+    col = conn.execute(
+        "SELECT * FROM _columns WHERE id = ? AND tool_id = ?", (column_id, tool_id)
+    ).fetchone()
     if not col:
         raise HTTPException(status_code=404, detail="Colonna non trovata")
-
-    if col.is_system:
-        raise HTTPException(
-            status_code=400,
-            detail="Le colonne di sistema non possono essere modificate"
-        )
+    col = dict(col)
+    if col["is_system"]:
+        raise HTTPException(status_code=400,
+            detail="Le colonne di sistema non possono essere modificate")
 
     allowed = ["name", "width", "position", "col_type", "formula"]
+    sets = []
+    vals = []
     for field in allowed:
         if field in data:
-            setattr(col, field, data[field])
+            sets.append(f"{field} = ?")
+            vals.append(data[field])
 
-    db.commit()
-    db.refresh(col)
-    return col
+    if sets:
+        vals.append(column_id)
+        conn.execute(f"UPDATE _columns SET {', '.join(sets)} WHERE id = ?", vals)
+        conn.commit()
+
+    return dict(conn.execute(
+        "SELECT * FROM _columns WHERE id = ?", (column_id,)
+    ).fetchone())
 
 
-def delete_column(
-    db: Session,
-    tool_id: int,
-    column_id: int,
-    project_id: int
-) -> dict:
-    """
-    Elimina una colonna e tutte le sue celle.
-    Le colonne di sistema non possono essere eliminate.
-    """
-    col = db.query(ToolColumn).filter(
-        ToolColumn.id == column_id,
-        ToolColumn.tool_id == tool_id
-    ).first()
-
+def delete_column(conn: sqlite3.Connection, tool_id: int, column_id: int) -> dict:
+    col = conn.execute(
+        "SELECT * FROM _columns WHERE id = ? AND tool_id = ?", (column_id, tool_id)
+    ).fetchone()
     if not col:
         raise HTTPException(status_code=404, detail="Colonna non trovata")
+    col = dict(col)
+    if col["is_system"]:
+        raise HTTPException(status_code=400,
+            detail="Le colonne di sistema non possono essere eliminate")
 
-    if col.is_system:
-        raise HTTPException(
-            status_code=400,
-            detail="Le colonne di sistema non possono essere eliminate"
-        )
-
-    db.delete(col)
-    db.commit()
+    conn.execute("DELETE FROM _columns WHERE id = ?", (column_id,))
+    conn.commit()
     return {"ok": True, "deleted_id": column_id}
 
 
-def update_column_width(
-    db: Session,
-    tool_id: int,
-    column_id: int,
-    width: int
-) -> ToolColumn:
-    """
-    Aggiorna solo la larghezza di una colonna.
-    Chiamata frequente dal frontend durante il resize.
-    """
-    col = db.query(ToolColumn).filter(
-        ToolColumn.id == column_id,
-        ToolColumn.tool_id == tool_id
-    ).first()
-
+def update_column_width(conn: sqlite3.Connection, tool_id: int, column_id: int, width: int) -> dict:
+    col = conn.execute(
+        "SELECT * FROM _columns WHERE id = ? AND tool_id = ?", (column_id, tool_id)
+    ).fetchone()
     if not col:
         raise HTTPException(status_code=404, detail="Colonna non trovata")
 
-    col.width = max(40, min(width, 800))  # Clamp tra 40 e 800px
-    db.commit()
-    db.refresh(col)
-    return col
+    width = max(40, min(width, 800))
+    conn.execute("UPDATE _columns SET width = ? WHERE id = ?", (width, column_id))
+    conn.commit()
+    return dict(conn.execute(
+        "SELECT * FROM _columns WHERE id = ?", (column_id,)
+    ).fetchone())
 
 
 # ============================================================
-# RIGHE — CRUD con soft delete
+# RIGHE — CRUD con trash
 # ============================================================
 
 def get_rows(
-    db: Session,
+    conn: sqlite3.Connection,
     tool_id: int,
+    project_id: int,
     include_deleted: bool = False
 ) -> list[dict]:
-    """
-    Restituisce tutte le righe del tool come dizionari piatti.
-    Se include_deleted=False, esclude le righe soft-deleted.
-    """
-    columns = get_columns(db, tool_id)
+    tool = get_tool(conn, tool_id)
+    slug = tool["slug"]
 
-    query = db.query(ToolRow).filter(
-        ToolRow.tool_id == tool_id
-    )
+    active = conn.execute(
+        f'SELECT * FROM "{slug}" ORDER BY __position ASC'
+    ).fetchall()
+    result = [serialize_active_row(r, tool_id, project_id) for r in active]
 
-    if not include_deleted:
-        query = query.filter(ToolRow.is_deleted == False)
+    if include_deleted:
+        trash = conn.execute(
+            "SELECT * FROM _trash WHERE tool_slug = ? ORDER BY deleted_at DESC",
+            (slug,)
+        ).fetchall()
+        result += [serialize_trash_row(r, tool_id, project_id) for r in trash]
 
-    rows = query.order_by(ToolRow.position.asc()).all()
-
-    return [serialize_row(row, columns) for row in rows]
+    return result
 
 
 def create_row(
-    db: Session,
+    conn: sqlite3.Connection,
     tool_id: int,
     project_id: int,
     cell_data: dict
 ) -> dict:
-    """
-    Crea una nuova riga con i valori delle celle forniti.
+    tool = get_tool(conn, tool_id)
+    slug = tool["slug"]
+    rev  = tool["rev"]
 
-    cell_data: dizionario {slug_colonna: valore}
-    Es: {"tag": "PT-101", "servizio": "Acqua PW"}
-
-    Valida unicità TAG per progetto.
-    """
-    tool = get_tool(db, tool_id, project_id)
-    col_map = _get_column_map(db, tool_id)
-
-    # Validazione TAG obbligatorio
     tag_value = (cell_data.get("tag") or "").strip()
     if not tag_value:
         raise HTTPException(status_code=422, detail="Il campo TAG è obbligatorio")
 
-    # Validazione unicità TAG nel progetto
-    _validate_tag_unique(db, tool_id, tag_value)
+    _validate_tag_unique(conn, slug, tag_value)
 
-    # Calcola posizione
-    last_row = db.query(ToolRow).filter(
-        ToolRow.tool_id == tool_id
-    ).order_by(ToolRow.position.desc()).first()
-    position = (last_row.position + 1) if last_row else 0
+    max_pos = conn.execute(
+        f'SELECT MAX(__position) FROM "{slug}"'
+    ).fetchone()[0]
+    next_pos = (max_pos or -1) + 1
 
-    # Crea la riga
-    row = ToolRow(
-        tool_id=tool_id,
-        project_id=project_id,
-        position=position,
-        rev=tool.current_rev,
-        is_deleted=False
-    )
-    db.add(row)
-    db.flush()
+    # Colonne valide (escludi system read-only)
+    valid_cols = {c["slug"] for c in get_columns(conn, tool_id)
+                  if c["slug"] not in ("log",)}
 
-    # Crea le celle
-    for slug, value in cell_data.items():
-        col = col_map.get(slug)
-        if not col:
-            continue
-        cell = ToolCell(
-            row_id=row.id,
-            column_id=col.id,
-            value=str(value).strip() if value else None
-        )
-        db.add(cell)
+    insert_data = {"tag": tag_value, "rev": rev, "__position": next_pos}
+    for k, v in cell_data.items():
+        if k in valid_cols and k not in ("rev",):
+            insert_data[k] = str(v).strip() if v is not None else None
 
-    # Audit log
-    write_log(
-        db=db,
-        project_id=project_id,
-        tool=tool.slug,
-        action="INSERT",
-        row_id=row.id,
-        new_value=tag_value
+    cols_str = ", ".join(f'"{c}"' for c in insert_data)
+    placeholders = ", ".join("?" * len(insert_data))
+    conn.execute(
+        f'INSERT INTO "{slug}" ({cols_str}) VALUES ({placeholders})',
+        list(insert_data.values())
     )
 
-    db.commit()
-    db.refresh(row)
+    row_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    audit(conn, slug, "INSERT", row_tag=tag_value, new_val=tag_value)
+    conn.commit()
 
-    columns = get_columns(db, tool_id)
-    return serialize_row(row, columns)
+    row = conn.execute(f'SELECT * FROM "{slug}" WHERE __id = ?', (row_id,)).fetchone()
+    return serialize_active_row(row, tool_id, project_id)
 
 
 def update_cell(
-    db: Session,
+    conn: sqlite3.Connection,
     tool_id: int,
     row_id: int,
     project_id: int,
     slug: str,
     new_value: str
 ) -> dict:
-    """
-    Aggiorna il valore di una singola cella.
+    tool = get_tool(conn, tool_id)
+    tool_slug = tool["slug"]
+    rev = tool["rev"]
 
-    - Calcola diff e aggiorna row_log
-    - Scrive in audit_log
-    - Valida unicità TAG se il campo modificato è TAG
-    - Marca la cella come is_overridden=True
-    """
-    tool = get_tool(db, tool_id, project_id)
-    col_map = _get_column_map(db, tool_id)
+    if slug in ("rev", "log"):
+        raise HTTPException(status_code=400,
+            detail=f"'{slug}' è gestita automaticamente dal sistema")
 
-    col = col_map.get(slug)
-    if not col:
+    if not conn.execute(
+        "SELECT 1 FROM _columns WHERE tool_id = ? AND slug = ?", (tool_id, slug)
+    ).fetchone():
         raise HTTPException(status_code=404, detail=f"Colonna '{slug}' non trovata")
 
-    # Blocca modifica colonne di sola lettura (REV, LOG)
-    if slug in ["rev", "log"]:
-        raise HTTPException(
-            status_code=400,
-            detail=f"La colonna '{slug}' è gestita automaticamente dal sistema"
-        )
-
-    row = db.query(ToolRow).filter(
-        ToolRow.id == row_id,
-        ToolRow.tool_id == tool_id
-    ).first()
-
+    row = conn.execute(
+        f'SELECT * FROM "{tool_slug}" WHERE __id = ?', (row_id,)
+    ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Riga non trovata")
+    row = dict(row)
 
-    if row.is_deleted:
-        raise HTTPException(
-            status_code=400,
-            detail="Impossibile modificare una riga eliminata"
-        )
-
-    # Valore attuale
-    cell = db.query(ToolCell).filter(
-        ToolCell.row_id == row_id,
-        ToolCell.column_id == col.id
-    ).first()
-
-    old_value = cell.value if cell else None
+    old_value = row.get(slug)
     new_value = new_value.strip() if new_value else None
 
-    # Nessuna modifica reale
     if str(old_value or "") == str(new_value or ""):
-        columns = get_columns(db, tool_id)
-        return serialize_row(row, columns)
+        return serialize_active_row(
+            conn.execute(f'SELECT * FROM "{tool_slug}" WHERE __id = ?', (row_id,)).fetchone(),
+            tool_id, project_id
+        )
 
-    # Validazione TAG
     if slug == "tag":
         if not new_value:
             raise HTTPException(status_code=422, detail="Il TAG non può essere vuoto")
-        _validate_tag_unique(db, tool_id, new_value, exclude_row_id=row_id)
+        _validate_tag_unique(conn, tool_slug, new_value, exclude_id=row_id)
 
-    # Aggiorna o crea la cella
-    if cell:
-        cell.value = new_value
-        cell.is_overridden = True
-    else:
-        cell = ToolCell(
-            row_id=row_id,
-            column_id=col.id,
-            value=new_value,
-            is_overridden=True
-        )
-        db.add(cell)
-
-    # Aggiorna row_log
-    log_entry = _format_log_entry(tool.current_rev, slug, old_value, new_value)
-    row.row_log = _append_row_log(row.row_log, log_entry)
-
-    # Audit log
-    write_log(
-        db=db,
-        project_id=project_id,
-        tool=tool.slug,
-        action="UPDATE",
-        row_id=row_id,
-        field=slug,
-        old_value=old_value,
-        new_value=new_value
+    # Aggiorna valore
+    conn.execute(
+        f'UPDATE "{tool_slug}" SET "{slug}" = ? WHERE __id = ?',
+        (new_value, row_id)
     )
 
-    db.commit()
-    db.refresh(row)
+    # Override
+    tag_val = row.get("tag", "")
+    conn.execute(
+        "INSERT OR IGNORE INTO _overrides (tool_slug, row_tag, col_slug) VALUES (?,?,?)",
+        (tool_slug, tag_val, slug)
+    )
 
-    columns = get_columns(db, tool_id)
-    return serialize_row(row, columns)
+    # Row log
+    log_entry = _format_log_entry(rev, slug, old_value, new_value)
+    existing_log = row.get("__log")
+    new_log = _append_log(existing_log, log_entry)
+    conn.execute(
+        f'UPDATE "{tool_slug}" SET __log = ? WHERE __id = ?',
+        (new_log, row_id)
+    )
+
+    # Se TAG cambia, aggiorna _overrides con nuovo tag
+    if slug == "tag" and new_value and old_value:
+        conn.execute(
+            "UPDATE _overrides SET row_tag = ? WHERE tool_slug = ? AND row_tag = ?",
+            (new_value, tool_slug, old_value)
+        )
+
+    audit(conn, tool_slug, "UPDATE", row_tag=tag_val, field=slug,
+          old_val=old_value, new_val=new_value)
+    conn.commit()
+
+    updated = conn.execute(
+        f'SELECT * FROM "{tool_slug}" WHERE __id = ?', (row_id,)
+    ).fetchone()
+    return serialize_active_row(updated, tool_id, project_id)
 
 
 def soft_delete_row(
-    db: Session,
+    conn: sqlite3.Connection,
     tool_id: int,
     row_id: int,
     project_id: int
 ) -> dict:
-    """
-    Soft delete: marca la riga come eliminata senza
-    rimuoverla dal DB. Aggiorna row_log con stato REMOVED.
-    """
-    tool = get_tool(db, tool_id, project_id)
+    tool = get_tool(conn, tool_id)
+    slug = tool["slug"]
+    rev  = tool["rev"]
 
-    row = db.query(ToolRow).filter(
-        ToolRow.id == row_id,
-        ToolRow.tool_id == tool_id
-    ).first()
-
+    row = conn.execute(
+        f'SELECT * FROM "{slug}" WHERE __id = ?', (row_id,)
+    ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Riga non trovata")
+    row = dict(row)
 
-    row.is_deleted = True
-    row.deleted_at = _now()
-
-    # Aggiorna row_log con stato REMOVED
+    tag_val = row.get("tag", "")
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-    log_entry = f"[{ts} REV {tool.current_rev}] REMOVED"
-    row.row_log = _append_row_log(row.row_log, log_entry)
+    log_entry = _append_log(row.get("__log"), f"[{ts} REV {rev}] REMOVED")
 
-    # Audit log
-    write_log(
-        db=db,
-        project_id=project_id,
-        tool=tool.slug,
-        action="DELETE",
-        row_id=row_id,
-        old_value=_get_tag_value(db, row_id, tool_id)
+    # Serializza riga (solo campi utente + tag + rev)
+    row_data = {k: v for k, v in row.items() if not k.startswith("__")}
+    orig_pos = row.get("__position", 0)
+
+    conn.execute(
+        "INSERT INTO _trash (tool_slug, orig_pos, row_data, row_log) VALUES (?,?,?,?)",
+        (slug, orig_pos, json.dumps(row_data), log_entry)
     )
+    trash_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-    db.commit()
-    db.refresh(row)
+    conn.execute(f'DELETE FROM "{slug}" WHERE __id = ?', (row_id,))
 
-    columns = get_columns(db, tool_id)
-    return serialize_row(row, columns)
+    audit(conn, slug, "DELETE", row_tag=tag_val)
+    conn.commit()
+
+    trash_row = conn.execute(
+        "SELECT * FROM _trash WHERE id = ?", (trash_id,)
+    ).fetchone()
+    return serialize_trash_row(trash_row, tool_id, project_id)
 
 
 def restore_row(
-    db: Session,
+    conn: sqlite3.Connection,
     tool_id: int,
-    row_id: int,
+    trash_id: int,
     project_id: int
 ) -> dict:
-    """
-    Ripristina una riga soft-deleted.
-    Aggiorna row_log con stato RESTORED.
-    """
-    tool = get_tool(db, tool_id, project_id)
+    tool = get_tool(conn, tool_id)
+    slug = tool["slug"]
+    rev  = tool["rev"]
 
-    row = db.query(ToolRow).filter(
-        ToolRow.id == row_id,
-        ToolRow.tool_id == tool_id
-    ).first()
+    trash = conn.execute(
+        "SELECT * FROM _trash WHERE id = ? AND tool_slug = ?", (trash_id, slug)
+    ).fetchone()
+    if not trash:
+        raise HTTPException(status_code=404, detail="Riga nel cestino non trovata")
+    trash = dict(trash)
 
-    if not row:
-        raise HTTPException(status_code=404, detail="Riga non trovata")
+    try:
+        row_data = json.loads(trash["row_data"])
+    except Exception:
+        row_data = {}
 
-    row.is_deleted = False
-    row.deleted_at = None
+    tag_val = row_data.get("tag", "")
+    _validate_tag_unique(conn, slug, tag_val)
+
+    max_pos = conn.execute(
+        f'SELECT MAX(__position) FROM "{slug}"'
+    ).fetchone()[0]
+    next_pos = (max_pos or -1) + 1
 
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-    log_entry = f"[{ts} REV {tool.current_rev}] RESTORED"
-    row.row_log = _append_row_log(row.row_log, log_entry)
+    new_log = _append_log(trash.get("row_log"), f"[{ts} REV {rev}] RESTORED")
 
-    db.commit()
-    db.refresh(row)
+    # Ri-inserisce (senza le colonne interne)
+    safe_data = {k: v for k, v in row_data.items()
+                 if not k.startswith("__") and k != "log"}
+    safe_data["__position"] = next_pos
+    safe_data["__log"] = new_log
 
-    columns = get_columns(db, tool_id)
-    return serialize_row(row, columns)
+    cols_str = ", ".join(f'"{c}"' for c in safe_data)
+    placeholders = ", ".join("?" * len(safe_data))
+    conn.execute(
+        f'INSERT INTO "{slug}" ({cols_str}) VALUES ({placeholders})',
+        list(safe_data.values())
+    )
+    new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+    conn.execute("DELETE FROM _trash WHERE id = ?", (trash_id,))
+    conn.commit()
+
+    row = conn.execute(f'SELECT * FROM "{slug}" WHERE __id = ?', (new_id,)).fetchone()
+    return serialize_active_row(row, tool_id, project_id)
+
 
 def hard_delete_row(
-    db: Session,
+    conn: sqlite3.Connection,
     tool_id: int,
-    row_id: int,
+    trash_id: int,
     project_id: int
 ) -> dict:
-    """
-    Eliminazione definitiva di una riga dal database.
-    Disponibile solo su righe già soft-deleted.
-    """
-    row = db.query(ToolRow).filter(
-        ToolRow.id == row_id,
-        ToolRow.tool_id == tool_id
-    ).first()
+    tool = get_tool(conn, tool_id)
+    slug = tool["slug"]
 
-    if not row:
-        raise HTTPException(status_code=404, detail="Riga non trovata")
+    trash = conn.execute(
+        "SELECT * FROM _trash WHERE id = ? AND tool_slug = ?", (trash_id, slug)
+    ).fetchone()
+    if not trash:
+        raise HTTPException(status_code=404, detail="Riga nel cestino non trovata")
 
-    if not row.is_deleted:
-        raise HTTPException(
-            status_code=400,
-            detail="La riga deve essere eliminata prima di poter essere rimossa definitivamente"
-        )
+    conn.execute("DELETE FROM _trash WHERE id = ?", (trash_id,))
+    conn.commit()
+    return {"ok": True, "deleted_id": trash_id}
 
-    # Audit log prima di eliminare
-    write_log(
-        db=db,
-        project_id=project_id,
-        tool=db.query(Tool).filter(Tool.id == tool_id).first().slug,
-        action="HARD_DELETE",
-        row_id=row_id,
-        old_value=_get_tag_value(db, row_id, tool_id)
-    )
-
-    db.delete(row)
-    db.commit()
-    return {"ok": True, "deleted_id": row_id}
 
 def paste_rows(
-    db: Session,
+    conn: sqlite3.Connection,
     tool_id: int,
     project_id: int,
     rows_data: list[dict]
-) -> list[dict]:
-    """
-    Incolla multiple righe in una sola operazione.
-    Usato per paste da Excel/CSV.
+) -> dict:
+    tool = get_tool(conn, tool_id)
+    slug = tool["slug"]
+    rev  = tool["rev"]
 
-    rows_data: lista di dizionari {slug: valore}
-    Le righe con TAG duplicato vengono saltate con warning.
-    """
-    tool = get_tool(db, tool_id, project_id)
-    col_map = _get_column_map(db, tool_id)
-    columns = get_columns(db, tool_id)
+    valid_cols = {c["slug"] for c in get_columns(conn, tool_id)
+                  if c["slug"] not in ("log",)}
 
-    results = []
-    skipped = []
+    max_pos = conn.execute(
+        f'SELECT MAX(__position) FROM "{slug}"'
+    ).fetchone()[0]
+    next_pos = (max_pos or -1) + 1
 
-    # Posizione di partenza
-    last_row = db.query(ToolRow).filter(
-        ToolRow.tool_id == tool_id
-    ).order_by(ToolRow.position.desc()).first()
-    next_position = (last_row.position + 1) if last_row else 0
+    inserted = []
+    skipped  = []
 
     for row_data in rows_data:
-        tag_value = (row_data.get("tag") or "").strip()
-
-        if not tag_value:
+        tag_val = (row_data.get("tag") or "").strip()
+        if not tag_val:
             skipped.append({"reason": "TAG vuoto", "data": row_data})
             continue
 
-        # Controlla unicità TAG
-        existing = _find_tag(db, tool_id, tag_value)
-        if existing:
-            skipped.append({"reason": f"TAG '{tag_value}' già esistente", "data": row_data})
+        if conn.execute(
+            f'SELECT 1 FROM "{slug}" WHERE tag = ?', (tag_val,)
+        ).fetchone():
+            skipped.append({"reason": f"TAG '{tag_val}' già esistente", "data": row_data})
             continue
 
-        row = ToolRow(
-            tool_id=tool_id,
-            project_id=project_id,
-            position=next_position,
-            rev=tool.current_rev,
-            is_deleted=False
+        insert_data = {"tag": tag_val, "rev": rev, "__position": next_pos}
+        for k, v in row_data.items():
+            if k in valid_cols and k not in ("tag", "rev"):
+                insert_data[k] = str(v).strip() if v is not None else None
+
+        cols_str = ", ".join(f'"{c}"' for c in insert_data)
+        placeholders = ", ".join("?" * len(insert_data))
+        conn.execute(
+            f'INSERT INTO "{slug}" ({cols_str}) VALUES ({placeholders})',
+            list(insert_data.values())
         )
-        db.add(row)
-        db.flush()
+        new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-        for slug, value in row_data.items():
-            col = col_map.get(slug)
-            if not col:
-                continue
-            cell = ToolCell(
-                row_id=row.id,
-                column_id=col.id,
-                value=str(value).strip() if value else None
-            )
-            db.add(cell)
+        audit(conn, slug, "INSERT", row_tag=tag_val, new_val=tag_val)
+        next_pos += 1
 
-        write_log(
-            db=db,
-            project_id=project_id,
-            tool=tool.slug,
-            action="INSERT",
-            row_id=row.id,
-            new_value=tag_value
-        )
+        row = conn.execute(
+            f'SELECT * FROM "{slug}" WHERE __id = ?', (new_id,)
+        ).fetchone()
+        inserted.append(serialize_active_row(row, tool_id, project_id))
 
-        next_position += 1
-        db.flush()
-        results.append(serialize_row(row, columns))
-
-    db.commit()
-    return {"inserted": results, "skipped": skipped}
+    conn.commit()
+    return {"inserted": inserted, "skipped": skipped}
 
 
 # ============================================================
@@ -817,79 +601,34 @@ def paste_rows(
 # ============================================================
 
 def _validate_tag_unique(
-    db: Session,
-    tool_id: int,
+    conn: sqlite3.Connection,
+    tool_slug: str,
     tag: str,
-    exclude_row_id: int = None
+    exclude_id: int = None
 ):
-    """Solleva 409 se il TAG esiste già nel tool."""
-    existing = _find_tag(db, tool_id, tag, exclude_row_id)
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail=f"TAG '{tag}' già esistente in questo tool"
-        )
-
-
-def _find_tag(
-    db: Session,
-    tool_id: int,
-    tag: str,
-    exclude_row_id: int = None
-):
-    """Cerca una riga con un dato TAG nel tool."""
-    tag_col = db.query(ToolColumn).filter(
-        ToolColumn.tool_id == tool_id,
-        ToolColumn.slug == "tag"
-    ).first()
-
-    if not tag_col:
-        return None
-
-    query = db.query(ToolCell).join(ToolRow).filter(
-        ToolRow.tool_id == tool_id,
-        ToolCell.column_id == tag_col.id,
-        ToolCell.value == tag,
-        ToolRow.is_deleted == False
-    )
-
-    if exclude_row_id:
-        query = query.filter(ToolRow.id != exclude_row_id)
-
-    return query.first()
-
-
-def _get_tag_value(db: Session, row_id: int, tool_id: int) -> str:
-    """Restituisce il valore TAG di una riga."""
-    tag_col = db.query(ToolColumn).filter(
-        ToolColumn.tool_id == tool_id,
-        ToolColumn.slug == "tag"
-    ).first()
-
-    if not tag_col:
-        return ""
-
-    cell = db.query(ToolCell).filter(
-        ToolCell.row_id == row_id,
-        ToolCell.column_id == tag_col.id
-    ).first()
-
-    return cell.value if cell else ""
+    query = f'SELECT __id FROM "{tool_slug}" WHERE tag = ?'
+    args  = [tag]
+    if exclude_id is not None:
+        query += " AND __id != ?"
+        args.append(exclude_id)
+    if conn.execute(query, args).fetchone():
+        raise HTTPException(status_code=409,
+            detail=f"TAG '{tag}' già esistente in questo tool")
 
 
 # ============================================================
-# TEMPLATE — query ETL riutilizzabili
+# TEMPLATE — nel registry DB (SQLAlchemy)
 # ============================================================
 
-def get_templates(db: Session, type_slug: str = None) -> list[ToolTemplate]:
-    q = db.query(ToolTemplate)
+def get_templates(registry_db: Session, type_slug: str = None) -> list[ToolTemplate]:
+    q = registry_db.query(ToolTemplate)
     if type_slug:
         q = q.filter(ToolTemplate.type_slug == type_slug)
     return q.order_by(ToolTemplate.created_at.desc()).all()
 
 
 def create_template(
-    db: Session,
+    registry_db: Session,
     type_slug: str,
     name: str,
     etl_sql: str,
@@ -901,15 +640,15 @@ def create_template(
         description=description,
         etl_sql=etl_sql
     )
-    db.add(t)
-    db.commit()
-    db.refresh(t)
+    registry_db.add(t)
+    registry_db.commit()
+    registry_db.refresh(t)
     return t
 
 
-def delete_template(db: Session, template_id: int) -> None:
-    t = db.query(ToolTemplate).filter(ToolTemplate.id == template_id).first()
+def delete_template(registry_db: Session, template_id: int) -> None:
+    t = registry_db.query(ToolTemplate).filter(ToolTemplate.id == template_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="Template non trovato")
-    db.delete(t)
-    db.commit()
+    registry_db.delete(t)
+    registry_db.commit()

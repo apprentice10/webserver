@@ -1,42 +1,22 @@
 """
 engine/routes.py
 -----------------
-Endpoints HTTP universali del Table Engine.
-
-Responsabilità SOLO:
-- Ricevere e validare input HTTP (Pydantic)
-- Delegare al service.py
-- Restituire risposte HTTP
-
-Struttura URL:
-  /api/tools/                          GET  — lista tool del progetto
-  /api/tools/                          POST — crea nuovo tool
-  /api/tools/{tool_id}/                GET  — dettaglio tool
-  /api/tools/{tool_id}/settings        PATCH — aggiorna settings tool
-  /api/tools/{tool_id}/columns         GET  — lista colonne
-  /api/tools/{tool_id}/columns         POST — aggiungi colonna
-  /api/tools/{tool_id}/columns/{id}    PATCH — modifica colonna
-  /api/tools/{tool_id}/columns/{id}    DELETE — elimina colonna
-  /api/tools/{tool_id}/columns/{id}/width PATCH — resize colonna
-  /api/tools/{tool_id}/rows            GET  — lista righe
-  /api/tools/{tool_id}/rows            POST — crea riga
-  /api/tools/{tool_id}/rows/paste      POST — incolla righe multiple
-  /api/tools/{tool_id}/rows/{id}/cell  PATCH — aggiorna cella
-  /api/tools/{tool_id}/rows/{id}/delete POST — soft delete
-  /api/tools/{tool_id}/rows/{id}/restore POST — ripristina riga
-  /api/tools/{tool_id}/sql             POST — SQL editor
+Endpoints HTTP del Table Engine — thin layer su service.py ed etl.py.
 """
 
+import sqlite3
+import sqlalchemy
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, Any
 from datetime import datetime
-import sqlalchemy
 
 from database import get_db
+from engine.project_db import get_project_conn
 from engine import service
 from engine.catalog import TOOL_CATALOG
+from engine.models import ToolTemplate
 
 router = APIRouter(prefix="/api/tools", tags=["engine"])
 
@@ -54,6 +34,29 @@ class ToolCreate(BaseModel):
     default_columns: Optional[list[dict]] = None
 
 
+class ToolSettingsUpdate(BaseModel):
+    name:         Optional[str] = None
+    rev:          Optional[str] = None
+    current_rev:  Optional[str] = None   # alias per compatibilità
+    note:         Optional[str] = None
+    query_config: Optional[Any] = None
+    icon:         Optional[str] = None
+
+
+class ToolResponse(BaseModel):
+    id:          int
+    name:        str
+    slug:        str
+    tool_type:   Optional[str]
+    current_rev: str
+    note:        Optional[str]
+    icon:        Optional[str]
+    project_id:  Optional[int] = None   # non in _tools, lo inseriamo nel route
+
+    class Config:
+        from_attributes = True
+
+
 class TemplateCreate(BaseModel):
     type_slug:   str
     name:        str
@@ -68,28 +71,6 @@ class TemplateResponse(BaseModel):
     description: Optional[str]
     etl_sql:     str
     created_at:  Optional[datetime]
-
-    class Config:
-        from_attributes = True
-
-
-class ToolSettingsUpdate(BaseModel):
-    name:         Optional[str] = None
-    current_rev:  Optional[str] = None
-    note:         Optional[str] = None
-    query_config: Optional[Any] = None
-    icon:         Optional[str] = None
-
-
-class ToolResponse(BaseModel):
-    id:          int
-    project_id:  int
-    name:        str
-    slug:        str
-    tool_type:   Optional[str]
-    current_rev: str
-    note:        Optional[str]
-    icon:        Optional[str]
 
     class Config:
         from_attributes = True
@@ -124,14 +105,14 @@ class ColumnResponse(BaseModel):
     width:     int
     position:  int
     is_system: bool
-    formula:   Optional[str]
+    formula:   Optional[str] = None
 
     class Config:
         from_attributes = True
 
 
 class RowCreate(BaseModel):
-    cells: dict[str, Any]  # {slug: valore}
+    cells: dict[str, Any]
 
 
 class CellUpdate(BaseModel):
@@ -140,37 +121,56 @@ class CellUpdate(BaseModel):
 
 
 class PasteData(BaseModel):
-    rows: list[dict[str, Any]]  # lista di {slug: valore}
+    rows: list[dict[str, Any]]
 
 
 class SqlQuery(BaseModel):
     sql: str
 
 
+class EtlQuery(BaseModel):
+    sql:   str
+    label: Optional[str] = None
+
+
 # ============================================================
-# ROUTE — CATALOGO E TEMPLATE
+# HELPER — adatta il dict _tools al formato ToolResponse
+# ============================================================
+
+def _tool_to_response(tool: dict, project_id: int = None) -> dict:
+    return {
+        "id":          tool["id"],
+        "name":        tool["name"],
+        "slug":        tool["slug"],
+        "tool_type":   tool.get("tool_type"),
+        "current_rev": tool.get("rev", "A"),
+        "note":        tool.get("note"),
+        "icon":        tool.get("icon", "📄"),
+        "project_id":  project_id,
+    }
+
+
+# ============================================================
+# CATALOGO E TEMPLATE
 # ============================================================
 
 @router.get("/types")
 def get_tool_types():
-    """Restituisce il catalogo dei tipi di tool disponibili."""
     return TOOL_CATALOG
 
 
 @router.get("/templates", response_model=list[TemplateResponse])
 def list_templates(
     type_slug: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
+    registry_db: Session = Depends(get_db)
 ):
-    """Restituisce i template salvati, opzionalmente filtrati per tipo."""
-    return service.get_templates(db, type_slug)
+    return service.get_templates(registry_db, type_slug)
 
 
 @router.post("/templates", response_model=TemplateResponse)
-def create_template(data: TemplateCreate, db: Session = Depends(get_db)):
-    """Crea un nuovo template ETL."""
+def create_template(data: TemplateCreate, registry_db: Session = Depends(get_db)):
     return service.create_template(
-        db,
+        registry_db,
         type_slug=data.type_slug,
         name=data.name,
         etl_sql=data.etl_sql,
@@ -179,87 +179,95 @@ def create_template(data: TemplateCreate, db: Session = Depends(get_db)):
 
 
 @router.delete("/templates/{template_id}")
-def delete_template(template_id: int, db: Session = Depends(get_db)):
-    """Elimina un template."""
-    service.delete_template(db, template_id)
+def delete_template(template_id: int, registry_db: Session = Depends(get_db)):
+    service.delete_template(registry_db, template_id)
     return {"ok": True}
 
 
 # ============================================================
-# ROUTE — TOOL
+# TOOL
 # ============================================================
 
-@router.get("/project/{project_id}", response_model=list[ToolResponse])
-def list_tools(project_id: int, db: Session = Depends(get_db)):
-    """Restituisce tutti i tool di un progetto."""
-    return service.get_tools_for_project(db, project_id)
+@router.get("/project/{project_id}")
+def list_tools(
+    project_id: int,
+    conn: sqlite3.Connection = Depends(get_project_conn)
+):
+    tools = service.get_tools_for_project(conn)
+    return [_tool_to_response(t, project_id) for t in tools]
 
 
-@router.post("/project/{project_id}", response_model=ToolResponse)
-def create_tool(project_id: int, data: ToolCreate, db: Session = Depends(get_db)):
-    """Crea un nuovo tool per il progetto."""
-    return service.create_tool(
-        db=db,
-        project_id=project_id,
+@router.post("/project/{project_id}")
+def create_tool(
+    project_id: int,
+    data: ToolCreate,
+    conn: sqlite3.Connection = Depends(get_project_conn),
+    registry_db: Session = Depends(get_db)
+):
+    tool = service.create_tool(
+        conn=conn,
         name=data.name,
         slug=data.slug,
         tool_type=data.tool_type,
         icon=data.icon,
         template_id=data.template_id,
-        default_columns=data.default_columns
+        default_columns=data.default_columns,
+        registry_db=registry_db
     )
+    return _tool_to_response(tool, project_id)
 
 
-@router.get("/{tool_id}", response_model=ToolResponse)
+@router.get("/{tool_id}")
 def get_tool(
     tool_id: int,
     project_id: int = Query(...),
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Restituisce il dettaglio di un tool."""
-    return service.get_tool(db, tool_id, project_id)
+    tool = service.get_tool(conn, tool_id)
+    return _tool_to_response(tool, project_id)
 
 
-@router.patch("/{tool_id}/settings", response_model=ToolResponse)
+@router.patch("/{tool_id}/settings")
 def update_tool_settings(
     tool_id: int,
     project_id: int = Query(...),
     data: ToolSettingsUpdate = ...,
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Aggiorna le impostazioni di un tool."""
-    return service.update_tool_settings(
-        db, tool_id, project_id,
-        data.model_dump(exclude_unset=True)
-    )
+    payload = data.model_dump(exclude_unset=True)
+    # alias current_rev → rev
+    if "current_rev" in payload and "rev" not in payload:
+        payload["rev"] = payload.pop("current_rev")
+    elif "current_rev" in payload:
+        payload.pop("current_rev")
+
+    tool = service.update_tool_settings(conn, tool_id, payload)
+    return _tool_to_response(tool, project_id)
 
 
 # ============================================================
-# ROUTE — COLONNE
+# COLONNE
 # ============================================================
 
-@router.get("/{tool_id}/columns", response_model=list[ColumnResponse])
+@router.get("/{tool_id}/columns")
 def list_columns(
     tool_id: int,
     project_id: int = Query(...),
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Restituisce le colonne di un tool."""
-    return service.get_columns(db, tool_id)
+    return service.get_columns(conn, tool_id)
 
 
-@router.post("/{tool_id}/columns", response_model=ColumnResponse)
+@router.post("/{tool_id}/columns")
 def add_column(
     tool_id: int,
     project_id: int = Query(...),
     data: ColumnCreate = ...,
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Aggiunge una nuova colonna al tool."""
     return service.add_column(
-        db=db,
+        conn=conn,
         tool_id=tool_id,
-        project_id=project_id,
         name=data.name,
         slug=data.slug,
         col_type=data.col_type,
@@ -268,18 +276,16 @@ def add_column(
     )
 
 
-@router.patch("/{tool_id}/columns/{column_id}", response_model=ColumnResponse)
+@router.patch("/{tool_id}/columns/{column_id}")
 def update_column(
     tool_id: int,
     column_id: int,
     project_id: int = Query(...),
     data: ColumnUpdate = ...,
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Modifica una colonna esistente."""
     return service.update_column(
-        db, tool_id, column_id, project_id,
-        data.model_dump(exclude_unset=True)
+        conn, tool_id, column_id, data.model_dump(exclude_unset=True)
     )
 
 
@@ -288,25 +294,24 @@ def delete_column(
     tool_id: int,
     column_id: int,
     project_id: int = Query(...),
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Elimina una colonna e tutte le sue celle."""
-    return service.delete_column(db, tool_id, column_id, project_id)
+    return service.delete_column(conn, tool_id, column_id)
 
 
-@router.patch("/{tool_id}/columns/{column_id}/width", response_model=ColumnResponse)
+@router.patch("/{tool_id}/columns/{column_id}/width")
 def update_column_width(
     tool_id: int,
     column_id: int,
     data: ColumnWidthUpdate,
-    db: Session = Depends(get_db)
+    project_id: int = Query(...),
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Aggiorna solo la larghezza di una colonna (resize)."""
-    return service.update_column_width(db, tool_id, column_id, data.width)
+    return service.update_column_width(conn, tool_id, column_id, data.width)
 
 
 # ============================================================
-# ROUTE — RIGHE
+# RIGHE
 # ============================================================
 
 @router.get("/{tool_id}/rows")
@@ -314,10 +319,9 @@ def list_rows(
     tool_id: int,
     project_id: int = Query(...),
     include_deleted: bool = Query(False),
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Restituisce le righe del tool."""
-    return service.get_rows(db, tool_id, include_deleted)
+    return service.get_rows(conn, tool_id, project_id, include_deleted)
 
 
 @router.post("/{tool_id}/rows")
@@ -325,10 +329,9 @@ def create_row(
     tool_id: int,
     project_id: int = Query(...),
     data: RowCreate = ...,
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Crea una nuova riga."""
-    return service.create_row(db, tool_id, project_id, data.cells)
+    return service.create_row(conn, tool_id, project_id, data.cells)
 
 
 @router.post("/{tool_id}/rows/paste")
@@ -336,10 +339,9 @@ def paste_rows(
     tool_id: int,
     project_id: int = Query(...),
     data: PasteData = ...,
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Incolla righe multiple (da Excel/CSV)."""
-    return service.paste_rows(db, tool_id, project_id, data.rows)
+    return service.paste_rows(conn, tool_id, project_id, data.rows)
 
 
 @router.patch("/{tool_id}/rows/{row_id}/cell")
@@ -348,12 +350,10 @@ def update_cell(
     row_id: int,
     project_id: int = Query(...),
     data: CellUpdate = ...,
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Aggiorna il valore di una singola cella."""
     return service.update_cell(
-        db, tool_id, row_id, project_id,
-        data.slug, data.value
+        conn, tool_id, row_id, project_id, data.slug, data.value
     )
 
 
@@ -362,10 +362,9 @@ def soft_delete_row(
     tool_id: int,
     row_id: int,
     project_id: int = Query(...),
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Soft delete: marca la riga come eliminata."""
-    return service.soft_delete_row(db, tool_id, row_id, project_id)
+    return service.soft_delete_row(conn, tool_id, row_id, project_id)
 
 
 @router.post("/{tool_id}/rows/{row_id}/restore")
@@ -373,23 +372,23 @@ def restore_row(
     tool_id: int,
     row_id: int,
     project_id: int = Query(...),
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Ripristina una riga soft-deleted."""
-    return service.restore_row(db, tool_id, row_id, project_id)
+    return service.restore_row(conn, tool_id, row_id, project_id)
+
 
 @router.post("/{tool_id}/rows/{row_id}/hard-delete")
 def hard_delete_row(
     tool_id: int,
     row_id: int,
     project_id: int = Query(...),
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Eliminazione definitiva — solo su righe già soft-deleted."""
-    return service.hard_delete_row(db, tool_id, row_id, project_id)
+    return service.hard_delete_row(conn, tool_id, row_id, project_id)
+
 
 # ============================================================
-# ROUTE — SQL EDITOR
+# SQL EDITOR
 # ============================================================
 
 @router.post("/{tool_id}/sql")
@@ -397,14 +396,9 @@ def run_sql(
     tool_id: int,
     project_id: int = Query(...),
     data: SqlQuery = ...,
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """
-    Esegue una query SQL sul database.
-    Blocca operazioni DDL pericolose.
-    """
     sql = data.sql.strip()
-
     forbidden = ["drop ", "alter ", "truncate ", "attach ", "detach "]
     sql_lower = sql.lower()
     for keyword in forbidden:
@@ -414,34 +408,21 @@ def run_sql(
                 status_code=403,
                 detail=f"Operazione non permessa: '{keyword.strip()}'"
             )
-
     try:
-        result = db.execute(sqlalchemy.text(sql))
-
-        if result.returns_rows:
-            columns = list(result.keys())
-            rows = [dict(zip(columns, row)) for row in result.fetchall()]
+        cur = conn.execute(sql)
+        if cur.description:
+            columns = [d[0] for d in cur.description]
+            rows    = [dict(zip(columns, row)) for row in cur.fetchall()]
             return {"columns": columns, "rows": rows}
-
-        db.commit()
-        return {"rowcount": result.rowcount}
-
+        conn.commit()
+        return {"rowcount": cur.rowcount}
     except Exception as e:
-        db.rollback()
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail=str(e))
 
-# ============================================================
-# SCHEMI ETL
-# ============================================================
-
-class EtlQuery(BaseModel):
-    sql:   str
-    label: Optional[str] = None
-
 
 # ============================================================
-# ROUTE — ETL
+# ETL
 # ============================================================
 
 @router.post("/{tool_id}/etl/preview")
@@ -449,11 +430,10 @@ def etl_preview(
     tool_id: int,
     project_id: int = Query(...),
     data: EtlQuery = ...,
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Anteprima risultati query ETL senza modificare il DB."""
     from engine.etl import etl_preview as _preview
-    return _preview(db, tool_id, project_id, data.sql)
+    return _preview(conn, tool_id, data.sql)
 
 
 @router.post("/{tool_id}/etl/apply")
@@ -461,11 +441,10 @@ def etl_apply(
     tool_id: int,
     project_id: int = Query(...),
     data: EtlQuery = ...,
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Applica la query ETL — merge con dati esistenti."""
     from engine.etl import etl_apply as _apply
-    return _apply(db, tool_id, project_id, data.sql)
+    return _apply(conn, tool_id, data.sql)
 
 
 @router.post("/{tool_id}/etl/save")
@@ -473,134 +452,27 @@ def etl_save(
     tool_id: int,
     project_id: int = Query(...),
     data: EtlQuery = ...,
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Salva la query ETL nello storico versioni."""
     from engine.etl import save_etl_version
-    return save_etl_version(db, tool_id, project_id, data.sql, data.label)
+    return save_etl_version(conn, tool_id, data.sql, data.label)
 
 
 @router.get("/{tool_id}/etl/config")
 def etl_config(
     tool_id: int,
     project_id: int = Query(...),
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """Restituisce configurazione ETL e storico versioni."""
     from engine.etl import get_etl_config
-    return get_etl_config(db, tool_id, project_id)
+    return get_etl_config(conn, tool_id)
 
 
 @router.get("/{tool_id}/etl/schema")
 def etl_schema(
     tool_id: int,
     project_id: int = Query(...),
-    db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    """
-    Restituisce lo schema del database utile per scrivere query ETL.
-
-    Include:
-    - Tabelle DB native rilevanti (tool_rows, tool_cells, tool_columns, projects)
-    - Tool del progetto con le loro colonne user-defined e view name
-    """
-    from engine.models import ToolColumn
-
-    # Tabelle native con colonne utili per ETL
-    native_tables = [
-        {
-            "name": "tool_rows",
-            "label": "tool_rows",
-            "type": "native",
-            "columns": [
-                {"name": "id",         "type": "INTEGER"},
-                {"name": "tool_id",    "type": "INTEGER"},
-                {"name": "project_id", "type": "INTEGER"},
-                {"name": "position",   "type": "INTEGER"},
-                {"name": "rev",        "type": "TEXT"},
-                {"name": "is_deleted", "type": "BOOLEAN"},
-                {"name": "row_log",    "type": "TEXT"},
-                {"name": "created_at", "type": "DATETIME"},
-                {"name": "updated_at", "type": "DATETIME"},
-            ]
-        },
-        {
-            "name": "tool_cells",
-            "label": "tool_cells",
-            "type": "native",
-            "columns": [
-                {"name": "id",            "type": "INTEGER"},
-                {"name": "row_id",        "type": "INTEGER"},
-                {"name": "column_id",     "type": "INTEGER"},
-                {"name": "value",         "type": "TEXT"},
-                {"name": "is_overridden", "type": "BOOLEAN"},
-            ]
-        },
-        {
-            "name": "tool_columns",
-            "label": "tool_columns",
-            "type": "native",
-            "columns": [
-                {"name": "id",        "type": "INTEGER"},
-                {"name": "tool_id",   "type": "INTEGER"},
-                {"name": "name",      "type": "TEXT"},
-                {"name": "slug",      "type": "TEXT"},
-                {"name": "position",  "type": "INTEGER"},
-                {"name": "is_system", "type": "BOOLEAN"},
-            ]
-        },
-        {
-            "name": "tools",
-            "label": "tools",
-            "type": "native",
-            "columns": [
-                {"name": "id",          "type": "INTEGER"},
-                {"name": "project_id",  "type": "INTEGER"},
-                {"name": "name",        "type": "TEXT"},
-                {"name": "slug",        "type": "TEXT"},
-                {"name": "current_rev", "type": "TEXT"},
-            ]
-        },
-        {
-            "name": "projects",
-            "label": "projects",
-            "type": "native",
-            "columns": [
-                {"name": "id",          "type": "INTEGER"},
-                {"name": "name",        "type": "TEXT"},
-                {"name": "client",      "type": "TEXT"},
-                {"name": "description", "type": "TEXT"},
-            ]
-        },
-    ]
-
-    # Tool del progetto con le loro colonne user-defined
-    project_tools = service.get_tools_for_project(db, project_id)
-    tool_schemas = []
-
-    for t in project_tools:
-        cols = db.query(ToolColumn).filter(
-            ToolColumn.tool_id == t.id
-        ).order_by(ToolColumn.position).all()
-
-        tool_schemas.append({
-            "name":    f"tool_{t.id}",
-            "label":   t.name,
-            "type":    "tool",
-            "tool_id": t.id,
-            "icon":    t.icon or "📄",
-            "columns": [
-                {
-                    "name":      c.slug,
-                    "label":     c.name,
-                    "type":      c.col_type,
-                    "is_system": c.is_system
-                }
-                for c in cols
-            ]
-        })
-
-    return {
-        "native_tables": native_tables,
-        "tool_tables":   tool_schemas
-    }
+    from engine.etl import get_etl_schema
+    return get_etl_schema(conn, tool_id)
