@@ -3,15 +3,17 @@
  * -----------------
  * Rendering e interazione della griglia universale.
  *
- * Responsabilità:
- * - Carica e renderizza righe + colonne
- * - Ghost row (riga vuota finale per inserimento rapido)
- * - Editing inline con salvataggio al blur
- * - Navigazione tastiera tipo spreadsheet
- * - Soft delete / restore visivo
- * - Ricerca/filtro locale
- * - Toggle colonna LOG
- * - Toggle righe eliminate
+ * SECTION MAP (for targeted reading):
+ *   ~L17  : stato interno (_rows, _filteredRows, _ctxRowId …)
+ *   ~L34  : init()
+ *   ~L52  : rendering  (render, _renderRow, _renderCell, _renderGhostRow)
+ *   ~L182 : event listeners  (_attachListeners, onCellFocus/Blur/Keydown)
+ *   ~L261 : keyboard nav + ghost row  (_moveFocus, _createFromGhost)
+ *   ~L331 : cell save  (_saveCell, _updateLogCell)
+ *   ~L373 : soft-delete / restore / hard-delete
+ *   ~L403 : toggleDeleted / toggleLog (CSS .log-hidden, no re-render) / context menu
+ *   ~L480 : search / filters / appendRows / showRowLog
+ *   ~L580 : public API
  */
 
 const GridManager = (() => {
@@ -23,8 +25,8 @@ const GridManager = (() => {
     let _rows         = [];     // Tutte le righe (incluse deleted)
     let _filteredRows = [];     // Righe dopo filtro ricerca
     let _showDeleted  = false;  // Mostra righe eliminate?
-    let _showLog      = false;  // Mostra colonna LOG?
     let _searchQuery  = "";     // Query ricerca corrente
+    let _ctxRowId     = null;   // Row ID del context menu aperto
 
 
     // --------------------------------------------------------
@@ -41,6 +43,7 @@ const GridManager = (() => {
             render();
 
             PasteManager.init();
+            _initContextMenu();
         } catch (err) {
             _showError(err.message);
         }
@@ -59,7 +62,7 @@ const GridManager = (() => {
 
         if (_filteredRows.length === 0 && _rows.filter(r => !r.is_deleted).length === 0) {
             html = `<tr class="grid-empty">
-                        <td colspan="${columns.length + 1}">
+                        <td colspan="${columns.length}">
                             Nessuna riga. Inizia a digitare nella riga vuota qui sotto.
                         </td>
                     </tr>`;
@@ -80,25 +83,12 @@ const GridManager = (() => {
     function _renderRow(row, columns) {
         const isDeleted = row.is_deleted;
         const rowClass  = isDeleted ? "row-deleted" : "";
-
-        const actionBtn = isDeleted
-            ? `<button class="btn-row-action btn-row-restore"
-                   onclick="GridManager.restoreRow(${row.id})"
-                   title="Ripristina">↩</button>
-               <button class="btn-row-action btn-row-hard-delete"
-                   onclick="GridManager.hardDeleteRow(${row.id})"
-                   title="Elimina definitivamente">🗑</button>`
-            : `<button class="btn-row-action btn-row-delete"
-                   onclick="GridManager.softDeleteRow(${row.id})"
-                   title="Elimina">✕</button>`;
-
-        const cells = columns.map(col => _renderCell(row, col, isDeleted)).join("");
+        const cells     = columns.map(col => _renderCell(row, col, isDeleted)).join("");
 
         return `
-            <tr data-row-id="${row.id}" class="${rowClass}">
-                <td class="col-actions">
-                    <div class="cell-actions">${actionBtn}</div>
-                </td>
+            <tr data-row-id="${row.id}"
+                class="${rowClass}"
+                oncontextmenu="GridManager.openContextMenu(event, ${row.id})">
                 ${cells}
             </tr>`;
     }
@@ -107,15 +97,14 @@ const GridManager = (() => {
      * Renderizza una singola cella.
      */
     function _renderCell(row, col, isDeleted) {
-        const value   = row[col.slug] ?? "";
-        const isLog   = col.slug === "log";
-        const isRev   = col.slug === "rev";
-        const isTag   = col.slug === "tag";
-        const logDisplay = (_showLog || isLog) ? "" : "display:none";
+        const value  = row[col.slug] ?? "";
+        const isLog  = col.slug === "log";
+        const isRev  = col.slug === "rev";
+        const isTag  = col.slug === "tag";
 
         if (isLog) {
             return `
-                <td style="width:${col.width}px;${logDisplay}">
+                <td data-slug="log" style="width:${col.width}px">
                     <div class="cell-log-preview"
                          onclick="GridManager.showRowLog(${row.id})">
                         ${_formatLogPreview(row.row_log)}
@@ -146,7 +135,7 @@ const GridManager = (() => {
     function _renderGhostRow(columns) {
         const cells = columns.map(col => {
             if (col.slug === "log" || col.slug === "rev") {
-                return `<td style="width:${col.width}px"></td>`;
+                return `<td data-slug="${col.slug}" style="width:${col.width}px"></td>`;
             }
             const isTag = col.slug === "tag";
             return `
@@ -163,7 +152,6 @@ const GridManager = (() => {
 
         return `
             <tr class="row-ghost" id="ghost-row">
-                <td class="col-actions"></td>
                 ${cells}
             </tr>`;
     }
@@ -419,8 +407,71 @@ const GridManager = (() => {
     // --------------------------------------------------------
 
     function toggleLog() {
-        _showLog = !_showLog;
-        render();
+        const table  = document.getElementById("data-grid");
+        const hidden = table.classList.toggle("log-hidden");
+        const btn    = document.getElementById("btn-toggle-log");
+        if (btn) {
+            btn.textContent = hidden ? "📋 LOG (nascosta)" : "📋 LOG";
+            btn.classList.toggle("active", hidden);
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // CONTEXT MENU
+    // --------------------------------------------------------
+
+    function _initContextMenu() {
+        const menu = document.getElementById("row-context-menu");
+        if (!menu) return;
+
+        menu.addEventListener("click", async e => {
+            const item = e.target.closest("[data-action]");
+            if (!item || _ctxRowId === null) return;
+            const action = item.dataset.action;
+            const rowId  = _ctxRowId;
+            _closeContextMenu();
+
+            if (action === "delete")      await softDeleteRow(rowId);
+            if (action === "restore")     await restoreRow(rowId);
+            if (action === "hard-delete") await hardDeleteRow(rowId);
+            if (action === "log")         showRowLog(rowId);
+        });
+
+        document.addEventListener("click", e => {
+            if (menu.classList.contains("visible") && !menu.contains(e.target)) {
+                _closeContextMenu();
+            }
+        });
+
+        document.addEventListener("keydown", e => {
+            if (e.key === "Escape") _closeContextMenu();
+        });
+    }
+
+    function openContextMenu(e, rowId) {
+        e.preventDefault();
+        _ctxRowId = rowId;
+
+        const row  = _rows.find(r => r.id === rowId);
+        const menu = document.getElementById("row-context-menu");
+        if (!menu || !row) return;
+
+        const isDeleted = row.is_deleted;
+        menu.querySelector('[data-action="delete"]').style.display      = isDeleted ? "none" : "";
+        menu.querySelector('[data-action="restore"]').style.display     = isDeleted ? "" : "none";
+        menu.querySelector('[data-action="hard-delete"]').style.display = isDeleted ? "" : "none";
+
+        const x = Math.min(e.clientX, window.innerWidth  - 210);
+        const y = Math.min(e.clientY, window.innerHeight - 140);
+        menu.style.left = x + "px";
+        menu.style.top  = y + "px";
+        menu.classList.add("visible");
+    }
+
+    function _closeContextMenu() {
+        document.getElementById("row-context-menu")?.classList.remove("visible");
+        _ctxRowId = null;
     }
 
 
@@ -513,7 +564,7 @@ const GridManager = (() => {
         const columns = ColumnsManager.getColumns();
         tbody.innerHTML = `
             <tr class="grid-empty">
-                <td colspan="${columns.length + 1}"
+                <td colspan="${columns.length}"
                     style="color:var(--color-danger)">
                     Errore: ${_escHtml(message)}
                 </td>
@@ -589,7 +640,8 @@ const GridManager = (() => {
         toggleDeleted,
         toggleLog,
         search,
-        showRowLog
+        showRowLog,
+        openContextMenu
     };
 
 })();

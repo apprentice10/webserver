@@ -36,30 +36,108 @@ const ColumnsManager = (() => {
      * Renderizza la riga <tr> dell'intestazione.
      * Chiamato da GridManager dopo il caricamento colonne.
      */
+    // Stato drag-and-drop colonne
+    let _dragSrcId = null;
+
     function renderHeader() {
         const headerRow = document.getElementById("grid-header-row");
 
-        // Colonna azioni fissa
-        let html = `<th class="col-actions" style="width:56px;min-width:56px">
-                        <div class="th-content">
-                            <span class="th-label"></span>
-                        </div>
-                    </th>`;
+        let html = "";
 
         _columns.forEach(col => {
+            const draggable = col.is_system ? "" : 'draggable="true"';
+            const dragClass = col.is_system ? "" : " th-draggable";
             html += `
                 <th style="width:${col.width}px;min-width:40px"
-                    data-column-id="${col.id}">
-                    <div class="th-content">
+                    data-column-id="${col.id}"
+                    data-slug="${col.slug}"
+                    data-is-system="${col.is_system ? 1 : 0}"
+                    ${draggable}>
+                    <div class="th-content${dragClass}">
                         <span class="th-label">${_escHtml(col.name)}</span>
                     </div>
-                    <div class="resize-handle"
-                         data-column-id="${col.id}"></div>
+                    <div class="resize-handle" data-column-id="${col.id}" draggable="false"></div>
                 </th>`;
         });
 
         headerRow.innerHTML = html;
         ResizeManager.init();
+        _attachDragListeners();
+    }
+
+    function _attachDragListeners() {
+        const ths = document.querySelectorAll("th[draggable='true']");
+
+        ths.forEach(th => {
+            th.addEventListener("dragstart", e => {
+                if (e.target.classList.contains("resize-handle")) {
+                    e.preventDefault();
+                    return;
+                }
+                _dragSrcId = parseInt(th.dataset.columnId);
+                th.classList.add("col-dragging");
+                e.dataTransfer.effectAllowed = "move";
+            });
+
+            th.addEventListener("dragend", () => {
+                document.querySelectorAll("th").forEach(t => {
+                    t.classList.remove("col-dragging", "col-dragover");
+                });
+            });
+
+            th.addEventListener("dragover", e => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                if (parseInt(th.dataset.columnId) !== _dragSrcId && !th.dataset.isSystem) {
+                    document.querySelectorAll("th").forEach(t => t.classList.remove("col-dragover"));
+                    th.classList.add("col-dragover");
+                }
+            });
+
+            th.addEventListener("dragleave", () => {
+                th.classList.remove("col-dragover");
+            });
+
+            th.addEventListener("drop", async e => {
+                e.preventDefault();
+                const targetId = parseInt(th.dataset.columnId);
+                if (targetId === _dragSrcId || th.dataset.isSystem === "1") return;
+
+                // Riordina l'array locale (solo colonne utente)
+                const userCols  = _columns.filter(c => !c.is_system);
+                const srcIdx    = userCols.findIndex(c => c.id === _dragSrcId);
+                const tgtIdx    = userCols.findIndex(c => c.id === targetId);
+                if (srcIdx === -1 || tgtIdx === -1) return;
+
+                const [moved] = userCols.splice(srcIdx, 1);
+                userCols.splice(tgtIdx, 0, moved);
+
+                // Aggiorna posizioni nel array completo
+                let pos = 2;
+                _columns = _columns.map(c => {
+                    if (!c.is_system) {
+                        const updated = userCols.find(u => u.id === c.id);
+                        return updated ? { ...updated, position: pos++ } : c;
+                    }
+                    return c;
+                });
+                _columns.sort((a, b) => {
+                    if (a.slug === "log") return 1;
+                    if (b.slug === "log") return -1;
+                    return a.position - b.position;
+                });
+
+                renderHeader();
+                GridManager.render();
+
+                // Salva nel backend
+                try {
+                    await ApiClient.reorderColumns(userCols.map(c => c.id));
+                } catch (err) {
+                    showToast("Errore salvataggio ordine: " + err.message, "error");
+                }
+            });
+        });
     }
 
     // --------------------------------------------------------

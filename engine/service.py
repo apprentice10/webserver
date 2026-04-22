@@ -253,6 +253,17 @@ def delete_column(conn: sqlite3.Connection, tool_id: int, column_id: int) -> dic
     return {"ok": True, "deleted_id": column_id}
 
 
+def reorder_columns(conn: sqlite3.Connection, tool_id: int, col_ids: list[int]) -> dict:
+    """Riordina le colonne utente (non system). Posizioni partono da 2."""
+    for i, col_id in enumerate(col_ids):
+        conn.execute(
+            "UPDATE _columns SET position = ? WHERE id = ? AND tool_id = ? AND is_system = 0",
+            (i + 2, col_id, tool_id)
+        )
+    conn.commit()
+    return {"ok": True, "reordered": len(col_ids)}
+
+
 def update_column_width(conn: sqlite3.Connection, tool_id: int, column_id: int, width: int) -> dict:
     col = conn.execute(
         "SELECT * FROM _columns WHERE id = ? AND tool_id = ?", (column_id, tool_id)

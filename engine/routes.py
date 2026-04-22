@@ -95,6 +95,9 @@ class ColumnUpdate(BaseModel):
 class ColumnWidthUpdate(BaseModel):
     width: int
 
+class ColumnReorder(BaseModel):
+    order: list[int]   # IDs colonne utente nel nuovo ordine
+
 
 class ColumnResponse(BaseModel):
     id:        int
@@ -274,6 +277,16 @@ def add_column(
         width=data.width,
         position=data.position
     )
+
+
+@router.put("/{tool_id}/columns/reorder")
+def reorder_columns(
+    tool_id: int,
+    project_id: int = Query(...),
+    data: ColumnReorder = ...,
+    conn: sqlite3.Connection = Depends(get_project_conn)
+):
+    return service.reorder_columns(conn, tool_id, data.order)
 
 
 @router.patch("/{tool_id}/columns/{column_id}")

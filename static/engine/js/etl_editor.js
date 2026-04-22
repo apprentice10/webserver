@@ -18,13 +18,26 @@ const EtlEditor = (() => {
     let _history         = [];
     let _previewData     = null;
     let _cachedTemplates = [];
+    let _toolType        = null;
 
 
     // --------------------------------------------------------
     // INIT
     // --------------------------------------------------------
 
+    function setToolType(type) {
+        _toolType = type || null;
+    }
+
     async function init() {
+        // Carica tool_type se non già impostato dall'esterno
+        if (!_toolType) {
+            try {
+                const tool = await ApiClient.loadTool();
+                _toolType = tool.tool_type || null;
+            } catch (_) {}
+        }
+
         try {
             const config = await ApiClient.etlLoadConfig();
             _currentSql = config.etl_sql  || "";
@@ -239,9 +252,8 @@ const EtlEditor = (() => {
         const container = document.getElementById("etl-templates-list");
         if (!container) return;
 
-        const typeSlug = typeof ToolbarManager !== "undefined"
-            ? ToolbarManager.getToolType()
-            : null;
+        const typeSlug = _toolType
+            || (typeof ToolbarManager !== "undefined" ? ToolbarManager.getToolType() : null);
 
         try {
             const url = typeSlug
@@ -280,12 +292,12 @@ const EtlEditor = (() => {
         const sql = _getSql();
         if (!sql) { showToast("Nessuna query da salvare.", "error"); return; }
 
-        const typeSlug = typeof ToolbarManager !== "undefined"
-            ? ToolbarManager.getToolType()
-            : null;
+        // Usa tool_type caricato in init(), con fallback a ToolbarManager
+        const typeSlug = _toolType
+            || (typeof ToolbarManager !== "undefined" ? ToolbarManager.getToolType() : null);
 
         if (!typeSlug) {
-            showToast("Questo tool non ha un tipo definito.", "warning");
+            showToast("Questo tool non ha un tipo definito — imposta il tipo nelle impostazioni.", "warning");
             return;
         }
 
@@ -484,6 +496,7 @@ const EtlEditor = (() => {
 
     return {
         init,
+        setToolType,
         preview,
         apply,
         saveVersion,

@@ -81,8 +81,15 @@ const ApiClient = (() => {
 
     async function updateColumnWidth(columnId, width) {
         return request(
-            `/api/tools/${TOOL_ID}/columns/${columnId}/width`,
+            `/api/tools/${TOOL_ID}/columns/${columnId}/width?project_id=${PROJECT_ID}`,
             { method: "PATCH", body: JSON.stringify({ width }) }
+        );
+    }
+
+    async function reorderColumns(orderedIds) {
+        return request(
+            `/api/tools/${TOOL_ID}/columns/reorder?project_id=${PROJECT_ID}`,
+            { method: "PUT", body: JSON.stringify({ order: orderedIds }) }
         );
     }
 
@@ -223,6 +230,7 @@ const ApiClient = (() => {
         updateColumn,
         deleteColumn,
         updateColumnWidth,
+        reorderColumns,
         loadRows,
         createRow,
         updateCell,

@@ -35,7 +35,28 @@ document.addEventListener("DOMContentLoaded", () => {
     if (project) {
         _applyProjectToUI(project);
     }
+
+    // Ripristina stato sidebar
+    if (localStorage.getItem("sidebarCollapsed") === "1") {
+        const sidebar = document.getElementById("main-sidebar");
+        const btn     = document.getElementById("sidebar-toggle");
+        if (sidebar) sidebar.classList.add("collapsed");
+        if (btn)     btn.textContent = "›";
+    }
 });
+
+
+// ============================================================
+// SIDEBAR COLLAPSIBLE
+// ============================================================
+
+function toggleSidebar() {
+    const sidebar   = document.getElementById("main-sidebar");
+    const btn       = document.getElementById("sidebar-toggle");
+    const collapsed = sidebar.classList.toggle("collapsed");
+    btn.textContent = collapsed ? "›" : "‹";
+    localStorage.setItem("sidebarCollapsed", collapsed ? "1" : "0");
+}
 
 
 // ============================================================
