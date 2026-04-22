@@ -265,6 +265,59 @@ html, body {
     line-height: 1.4;
 }
 
+/* Template list nel modal nuovo tool */
+.templates-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.template-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: border-color var(--transition), background var(--transition);
+    background: var(--color-bg);
+}
+
+.template-item:hover {
+    border-color: var(--color-accent);
+    background: rgba(233, 69, 96, 0.04);
+}
+
+.template-item.selected {
+    border-color: var(--color-accent);
+    background: rgba(233, 69, 96, 0.10);
+}
+
+.template-item-name {
+    font-size: 13px;
+    color: var(--color-text);
+}
+
+.template-item-delete {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: var(--radius);
+    transition: background var(--transition), color var(--transition);
+    line-height: 1;
+}
+
+.template-item-delete:hover {
+    background: rgba(231, 76, 60, 0.15);
+    color: var(--color-danger);
+}
+
 /* ============================================================
    AREA CENTRALE
    ============================================================ */

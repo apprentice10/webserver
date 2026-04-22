@@ -16,7 +16,7 @@ Tabelle:
 
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean,
-    DateTime, ForeignKey, UniqueConstraint
+    DateTime, ForeignKey, UniqueConstraint, Index
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -174,3 +174,27 @@ class ToolCell(Base):
     __table_args__ = (
         UniqueConstraint("row_id", "column_id", name="uq_cell_per_row_column"),
     )
+
+
+# ============================================================
+# TOOL TEMPLATE — query ETL salvate come template riutilizzabili
+# ============================================================
+
+class ToolTemplate(Base):
+    __tablename__ = "tool_templates"
+
+    id          = Column(Integer, primary_key=True, index=True)
+
+    # Tipo di tool a cui si applica (es. "instrument-list")
+    type_slug   = Column(String(100), nullable=False, index=True)
+
+    # Nome del template (es. "Instrument List ATEX Standard")
+    name        = Column(String(200), nullable=False)
+
+    # Descrizione opzionale
+    description = Column(Text, nullable=True)
+
+    # Query ETL completa
+    etl_sql     = Column(Text, nullable=False)
+
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())

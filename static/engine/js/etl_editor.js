@@ -481,6 +481,43 @@ const EtlEditor = (() => {
 
 
     // --------------------------------------------------------
+    // SALVA COME TEMPLATE
+    // --------------------------------------------------------
+
+    async function saveAsTemplate() {
+        const sql = _getSql();
+        if (!sql) {
+            showToast("Nessuna query da salvare come template.", "error");
+            return;
+        }
+
+        const typeSlug = ToolbarManager.getToolType();
+        if (!typeSlug) {
+            showToast("Questo tool non ha un tipo definito — aggiorna le impostazioni.", "warning");
+            return;
+        }
+
+        const name = prompt("Nome del template:", "");
+        if (name === null) return;
+        if (!name.trim()) {
+            showToast("Il nome del template non può essere vuoto.", "error");
+            return;
+        }
+
+        try {
+            await ApiClient.saveTemplate({
+                type_slug: typeSlug,
+                name: name.trim(),
+                etl_sql: sql
+            });
+            showToast("Template salvato.", "success");
+        } catch (err) {
+            showToast("Errore salvataggio template: " + err.message, "error");
+        }
+    }
+
+
+    // --------------------------------------------------------
     // API PUBBLICA
     // --------------------------------------------------------
 
@@ -489,6 +526,7 @@ const EtlEditor = (() => {
         preview,
         apply,
         saveVersion,
+        saveAsTemplate,
         loadVersion,
         refreshSchema,
         insertColumn,

@@ -31,6 +31,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, Any
+from datetime import datetime
 import sqlalchemy
 
 from database import get_db
@@ -49,7 +50,27 @@ class ToolCreate(BaseModel):
     slug:            Optional[str] = None
     tool_type:       Optional[str] = None
     icon:            Optional[str] = "📄"
+    template_id:     Optional[int] = None
     default_columns: Optional[list[dict]] = None
+
+
+class TemplateCreate(BaseModel):
+    type_slug:   str
+    name:        str
+    description: Optional[str] = None
+    etl_sql:     str
+
+
+class TemplateResponse(BaseModel):
+    id:          int
+    type_slug:   str
+    name:        str
+    description: Optional[str]
+    etl_sql:     str
+    created_at:  Optional[datetime]
+
+    class Config:
+        from_attributes = True
 
 
 class ToolSettingsUpdate(BaseModel):
@@ -127,13 +148,41 @@ class SqlQuery(BaseModel):
 
 
 # ============================================================
-# ROUTE — CATALOGO TIPI TOOL
+# ROUTE — CATALOGO E TEMPLATE
 # ============================================================
 
 @router.get("/types")
 def get_tool_types():
     """Restituisce il catalogo dei tipi di tool disponibili."""
     return TOOL_CATALOG
+
+
+@router.get("/templates", response_model=list[TemplateResponse])
+def list_templates(
+    type_slug: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """Restituisce i template salvati, opzionalmente filtrati per tipo."""
+    return service.get_templates(db, type_slug)
+
+
+@router.post("/templates", response_model=TemplateResponse)
+def create_template(data: TemplateCreate, db: Session = Depends(get_db)):
+    """Crea un nuovo template ETL."""
+    return service.create_template(
+        db,
+        type_slug=data.type_slug,
+        name=data.name,
+        etl_sql=data.etl_sql,
+        description=data.description
+    )
+
+
+@router.delete("/templates/{template_id}")
+def delete_template(template_id: int, db: Session = Depends(get_db)):
+    """Elimina un template."""
+    service.delete_template(db, template_id)
+    return {"ok": True}
 
 
 # ============================================================
@@ -156,6 +205,7 @@ def create_tool(project_id: int, data: ToolCreate, db: Session = Depends(get_db)
         slug=data.slug,
         tool_type=data.tool_type,
         icon=data.icon,
+        template_id=data.template_id,
         default_columns=data.default_columns
     )
 

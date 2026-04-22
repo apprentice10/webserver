@@ -263,16 +263,20 @@ function openToolById(toolId, projectId) {
 // ============================================================
 
 let _selectedCatalogType = null;
+let _selectedTemplateId  = null;
 
 async function newTool() {
     const project = App.currentProject;
     if (!project) return;
 
     _selectedCatalogType = null;
+    _selectedTemplateId  = null;
 
     // Reset modal
     const nameGroup = document.getElementById("tool-name-group");
     if (nameGroup) nameGroup.style.display = "none";
+    const templatesGroup = document.getElementById("tool-templates-group");
+    if (templatesGroup) templatesGroup.style.display = "none";
     const createBtn = document.getElementById("btn-create-tool");
     if (createBtn) createBtn.disabled = true;
     const nameInput = document.getElementById("input-tool-name");
@@ -312,6 +316,7 @@ async function _loadToolCatalog() {
 
 function selectCatalogType(typeSlug, typeName, typeIcon) {
     _selectedCatalogType = { typeSlug, typeName, typeIcon };
+    _selectedTemplateId  = null;
 
     // Evidenzia la card selezionata
     document.querySelectorAll(".catalog-card").forEach(el => {
@@ -330,6 +335,66 @@ function selectCatalogType(typeSlug, typeName, typeIcon) {
 
     const createBtn = document.getElementById("btn-create-tool");
     if (createBtn) createBtn.disabled = false;
+
+    // Carica i template disponibili per questo tipo
+    _loadTemplatesInModal(typeSlug);
+}
+
+async function _loadTemplatesInModal(typeSlug) {
+    const group = document.getElementById("tool-templates-group");
+    const list  = document.getElementById("templates-list");
+    if (!group || !list) return;
+
+    try {
+        const templates = await fetch(
+            `/api/tools/templates?type_slug=${encodeURIComponent(typeSlug)}`
+        ).then(r => r.json());
+
+        if (templates.length === 0) {
+            group.style.display = "none";
+            return;
+        }
+
+        list.innerHTML = templates.map(t => `
+            <div class="template-item" data-template-id="${t.id}"
+                 onclick="selectTemplate(${t.id}, this)">
+                <span class="template-item-name">${escapeHtml(t.name)}</span>
+                <button class="template-item-delete"
+                        onclick="deleteTemplateFromModal(event, ${t.id}, '${escapeHtml(typeSlug)}')"
+                        title="Elimina template">✕</button>
+            </div>
+        `).join("");
+
+        group.style.display = "flex";
+
+    } catch (_) {
+        group.style.display = "none";
+    }
+}
+
+function selectTemplate(templateId, el) {
+    const alreadySelected = el.classList.contains("selected");
+
+    document.querySelectorAll(".template-item").forEach(i => i.classList.remove("selected"));
+
+    if (alreadySelected) {
+        _selectedTemplateId = null;
+    } else {
+        el.classList.add("selected");
+        _selectedTemplateId = templateId;
+    }
+}
+
+async function deleteTemplateFromModal(event, templateId, typeSlug) {
+    event.stopPropagation();
+    if (!confirm("Eliminare questo template?")) return;
+
+    try {
+        await fetch(`/api/tools/templates/${templateId}`, { method: "DELETE" });
+        await _loadTemplatesInModal(typeSlug);
+    } catch (err) {
+        alert("Errore: " + err.message);
+    }
 }
 
 async function submitNewTool() {
@@ -350,14 +415,19 @@ async function submitNewTool() {
     if (createBtn) createBtn.disabled = true;
 
     try {
+        const payload = {
+            name,
+            tool_type: _selectedCatalogType.typeSlug,
+            icon: _selectedCatalogType.typeIcon
+        };
+        if (_selectedTemplateId) {
+            payload.template_id = _selectedTemplateId;
+        }
+
         const response = await fetch(`/api/tools/project/${project.id}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                name,
-                tool_type: _selectedCatalogType.typeSlug,
-                icon: _selectedCatalogType.typeIcon
-            })
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) {

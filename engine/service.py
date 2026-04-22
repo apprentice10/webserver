@@ -21,7 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
 
 from core.audit import write_log
-from engine.models import Tool, ToolColumn, ToolRow, ToolCell
+from engine.models import Tool, ToolColumn, ToolRow, ToolCell, ToolTemplate
 
 
 # ============================================================
@@ -175,7 +175,8 @@ def create_tool(
     slug: str = None,
     default_columns: list[dict] = None,
     icon: str = None,
-    tool_type: str = None
+    tool_type: str = None,
+    template_id: int = None
 ) -> Tool:
     """
     Crea un nuovo tool per il progetto con le colonne di sistema
@@ -183,9 +184,23 @@ def create_tool(
 
     Se slug non è fornito viene auto-generato dal nome con suffisso
     numerico per garantire unicità nel progetto.
+    Se template_id è fornito, il query_config viene pre-caricato
+    dalla query ETL del template.
     """
     if not slug:
         slug = _unique_slug(db, project_id, _slugify(name))
+
+    # Carica query_config dal template se fornito
+    query_config = None
+    if template_id:
+        template = db.query(ToolTemplate).filter(
+            ToolTemplate.id == template_id
+        ).first()
+        if template:
+            query_config = json.dumps({
+                "etl_sql": template.etl_sql,
+                "etl_history": []
+            })
 
     tool = Tool(
         project_id=project_id,
@@ -193,7 +208,8 @@ def create_tool(
         slug=slug,
         tool_type=tool_type,
         current_rev="A",
-        icon=icon or "📄"
+        icon=icon or "📄",
+        query_config=query_config
     )
     db.add(tool)
 
@@ -859,3 +875,41 @@ def _get_tag_value(db: Session, row_id: int, tool_id: int) -> str:
     ).first()
 
     return cell.value if cell else ""
+
+
+# ============================================================
+# TEMPLATE — query ETL riutilizzabili
+# ============================================================
+
+def get_templates(db: Session, type_slug: str = None) -> list[ToolTemplate]:
+    q = db.query(ToolTemplate)
+    if type_slug:
+        q = q.filter(ToolTemplate.type_slug == type_slug)
+    return q.order_by(ToolTemplate.created_at.desc()).all()
+
+
+def create_template(
+    db: Session,
+    type_slug: str,
+    name: str,
+    etl_sql: str,
+    description: str = None
+) -> ToolTemplate:
+    t = ToolTemplate(
+        type_slug=type_slug,
+        name=name,
+        description=description,
+        etl_sql=etl_sql
+    )
+    db.add(t)
+    db.commit()
+    db.refresh(t)
+    return t
+
+
+def delete_template(db: Session, template_id: int) -> None:
+    t = db.query(ToolTemplate).filter(ToolTemplate.id == template_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Template non trovato")
+    db.delete(t)
+    db.commit()

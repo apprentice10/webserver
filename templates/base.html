@@ -122,6 +122,10 @@
                 <input type="text" id="input-tool-name" placeholder="Es. Strumenti Fase 1"
                        onkeydown="if(event.key==='Enter') submitNewTool()">
             </div>
+            <div class="form-group" id="tool-templates-group" style="display:none">
+                <label>Template (opzionale)</label>
+                <div class="templates-list" id="templates-list"></div>
+            </div>
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeModal('modal-new-tool')">Annulla</button>

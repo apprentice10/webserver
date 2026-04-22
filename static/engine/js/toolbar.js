@@ -58,26 +58,15 @@ const ToolbarManager = (() => {
         // Aggiorna titolo pagina
         document.title = `${_tool.name} — Instrument Manager`;
 
-        // Aggiorna nome e icona nella sidebar sinistra
-        const nameEl = document.getElementById(`sidebar-name-${_tool.slug}`);
-        const iconEl = document.getElementById(`sidebar-icon-${_tool.slug}`);
-        if (nameEl) nameEl.textContent = _tool.name;
-        if (iconEl) iconEl.textContent = _tool.icon || _getDefaultIcon(_tool.slug);
-
-        // Evidenzia tool attivo nella sidebar
-        document.querySelectorAll(".sidebar-item[data-tool]").forEach(el => {
-            el.classList.toggle("active", el.dataset.tool === _tool.slug);
-        });
+        // Aggiorna nome e icona nell'item attivo della sidebar dinamica
+        const activeItem = document.querySelector(`.sidebar-item[data-tool-id="${TOOL_ID}"]`);
+        if (activeItem) {
+            const iconEl = activeItem.querySelector(".sidebar-icon");
+            const nameEl = activeItem.querySelector("span:not(.sidebar-icon)");
+            if (iconEl) iconEl.textContent = _tool.icon || "📄";
+            if (nameEl) nameEl.textContent = _tool.name;
+        }
     }
-
-    function _getDefaultIcon(slug) {
-    const icons = {
-        "instrument-list": "📋",
-        "io-list":         "🔌",
-        "cable-list":      "🔧"
-    };
-    return icons[slug] || "📄";
-}
 
     // --------------------------------------------------------
     // CAMBIO REVISIONE
@@ -216,6 +205,10 @@ const ToolbarManager = (() => {
     // API PUBBLICA
     // --------------------------------------------------------
 
+    function getToolType() {
+        return _tool?.tool_type || null;
+    }
+
     return {
         init,
         changeRev,
@@ -225,7 +218,8 @@ const ToolbarManager = (() => {
         addColumn,
         exportExcel,
         selectIcon,
-        switchTab
+        switchTab,
+        getToolType
     };
 
 })();

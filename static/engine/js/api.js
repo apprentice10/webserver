@@ -196,6 +196,22 @@ const ApiClient = (() => {
 
 
     // --------------------------------------------------------
+    // TEMPLATE
+    // --------------------------------------------------------
+
+    async function saveTemplate(data) {
+        return request("/api/tools/templates", {
+            method: "POST",
+            body: JSON.stringify(data)
+        });
+    }
+
+    async function deleteTemplate(templateId) {
+        return request(`/api/tools/templates/${templateId}`, { method: "DELETE" });
+    }
+
+
+    // --------------------------------------------------------
     // API PUBBLICA
     // --------------------------------------------------------
 
@@ -220,7 +236,9 @@ const ApiClient = (() => {
         etlApply,
         etlSave,
         etlLoadConfig,
-        etlLoadSchema
+        etlLoadSchema,
+        saveTemplate,
+        deleteTemplate
     };
 
 })();
