@@ -55,6 +55,7 @@ class ToolSettingsUpdate(BaseModel):
     current_rev:  Optional[str] = None
     note:         Optional[str] = None
     query_config: Optional[Any] = None
+    icon:         Optional[str] = None
 
 
 class ToolResponse(BaseModel):
