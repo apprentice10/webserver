@@ -85,7 +85,8 @@ def create_tool(
     icon: str = "📄",
     template_id: int = None,
     default_columns: list[dict] = None,
-    registry_db: Session = None
+    registry_db: Session = None,
+    etl_sql: str = None
 ) -> dict:
     if not slug:
         slug = _unique_slug(conn, _slugify(name))
@@ -97,6 +98,8 @@ def create_tool(
         ).first()
         if tmpl:
             query_config = json.dumps({"etl_sql": tmpl.etl_sql, "etl_history": []})
+    elif etl_sql:
+        query_config = json.dumps({"etl_sql": etl_sql, "etl_history": []})
 
     conn.execute("""
         INSERT INTO _tools (slug, name, tool_type, icon, rev, query_config)
@@ -631,9 +634,19 @@ def _validate_tag_unique(
 # TEMPLATE — nel registry DB (SQLAlchemy)
 # ============================================================
 
-def get_templates(registry_db: Session, type_slug: str = None) -> list[ToolTemplate]:
+def get_templates(
+    registry_db: Session,
+    type_slug: str = None,
+    tool_id: int = None,
+    project_id: int = None
+) -> list[ToolTemplate]:
     q = registry_db.query(ToolTemplate)
-    if type_slug:
+    if tool_id:
+        q = q.filter(ToolTemplate.tool_id == tool_id)
+    elif project_id and type_slug:
+        q = q.filter(ToolTemplate.project_id == project_id,
+                     ToolTemplate.type_slug == type_slug)
+    elif type_slug:
         q = q.filter(ToolTemplate.type_slug == type_slug)
     return q.order_by(ToolTemplate.created_at.desc()).all()
 
@@ -643,13 +656,17 @@ def create_template(
     type_slug: str,
     name: str,
     etl_sql: str,
-    description: str = None
+    description: str = None,
+    project_id: int = None,
+    tool_id: int = None
 ) -> ToolTemplate:
     t = ToolTemplate(
         type_slug=type_slug,
         name=name,
         description=description,
-        etl_sql=etl_sql
+        etl_sql=etl_sql,
+        project_id=project_id,
+        tool_id=tool_id
     )
     registry_db.add(t)
     registry_db.commit()

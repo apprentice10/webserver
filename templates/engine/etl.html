@@ -171,11 +171,6 @@ WHERE 1=1"
                             onclick="EtlEditor.saveVersion()">
                         💾 Salva versione
                     </button>
-                    <button class="btn btn-ghost btn-sm"
-                            onclick="EtlEditor.saveAsTemplate()"
-                            title="Salva come template riutilizzabile">
-                        🔖 Template
-                    </button>
                 </div>
             </div>
 
@@ -212,6 +207,14 @@ WHERE 1=1"
             <div id="etl-templates-list" class="etl-history-list"
                  style="max-height:160px;overflow-y:auto">
                 <div class="etl-empty">Nessun template.</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;padding:6px 8px">
+                <button class="btn btn-ghost btn-sm" style="width:100%"
+                        onclick="EtlEditor.saveAsTemplate()">💾 Salva Template</button>
+                <button class="btn btn-ghost btn-sm" style="width:100%"
+                        onclick="EtlEditor.importFromFile()">📂 Carica da File</button>
+                <button class="btn btn-ghost btn-sm" style="width:100%"
+                        onclick="EtlEditor.exportToFile()">⬇ Salva su File</button>
             </div>
 
             <!-- STORICO VERSIONI -->

@@ -21,3 +21,5 @@ class ToolTemplate(Base):
     description = Column(Text, nullable=True)
     etl_sql     = Column(Text, nullable=False)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
+    project_id  = Column(Integer, nullable=True, index=True)
+    tool_id     = Column(Integer, nullable=True, index=True)

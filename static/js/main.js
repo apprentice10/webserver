@@ -285,6 +285,7 @@ function openToolById(toolId, projectId) {
 
 let _selectedCatalogType = null;
 let _selectedTemplateId  = null;
+let _selectedEtlSql      = null;
 
 async function newTool() {
     const project = App.currentProject;
@@ -292,6 +293,7 @@ async function newTool() {
 
     _selectedCatalogType = null;
     _selectedTemplateId  = null;
+    _selectedEtlSql      = null;
 
     // Reset modal
     const nameGroup = document.getElementById("tool-name-group");
@@ -302,6 +304,8 @@ async function newTool() {
     if (createBtn) createBtn.disabled = true;
     const nameInput = document.getElementById("input-tool-name");
     if (nameInput) nameInput.value = "";
+    const fileNameEl = document.getElementById("file-etl-name");
+    if (fileNameEl) { fileNameEl.style.display = "none"; fileNameEl.textContent = ""; }
 
     openModal("modal-new-tool");
     await _loadToolCatalog();
@@ -357,22 +361,28 @@ function selectCatalogType(typeSlug, typeName, typeIcon) {
     const createBtn = document.getElementById("btn-create-tool");
     if (createBtn) createBtn.disabled = false;
 
-    // Carica i template disponibili per questo tipo
+    // Carica i template disponibili per questo tipo (sempre mostra la sezione)
     _loadTemplatesInModal(typeSlug);
+    const templatesGroup = document.getElementById("tool-templates-group");
+    if (templatesGroup) templatesGroup.style.display = "flex";
 }
 
 async function _loadTemplatesInModal(typeSlug) {
-    const group = document.getElementById("tool-templates-group");
-    const list  = document.getElementById("templates-list");
-    if (!group || !list) return;
+    const list = document.getElementById("templates-list");
+    if (!list) return;
+
+    const project = App.currentProject;
+    const params  = new URLSearchParams();
+    if (typeSlug)          params.set("type_slug",  typeSlug);
+    if (project?.id)       params.set("project_id", project.id);
 
     try {
         const templates = await fetch(
-            `/api/tools/templates?type_slug=${encodeURIComponent(typeSlug)}`
+            `/api/tools/templates?${params.toString()}`
         ).then(r => r.json());
 
         if (templates.length === 0) {
-            group.style.display = "none";
+            list.innerHTML = '<div style="font-size:12px;color:var(--color-text-muted)">Nessun template salvato.</div>';
             return;
         }
 
@@ -386,10 +396,8 @@ async function _loadTemplatesInModal(typeSlug) {
             </div>
         `).join("");
 
-        group.style.display = "flex";
-
     } catch (_) {
-        group.style.display = "none";
+        list.innerHTML = "";
     }
 }
 
@@ -403,7 +411,39 @@ function selectTemplate(templateId, el) {
     } else {
         el.classList.add("selected");
         _selectedTemplateId = templateId;
+        _selectedEtlSql = null;  // template ha precedenza su file importato
+        const fileNameEl = document.getElementById("file-etl-name");
+        if (fileNameEl) { fileNameEl.style.display = "none"; fileNameEl.textContent = ""; }
     }
+}
+
+function importEtlFromFile() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".sql,.json,.txt";
+    input.onchange = async () => {
+        const file = input.files[0];
+        if (!file) return;
+        try {
+            const text = await file.text();
+            let sql = text;
+            if (file.name.endsWith(".json")) {
+                const parsed = JSON.parse(text);
+                sql = parsed.etl_sql || parsed.sql || text;
+            }
+            _selectedEtlSql = sql.trim();
+            _selectedTemplateId = null;
+            document.querySelectorAll(".template-item").forEach(i => i.classList.remove("selected"));
+            const fileNameEl = document.getElementById("file-etl-name");
+            if (fileNameEl) {
+                fileNameEl.textContent = `✓ ${file.name}`;
+                fileNameEl.style.display = "inline";
+            }
+        } catch (err) {
+            alert("Errore lettura file: " + err.message);
+        }
+    };
+    input.click();
 }
 
 async function deleteTemplateFromModal(event, templateId, typeSlug) {
@@ -443,6 +483,8 @@ async function submitNewTool() {
         };
         if (_selectedTemplateId) {
             payload.template_id = _selectedTemplateId;
+        } else if (_selectedEtlSql) {
+            payload.etl_sql = _selectedEtlSql;
         }
 
         const response = await fetch(`/api/tools/project/${project.id}`, {

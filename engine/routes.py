@@ -32,6 +32,7 @@ class ToolCreate(BaseModel):
     icon:            Optional[str] = "📄"
     template_id:     Optional[int] = None
     default_columns: Optional[list[dict]] = None
+    etl_sql:         Optional[str] = None
 
 
 class ToolSettingsUpdate(BaseModel):
@@ -62,6 +63,8 @@ class TemplateCreate(BaseModel):
     name:        str
     description: Optional[str] = None
     etl_sql:     str
+    project_id:  Optional[int] = None
+    tool_id:     Optional[int] = None
 
 
 class TemplateResponse(BaseModel):
@@ -71,6 +74,8 @@ class TemplateResponse(BaseModel):
     description: Optional[str]
     etl_sql:     str
     created_at:  Optional[datetime]
+    project_id:  Optional[int] = None
+    tool_id:     Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -164,10 +169,12 @@ def get_tool_types():
 
 @router.get("/templates", response_model=list[TemplateResponse])
 def list_templates(
-    type_slug: Optional[str] = Query(None),
+    type_slug:  Optional[str] = Query(None),
+    tool_id:    Optional[int] = Query(None),
+    project_id: Optional[int] = Query(None),
     registry_db: Session = Depends(get_db)
 ):
-    return service.get_templates(registry_db, type_slug)
+    return service.get_templates(registry_db, type_slug, tool_id, project_id)
 
 
 @router.post("/templates", response_model=TemplateResponse)
@@ -177,7 +184,9 @@ def create_template(data: TemplateCreate, registry_db: Session = Depends(get_db)
         type_slug=data.type_slug,
         name=data.name,
         etl_sql=data.etl_sql,
-        description=data.description
+        description=data.description,
+        project_id=data.project_id,
+        tool_id=data.tool_id
     )
 
 
@@ -215,7 +224,8 @@ def create_tool(
         icon=data.icon,
         template_id=data.template_id,
         default_columns=data.default_columns,
-        registry_db=registry_db
+        registry_db=registry_db,
+        etl_sql=data.etl_sql
     )
     return _tool_to_response(tool, project_id)
 
