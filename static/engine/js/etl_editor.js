@@ -252,13 +252,11 @@ const EtlEditor = (() => {
         const container = document.getElementById("etl-templates-list");
         if (!container) return;
 
-        const typeSlug = _toolType
-            || (typeof ToolbarManager !== "undefined" ? ToolbarManager.getToolType() : null);
-
         try {
-            const url = typeSlug
-                ? `/api/tools/templates?type_slug=${encodeURIComponent(typeSlug)}`
-                : "/api/tools/templates";
+            const params = [];
+            if (typeof PROJECT_ID !== "undefined") params.push(`project_id=${PROJECT_ID}`);
+            if (_toolType) params.push(`type_slug=${encodeURIComponent(_toolType)}`);
+            const url = "/api/tools/templates" + (params.length ? "?" + params.join("&") : "");
             _cachedTemplates = await fetch(url).then(r => r.json());
             _renderTemplatesList(container);
         } catch (err) {
@@ -273,9 +271,13 @@ const EtlEditor = (() => {
             container.innerHTML = '<div class="etl-empty">Nessun template salvato.</div>';
             return;
         }
-        container.innerHTML = _cachedTemplates.map(t => `
+        container.innerHTML = _cachedTemplates.map(t => {
+            const tooltip = t.description
+                ? _escAttr(`${t.name}\n${t.description}`)
+                : _escAttr(t.name);
+            return `
             <div class="etl-history-item">
-                <div class="etl-history-label" title="${_escAttr(t.name)}">${_esc(t.name)}</div>
+                <div class="etl-history-label" title="${tooltip}">${_esc(t.name)}</div>
                 <div class="etl-history-actions">
                     <button class="etl-history-btn"
                             onclick="EtlEditor.loadTemplate(${t.id})"
@@ -284,34 +286,73 @@ const EtlEditor = (() => {
                             onclick="EtlEditor.deleteTemplate(${t.id})"
                             title="Elimina">✕</button>
                 </div>
-            </div>
-        `).join("");
+            </div>`;
+        }).join("");
     }
 
     async function saveAsTemplate() {
         const sql = _getSql();
         if (!sql) { showToast("Nessuna query da salvare.", "error"); return; }
 
-        // Usa tool_type caricato in init(), con fallback a ToolbarManager
-        const typeSlug = _toolType
-            || (typeof ToolbarManager !== "undefined" ? ToolbarManager.getToolType() : null);
-
-        if (!typeSlug) {
-            showToast("Questo tool non ha un tipo definito — imposta il tipo nelle impostazioni.", "warning");
-            return;
-        }
-
         const name = prompt("Nome del template:", "");
         if (name === null) return;
         if (!name.trim()) { showToast("Nome vuoto.", "error"); return; }
 
+        const typeSlug = _toolType
+            || (typeof ToolbarManager !== "undefined" ? ToolbarManager.getToolType() : null)
+            || "";
+
         try {
-            await ApiClient.saveTemplate({ type_slug: typeSlug, name: name.trim(), etl_sql: sql });
+            await ApiClient.saveTemplate({
+                type_slug:  typeSlug,
+                name:       name.trim(),
+                etl_sql:    sql,
+                project_id: (typeof PROJECT_ID !== "undefined") ? PROJECT_ID : null
+            });
             showToast("Template salvato.", "success");
             await refreshTemplates();
         } catch (err) {
             showToast("Errore: " + err.message, "error");
         }
+    }
+
+    async function importFromFile() {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".sql,.json,.txt";
+        input.onchange = async () => {
+            const file = input.files[0];
+            if (!file) return;
+            try {
+                const text = await file.text();
+                let sql = text;
+                if (file.name.endsWith(".json")) {
+                    const parsed = JSON.parse(text);
+                    sql = parsed.etl_sql || parsed.sql || text;
+                }
+                const editor = document.getElementById("etl-sql-input");
+                if (editor) {
+                    editor.value = sql;
+                    _currentSql = sql;
+                }
+                showToast(`File "${file.name}" caricato.`, "success");
+            } catch (err) {
+                showToast("Errore lettura file: " + err.message, "error");
+            }
+        };
+        input.click();
+    }
+
+    function exportToFile() {
+        const sql = _getSql();
+        if (!sql) { showToast("Nessuna query da esportare.", "error"); return; }
+        const blob = new Blob([sql], { type: "text/plain" });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href     = url;
+        a.download = `etl_${typeof TOOL_ID !== "undefined" ? TOOL_ID : "query"}.sql`;
+        a.click();
+        URL.revokeObjectURL(url);
     }
 
     async function loadTemplate(templateId) {
@@ -501,6 +542,8 @@ const EtlEditor = (() => {
         apply,
         saveVersion,
         saveAsTemplate,
+        importFromFile,
+        exportToFile,
         loadVersion,
         loadTemplate,
         deleteTemplate,

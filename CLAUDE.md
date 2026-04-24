@@ -24,7 +24,7 @@ The UI resembles a spreadsheet: left sidebar for tool navigation, top bar with a
 - Settings panel: tool name, icon picker, revision
 - ETL Editor (standalone page `/tool/{pid}/{tid}/etl`): SQL → Preview → Apply
 - ETL auto-creates missing columns, merges by TAG, respects `is_overridden` cells
-- ETL version history, template save/load, schema browser
+- ETL version history, template save/load (scoped by tool type), schema browser
 - Power SQL Editor (arbitrary SELECT/DML, no DDL)
 - Right-click context menu on rows (delete, restore, hard-delete, view log)
 - Toggle LOG column visibility (CSS class, no re-render)
@@ -68,7 +68,7 @@ Models imported in `migrations/env.py`: `core.models`, `engine.models`.
 
 **Registry DB** (`data/registry.db`, SQLAlchemy) — global metadata:
 - `projects` table (`core/models.py::Project`) — project list with `db_path` field
-- `tool_templates` table (`engine/models.py::ToolTemplate`) — reusable ETL SQL
+- `tool_templates` table (`engine/models.py::ToolTemplate`) — reusable ETL SQL, scoped by `type_slug + project_id` (not per tool instance)
 
 **Per-project DB** (`data/{client}_{project}.db`, raw sqlite3) — all tool data:
 - `_tools` — tool metadata (name, slug, tool_type, icon, rev, query_config)
@@ -103,6 +103,16 @@ Runs a user-provided SELECT query against the per-project SQLite DB (which conta
 3. Inserts new rows not present in the tool table
 
 ETL history and current SQL stored as JSON in `_tools.query_config`.
+
+### ETL Templates (`engine/models.py::ToolTemplate`)
+
+Templates are scoped by **tool type**, not by individual tool instance. Key fields:
+- `type_slug` — matches `_tools.tool_type` (e.g. `instrument_list`); used as primary filter
+- `project_id` — secondary scope; templates are shared across all tools of the same type within the same project
+- `tool_id` — legacy field, no longer written; ignored by `refreshTemplates()`
+
+API: `GET /api/tools/templates?project_id=N&type_slug=X` returns all templates for that type in that project.
+Saving a template stores `type_slug + project_id` only — no `tool_id`.
 
 ---
 
