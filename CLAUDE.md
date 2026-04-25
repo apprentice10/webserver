@@ -4,6 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Session Strategy
 
+**Project index files — read before non-trivial tasks:**
+- What's done / in-progress / next → `_context/CURRENT_STATE.md`
+- Architectural decisions + rejected alternatives → `_context/DECISIONS.md` (consult before any structural change)
+- Known technical risks + dangerous files → `_context/RISKS.md`
+- Domain terms and data contracts → `_context/GLOSSARY.md`
+
+**After completing a feature:** move it to Done in `_context/CURRENT_STATE.md`, update Next.  
+**After an architectural decision:** add a row to `_context/DECISIONS.md`.  
+**After splitting an oversized file:** update `_context/RISKS.md` to remove/downgrade the entry.
+
 Before starting any task, check memory files for relevant context (already loaded in context):
 - ETL staleness, topological run, circular deps → `memory/project_etl_staleness.md`
 - System columns, internal `__` columns → `memory/project_system_columns.md`
