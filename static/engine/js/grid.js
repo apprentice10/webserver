@@ -27,6 +27,7 @@ const GridManager = (() => {
     let _showDeleted  = false;  // Mostra righe eliminate?
     let _searchQuery  = "";     // Query ricerca corrente
     let _ctxRowId     = null;   // Row ID del context menu aperto
+    let _editingInput = null;   // Input correntemente in edit mode (non readonly)
 
 
     // --------------------------------------------------------
@@ -112,7 +113,9 @@ const GridManager = (() => {
                 </td>`;
         }
 
-        const readonly  = isRev || isDeleted ? "readonly tabindex='-1'" : "";
+        const readonly  = (isRev || isDeleted)
+            ? "readonly tabindex='-1'"
+            : "readonly data-editable='true'";
         const cellClass = isTag ? "cell-input cell-tag" : "cell-input";
 
         return `
@@ -168,11 +171,13 @@ const GridManager = (() => {
     // --------------------------------------------------------
 
     function _attachListeners() {
-        // Celle normali
-        document.querySelectorAll(".cell-input:not([readonly]):not([data-ghost])").forEach(input => {
+        // Celle editabili (select mode di default, edit mode su dblclick)
+        document.querySelectorAll(".cell-input[data-editable]").forEach(input => {
             input.addEventListener("focus",   _onCellFocus);
             input.addEventListener("blur",    _onCellBlur);
             input.addEventListener("keydown", _onCellKeydown);
+            input.addEventListener("dblclick", _onCellDblClick);
+            input.addEventListener("paste",   _onCellPaste);
         });
 
         // Ghost row — TAG obbligatorio per creare riga
@@ -197,33 +202,82 @@ const GridManager = (() => {
         this.closest("tr")?.classList.remove("selected");
         const newVal  = this.value.trim();
         const origVal = this.dataset.originalValue ?? "";
-        if (newVal === origVal) return;
 
+        // Torna in select mode (readonly) dopo ogni blur
+        if (this.hasAttribute("data-editable")) {
+            this.setAttribute("readonly", "");
+            if (_editingInput === this) _editingInput = null;
+        }
+
+        if (newVal === origVal) return;
         const rowId = parseInt(this.dataset.rowId);
         const field = this.dataset.field;
         await _saveCell(this, rowId, field, newVal);
     }
 
+    function _onCellDblClick() {
+        _enterEditMode(this);
+    }
+
+    function _enterEditMode(input) {
+        if (_editingInput === input) return;
+        if (_editingInput) _editingInput.blur();
+        _editingInput = input;
+        input.removeAttribute("readonly");
+        input.focus();
+        input.select();
+    }
+
+    // Paste su cella in select mode: entra in edit mode e applica il valore
+    function _onCellPaste(e) {
+        if (!this.hasAttribute("readonly")) return;
+        const text = (e.clipboardData?.getData("text/plain") ?? "").trim();
+        const isMultiCell = text.includes("\n") || text.includes("\t");
+        if (isMultiCell) return; // paste.js gestisce multi-cella
+        e.preventDefault();
+        _enterEditMode(this);
+        this.value = text;
+    }
+
     function _onCellKeydown(e) {
+        const isEditing = !this.hasAttribute("readonly");
+
         if (e.key === "Enter") {
             e.preventDefault();
-            _moveFocus(this, 0, 1);  // Vai alla riga sotto
+            if (!isEditing && this.hasAttribute("data-editable")) {
+                _enterEditMode(this);
+                return;
+            }
+            _moveFocus(this, 0, 1);
+            return;
         }
         if (e.key === "Escape") {
-            this.value = this.dataset.originalValue ?? "";
-            this.blur();
+            if (isEditing) {
+                this.value = this.dataset.originalValue ?? "";
+                this.blur();
+            }
+            return;
         }
         if (e.key === "Tab") {
             e.preventDefault();
-            _moveFocus(this, e.shiftKey ? -1 : 1, 0);  // Vai alla cella destra/sinistra
+            _moveFocus(this, e.shiftKey ? -1 : 1, 0);
+            return;
         }
-        if (e.key === "ArrowUp")    { e.preventDefault(); _moveFocus(this, 0, -1); }
-        if (e.key === "ArrowDown")  { e.preventDefault(); _moveFocus(this, 0,  1); }
-        if (e.key === "ArrowLeft" && this.selectionStart === 0) {
-            e.preventDefault(); _moveFocus(this, -1, 0);
+        if (e.key === "ArrowUp")   { e.preventDefault(); _moveFocus(this, 0, -1); return; }
+        if (e.key === "ArrowDown") { e.preventDefault(); _moveFocus(this, 0,  1); return; }
+        if (e.key === "ArrowLeft") {
+            if (!isEditing || this.selectionStart === 0) { e.preventDefault(); _moveFocus(this, -1, 0); }
+            return;
         }
-        if (e.key === "ArrowRight" && this.selectionStart === this.value.length) {
-            e.preventDefault(); _moveFocus(this, 1, 0);
+        if (e.key === "ArrowRight") {
+            if (!isEditing || this.selectionStart === this.value.length) { e.preventDefault(); _moveFocus(this, 1, 0); }
+            return;
+        }
+        // Carattere stampabile su cella selezionata → entra in edit mode e sostituisce
+        if (!isEditing && this.hasAttribute("data-editable") && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+            _enterEditMode(this);
+            this.value = "";
+            // Non preventDefault — il carattere digitato verrà inserito
         }
     }
 
@@ -257,7 +311,7 @@ const GridManager = (() => {
      */
     function _moveFocus(currentInput, dCol, dRow) {
         const allInputs = Array.from(
-            document.querySelectorAll(".cell-input:not([readonly])")
+            document.querySelectorAll(".cell-input[data-editable]")
         );
         const idx = allInputs.indexOf(currentInput);
         if (idx === -1) return;

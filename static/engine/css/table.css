@@ -298,6 +298,22 @@
     font-size: 12px;
 }
 
+/* Celle editabili in select mode — aspetto normale (non muted) */
+.cell-input[data-editable][readonly] {
+    color: var(--color-text);
+    font-family: var(--font-main);
+    font-size: 13px;
+    cursor: default;
+}
+
+/* Select mode: focus più leggero (cella selezionata ma non in editing) */
+.cell-input[data-editable][readonly]:focus {
+    background: rgba(233, 69, 96, 0.03);
+    outline: 1px solid var(--color-accent);
+    outline-offset: -1px;
+    cursor: default;
+}
+
 /* Cella TAG */
 .cell-tag {
     font-family: var(--font-mono);

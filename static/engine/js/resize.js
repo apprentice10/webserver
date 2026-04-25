@@ -34,6 +34,7 @@ const ResizeManager = (() => {
             handle.parentNode.replaceChild(fresh, handle);
 
             fresh.addEventListener("mousedown", _onMouseDown);
+            fresh.addEventListener("dblclick",  _onDoubleClick);
         });
     }
 
@@ -99,6 +100,60 @@ const ResizeManager = (() => {
                 console.warn("Errore salvataggio larghezza colonna:", err.message);
             }
         }, 400);
+    }
+
+
+    // --------------------------------------------------------
+    // AUTO-FIT (double-click su resize-handle)
+    // --------------------------------------------------------
+
+    function _onDoubleClick(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const th       = this.closest("th");
+        const slug     = th.dataset.slug;
+        const columnId = parseInt(this.dataset.columnId);
+
+        const values = [];
+
+        const label = th.querySelector(".th-label");
+        if (label) values.push(label.textContent.trim());
+
+        document.querySelectorAll(`input[data-field="${CSS.escape(slug)}"]`).forEach(input => {
+            if (input.value) values.push(input.value);
+        });
+
+        const refEl  = document.querySelector(".cell-input") || th;
+        const fitted = _measureMaxTextWidth(values, refEl);
+        const newWidth = Math.max(40, Math.min(fitted + 24, 800));
+
+        th.style.width = newWidth + "px";
+        ColumnsManager.updateLocalWidth(columnId, newWidth);
+
+        ApiClient.updateColumnWidth(columnId, newWidth).catch(err => {
+            console.warn("Errore auto-fit larghezza colonna:", err.message);
+        });
+    }
+
+    function _measureMaxTextWidth(values, refEl) {
+        const probe = document.createElement("span");
+        probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;top:-9999px;left:-9999px";
+        if (refEl) {
+            const cs = window.getComputedStyle(refEl);
+            probe.style.font        = cs.font;
+            probe.style.letterSpacing = cs.letterSpacing;
+        }
+        document.body.appendChild(probe);
+
+        let max = 0;
+        for (const v of values) {
+            probe.textContent = v;
+            max = Math.max(max, probe.getBoundingClientRect().width);
+        }
+
+        document.body.removeChild(probe);
+        return Math.ceil(max);
     }
 
 

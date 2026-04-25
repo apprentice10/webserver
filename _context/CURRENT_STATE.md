@@ -1,34 +1,7 @@
 # CURRENT_STATE.md
 _Last updated: 2026-04-25 (session 2)_
 
----
-
-## Done ✓
-
-- Project management (create/open/delete, sessionStorage)
-- Universal Table Engine: inline cell edit, keyboard nav (Tab/Enter/Arrows)
-- Ghost row at grid bottom for fast row insertion
-- Paste from Excel/CSV (range paste + append paste)
-- Soft delete (strikethrough, restorable) + hard delete (trash only)
-- Per-row LOG column with full change history (rev, timestamp, old→new)
-- Column resize + reorder by drag (persisted to DB)
-- Settings panel: tool name, icon picker, revision
-- ETL Editor (`/tool/{pid}/{tid}/etl`): SQL → Preview → Apply
-- ETL: auto-creates columns, merges by TAG, respects `is_overridden` cells
-- ETL version history, template save/load (scoped by type_slug + project_id)
-- Power SQL Editor (arbitrary SELECT/DML, no DDL)
-- Right-click context menu (delete, restore, hard-delete, log)
-- Toggle LOG column visibility (CSS class, no re-render)
-- ETL staleness tracking: `is_stale` flag, orange badge in sidebar
-- ETL dependency graph: `etl_deps` extracted from SQL at save time
-- Topological ETL auto-run (`etl_run_saved` with `_visited` cycle guard)
-- Circular dependency detection (HTTP 400 on cycle)
-- Tool creation with ETL SQL from file + template scoping by tool type
-- Schema browser in ETL editor
-- Toolbar: stale badge, run ETL button, settings access
-- Horizontal scrollbar for wide tables (`grid-scroll-container` + `width: max-content`)
-- Toggle REV column visibility (CSS `.rev-hidden` class, same pattern as LOG toggle)
-- Toolbar toggle buttons unified: icona + etichetta fissa, `.active` CSS segnala stato (no text mutation); pulsante eliminati aggiunge icona 🗑
+Storico feature completate → `_context/DONE.md`
 
 ## In Progress
 
@@ -40,8 +13,8 @@ _(none)_
 
 1. ~~**Horizontal scrollbar** for wide tables (CSS/layout, low effort)~~ ✓
 2. ~~**Toggle REV column visibility** (same CSS pattern as LOG toggle)~~ ✓
-3. **Double-click column border** to auto-fit width (resize.js)
-4. **Single click = selezione cella, double click = modalità modifica** — attualmente il click apre subito l'edit; invertire il comportamento in `grid.js` (`_onCellFocus`, `_renderCell`)
+3. ~~**Double-click column border** to auto-fit width (resize.js)~~ ✓
+4. ~~**Single click = selezione cella, double click = modalità modifica**~~ ✓
 5. **Row numbers** — aggiungere colonna indice stile Excel (colonna fissa sinistra, stile uguale agli header colonna, non editabile)
 
 ### Gruppo B — Indicatori visivi celle (medio sforzo, dipende da A.4)
