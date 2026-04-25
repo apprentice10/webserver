@@ -105,7 +105,7 @@ const ColumnsManager = (() => {
             th.addEventListener("dragover", e => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
-                if (parseInt(th.dataset.columnId) !== _dragSrcId && !th.dataset.isSystem) {
+                if (parseInt(th.dataset.columnId) !== _dragSrcId && th.dataset.isSystem !== "1") {
                     document.querySelectorAll("th").forEach(t => t.classList.remove("col-dragover"));
                     th.classList.add("col-dragover");
                 }
