@@ -17,6 +17,12 @@ from engine.project_db import (
     add_column_to_table, audit, SYSTEM_COLUMN_DEFS
 )
 from engine.service import get_tool, get_columns
+from engine.sql_parser import (
+    resolve_etl_deps as _resolve_etl_deps,
+    extract_col_lineage as _extract_col_lineage,
+    extract_table_aliases as _extract_table_aliases,
+    lineage_to_source as _lineage_to_source,
+)
 
 
 SYSTEM_SLUGS = {"tag", "rev", "log"}
@@ -67,8 +73,12 @@ def etl_apply(conn: sqlite3.Connection, tool_id: int, sql: str) -> dict:
     etl_rows = preview["rows"]
     etl_cols = [c for c in preview["columns"] if c != "log"]
 
+    # Compute lineage once from the SQL
+    col_lineage = _extract_col_lineage(sql)
+    tbl_aliases = _extract_table_aliases(sql)
+
     # --------------------------------------------------------
-    # Crea colonne mancanti
+    # Crea colonne mancanti + aggiorna lineage_info
     # --------------------------------------------------------
     existing_slugs = {c["slug"] for c in get_columns(conn, tool_id)}
     cols_created   = 0
@@ -76,6 +86,13 @@ def etl_apply(conn: sqlite3.Connection, tool_id: int, sql: str) -> dict:
     for col_slug in etl_cols:
         if col_slug in SYSTEM_SLUGS or col_slug in INTERNAL_COLS:
             continue
+
+        lineage_json = None
+        source_expr = col_lineage.get(col_slug)
+        if source_expr:
+            lineage_data = _lineage_to_source(source_expr, tbl_aliases)
+            lineage_json = json.dumps(lineage_data)
+
         if col_slug not in existing_slugs:
             last_pos = conn.execute("""
                 SELECT MAX(position) FROM _columns
@@ -84,13 +101,20 @@ def etl_apply(conn: sqlite3.Connection, tool_id: int, sql: str) -> dict:
             new_pos = (last_pos or 1) + 1
 
             conn.execute("""
-                INSERT INTO _columns (tool_id, tool_slug, slug, name, col_type, width, position, is_system)
-                VALUES (?, ?, ?, ?, 'text', 120, ?, 0)
+                INSERT INTO _columns
+                    (tool_id, tool_slug, slug, name, col_type, width, position, is_system, lineage_info)
+                VALUES (?, ?, ?, ?, 'text', 120, ?, 0, ?)
             """, (tool_id, slug, col_slug,
-                  col_slug.upper().replace("_", " "), new_pos))
+                  col_slug.upper().replace("_", " "), new_pos, lineage_json))
 
             add_column_to_table(conn, slug, col_slug)
             cols_created += 1
+
+        elif lineage_json is not None:
+            conn.execute("""
+                UPDATE _columns SET lineage_info = ?
+                WHERE tool_slug = ? AND slug = ?
+            """, (lineage_json, slug, col_slug))
 
     # --------------------------------------------------------
     # Merge righe
@@ -174,6 +198,64 @@ def etl_apply(conn: sqlite3.Connection, tool_id: int, sql: str) -> dict:
 
 
 # ============================================================
+# RUN SAVED
+# ============================================================
+
+def etl_run_saved(
+    conn: sqlite3.Connection,
+    tool_id: int,
+    _visited: set = None
+) -> dict:
+    if _visited is None:
+        _visited = set()
+
+    tool = get_tool(conn, tool_id)
+    tool_slug = tool["slug"]
+
+    if tool_slug in _visited:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Dipendenza circolare rilevata: '{tool_slug}'"
+        )
+    _visited.add(tool_slug)
+
+    config = get_etl_config(conn, tool_id)
+    sql = config.get("etl_sql", "").strip()
+    if not sql:
+        raise HTTPException(
+            status_code=422,
+            detail="Nessuna query ETL salvata per questo tool"
+        )
+
+    # Topological order: run stale deps with their own ETL first
+    for dep_slug in config.get("etl_deps", []):
+        dep_row = conn.execute(
+            "SELECT * FROM _tools WHERE slug = ?", (dep_slug,)
+        ).fetchone()
+        if not dep_row:
+            continue
+        dep = dict(dep_row)
+        dep_config: dict = {}
+        if dep.get("query_config"):
+            try:
+                dep_config = json.loads(dep["query_config"])
+            except Exception:
+                pass
+        if dep.get("is_stale") and dep_config.get("etl_sql", "").strip():
+            etl_run_saved(conn, dep["id"], _visited)
+
+    result = etl_apply(conn, tool_id, sql)
+    conn.execute("UPDATE _tools SET is_stale = 0 WHERE id = ?", (tool_id,))
+
+    # Propagate: tools that depend on this one are now potentially stale
+    from engine.service import mark_dependents_stale
+    mark_dependents_stale(conn, tool_slug)
+
+    conn.commit()
+    return result
+
+
+# ============================================================
 # STORICO VERSIONI
 # ============================================================
 
@@ -202,6 +284,7 @@ def save_etl_version(
 
     config["etl_sql"]     = sql
     config["etl_history"] = history
+    config["etl_deps"]    = _resolve_etl_deps(conn, sql)
 
     conn.execute(
         "UPDATE _tools SET query_config = ? WHERE id = ?",
@@ -224,7 +307,8 @@ def get_etl_config(conn: sqlite3.Connection, tool_id: int) -> dict:
 
     return {
         "etl_sql":     config.get("etl_sql", ""),
-        "etl_history": config.get("etl_history", [])
+        "etl_history": config.get("etl_history", []),
+        "etl_deps":    config.get("etl_deps", [])
     }
 
 

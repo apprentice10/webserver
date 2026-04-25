@@ -4,6 +4,7 @@ engine/routes.py
 Endpoints HTTP del Table Engine — thin layer su service.py ed etl.py.
 """
 
+import json
 import sqlite3
 import sqlalchemy
 from fastapi import APIRouter, Depends, Query
@@ -146,6 +147,12 @@ class EtlQuery(BaseModel):
 # ============================================================
 
 def _tool_to_response(tool: dict, project_id: int = None) -> dict:
+    config = {}
+    if tool.get("query_config"):
+        try:
+            config = json.loads(tool["query_config"])
+        except Exception:
+            pass
     return {
         "id":          tool["id"],
         "name":        tool["name"],
@@ -155,6 +162,8 @@ def _tool_to_response(tool: dict, project_id: int = None) -> dict:
         "note":        tool.get("note"),
         "icon":        tool.get("icon", "📄"),
         "project_id":  project_id,
+        "is_stale":    bool(tool.get("is_stale", 0)),
+        "has_etl":     bool(config.get("etl_sql", "").strip()),
     }
 
 
@@ -468,6 +477,16 @@ def etl_apply(
 ):
     from engine.etl import etl_apply as _apply
     return _apply(conn, tool_id, data.sql)
+
+
+@router.post("/{tool_id}/etl/run")
+def etl_run(
+    tool_id: int,
+    project_id: int = Query(...),
+    conn: sqlite3.Connection = Depends(get_project_conn)
+):
+    from engine.etl import etl_run_saved
+    return etl_run_saved(conn, tool_id)
 
 
 @router.post("/{tool_id}/etl/save")

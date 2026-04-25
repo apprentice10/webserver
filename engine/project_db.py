@@ -31,20 +31,22 @@ CREATE TABLE IF NOT EXISTS _tools (
     rev          TEXT DEFAULT 'A',
     query_config TEXT,
     note         TEXT,
+    is_stale     INTEGER DEFAULT 0,
     created_at   TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS _columns (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    tool_id   INTEGER NOT NULL,
-    tool_slug TEXT NOT NULL,
-    slug      TEXT NOT NULL,
-    name      TEXT NOT NULL,
-    col_type  TEXT DEFAULT 'text',
-    width     INTEGER DEFAULT 120,
-    position  INTEGER DEFAULT 0,
-    is_system INTEGER DEFAULT 0,
-    formula   TEXT,
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    tool_id       INTEGER NOT NULL,
+    tool_slug     TEXT NOT NULL,
+    slug          TEXT NOT NULL,
+    name          TEXT NOT NULL,
+    col_type      TEXT DEFAULT 'text',
+    width         INTEGER DEFAULT 120,
+    position      INTEGER DEFAULT 0,
+    is_system     INTEGER DEFAULT 0,
+    formula       TEXT,
+    lineage_info  TEXT,
     UNIQUE (tool_slug, slug)
 );
 
@@ -100,6 +102,18 @@ def create_project_db(db_path: Path) -> None:
 # CONNESSIONE
 # ============================================================
 
+def _migrate_project_db(conn: sqlite3.Connection) -> None:
+    tools_cols = {row[1] for row in conn.execute("PRAGMA table_info(_tools)").fetchall()}
+    if "is_stale" not in tools_cols:
+        conn.execute("ALTER TABLE _tools ADD COLUMN is_stale INTEGER DEFAULT 0")
+
+    col_cols = {row[1] for row in conn.execute("PRAGMA table_info(_columns)").fetchall()}
+    if "lineage_info" not in col_cols:
+        conn.execute("ALTER TABLE _columns ADD COLUMN lineage_info TEXT")
+
+    conn.commit()
+
+
 def open_project_db(db_path: Path) -> sqlite3.Connection:
     if not db_path.exists():
         raise HTTPException(status_code=404, detail=f"File DB progetto non trovato: {db_path.name}")
@@ -107,6 +121,7 @@ def open_project_db(db_path: Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    _migrate_project_db(conn)
     return conn
 
 

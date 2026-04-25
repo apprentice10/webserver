@@ -9,11 +9,9 @@ Le righe cancellate vivono in _trash (soft delete).
 Gli override ETL vivono in _overrides.
 """
 
-import re
 import json
-from datetime import datetime
-from typing import Optional
 import sqlite3
+from typing import Optional
 from fastapi import HTTPException
 
 from engine.project_db import (
@@ -22,23 +20,8 @@ from engine.project_db import (
     serialize_active_row, serialize_trash_row
 )
 from engine.models import ToolTemplate
+from engine.utils import now_str as _now_str, slugify as _slugify, format_log_entry as _format_log_entry, append_log as _append_log
 from sqlalchemy.orm import Session
-
-
-# ============================================================
-# UTILITY
-# ============================================================
-
-def _now_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _slugify(text: str) -> str:
-    text = text.lower().strip()
-    text = re.sub(r"[^\w\s]", "", text)
-    text = re.sub(r"[\s]+", "_", text)
-    text = re.sub(r"_+", "_", text)
-    return text.strip("_") or "tool"
 
 
 def _unique_slug(conn: sqlite3.Connection, base_slug: str) -> str:
@@ -50,20 +33,27 @@ def _unique_slug(conn: sqlite3.Connection, base_slug: str) -> str:
     return slug
 
 
-def _format_log_entry(rev: str, field: str, old_val, new_val) -> str:
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-    old = f"'{old_val}'" if old_val else "—"
-    new = f"'{new_val}'" if new_val else "—"
-    return f"[{ts} REV {rev}] {field.upper()}: {old} → {new}"
-
-
-def _append_log(existing: Optional[str], entry: str) -> str:
-    return entry + "\n" + existing if existing else entry
-
-
 # ============================================================
 # TOOL — CRUD
 # ============================================================
+
+def mark_tool_stale(conn: sqlite3.Connection, tool_slug: str) -> None:
+    conn.execute("UPDATE _tools SET is_stale = 1 WHERE slug = ?", (tool_slug,))
+
+
+def mark_dependents_stale(conn: sqlite3.Connection, source_slug: str) -> None:
+    """Mark stale all tools whose ETL reads FROM source_slug."""
+    tools = conn.execute(
+        "SELECT id, query_config FROM _tools WHERE query_config IS NOT NULL"
+    ).fetchall()
+    for tool in tools:
+        try:
+            config = json.loads(tool["query_config"])
+        except Exception:
+            continue
+        if source_slug in config.get("etl_deps", []):
+            conn.execute("UPDATE _tools SET is_stale = 1 WHERE id = ?", (tool["id"],))
+
 
 def get_tool(conn: sqlite3.Connection, tool_id: int) -> dict:
     row = conn.execute("SELECT * FROM _tools WHERE id = ?", (tool_id,)).fetchone()
@@ -349,6 +339,8 @@ def create_row(
 
     row_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     audit(conn, slug, "INSERT", row_tag=tag_value, new_val=tag_value)
+    mark_tool_stale(conn, slug)
+    mark_dependents_stale(conn, slug)
     conn.commit()
 
     row = conn.execute(f'SELECT * FROM "{slug}" WHERE __id = ?', (row_id,)).fetchone()
@@ -428,6 +420,8 @@ def update_cell(
 
     audit(conn, tool_slug, "UPDATE", row_tag=tag_val, field=slug,
           old_val=old_value, new_val=new_value)
+    mark_tool_stale(conn, tool_slug)
+    mark_dependents_stale(conn, tool_slug)
     conn.commit()
 
     updated = conn.execute(
@@ -470,6 +464,8 @@ def soft_delete_row(
     conn.execute(f'DELETE FROM "{slug}" WHERE __id = ?', (row_id,))
 
     audit(conn, slug, "DELETE", row_tag=tag_val)
+    mark_tool_stale(conn, slug)
+    mark_dependents_stale(conn, slug)
     conn.commit()
 
     trash_row = conn.execute(
@@ -526,6 +522,8 @@ def restore_row(
     new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
     conn.execute("DELETE FROM _trash WHERE id = ?", (trash_id,))
+    mark_tool_stale(conn, slug)
+    mark_dependents_stale(conn, slug)
     conn.commit()
 
     row = conn.execute(f'SELECT * FROM "{slug}" WHERE __id = ?', (new_id,)).fetchone()
@@ -606,6 +604,9 @@ def paste_rows(
         ).fetchone()
         inserted.append(serialize_active_row(row, tool_id, project_id))
 
+    if inserted:
+        mark_tool_stale(conn, slug)
+        mark_dependents_stale(conn, slug)
     conn.commit()
     return {"inserted": inserted, "skipped": skipped}
 

@@ -226,6 +226,14 @@ html, body {
     pointer-events: none;
 }
 
+.stale-badge {
+    margin-left: auto;
+    color: var(--color-warning);
+    font-size: 10px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
 .sidebar-icon {
     font-size: 15px;
     width: 20px;

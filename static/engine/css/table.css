@@ -72,6 +72,17 @@
     border-color: var(--color-accent);
 }
 
+.btn-stale {
+    color: var(--color-warning) !important;
+    border-color: var(--color-warning) !important;
+    animation: pulse-stale 2s ease-in-out infinite;
+}
+
+@keyframes pulse-stale {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.6; }
+}
+
 /* ------------------------------------------------------------
    TOOLBAR SECONDARIA
    ------------------------------------------------------------ */
@@ -192,6 +203,14 @@
 /* Pulsanti header colonne — rimossi, gestiti da ETL Editor */
 .th-actions  { display: none; }
 .th-btn      { display: none; }
+
+/* Lineage dot — indica che la colonna ha un'origine ETL tracciata */
+.th-lineage-dot {
+    font-size: 9px;
+    opacity: 0.4;
+    cursor: default;
+    flex-shrink: 0;
+}
 
 /* Resize handle */
 .resize-handle {

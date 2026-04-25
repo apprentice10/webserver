@@ -1,0 +1,134 @@
+"""
+engine/sql_parser.py
+--------------------
+SQL parsing utilities: table reference extraction, column lineage, alias resolution.
+All functions operate on SQL strings; only _resolve_etl_deps requires a DB connection.
+"""
+
+import re
+import sqlite3
+
+_SQL_KEYWORDS = {"SELECT", "WITH", "LATERAL", "VALUES", "UNNEST"}
+
+
+def clean_sql(sql: str) -> str:
+    """Strip string literals, line comments, and block comments for safe regex parsing."""
+    s = re.sub(r"'(?:[^'\\]|\\.)*'", "''", sql)
+    s = re.sub(r"--[^\n]*", " ", s)
+    s = re.sub(r"/\*.*?\*/", " ", s, flags=re.DOTALL)
+    return s
+
+
+def extract_table_refs(sql: str) -> list[str]:
+    """Return table names referenced in FROM/JOIN clauses (order-preserving, deduplicated)."""
+    c = clean_sql(sql)
+    tables: list[str] = []
+    pattern = r'\b(?:FROM|JOIN)\s+(?:"([^"]+)"|`([^`]+)`|(\w+))'
+    for m in re.finditer(pattern, c, re.IGNORECASE):
+        name = m.group(1) or m.group(2) or m.group(3)
+        if not name or name.upper() in _SQL_KEYWORDS:
+            continue
+        if name not in tables:
+            tables.append(name)
+    return tables
+
+
+def resolve_etl_deps(conn: sqlite3.Connection, sql: str) -> list[str]:
+    """Return tool slugs in the DB that are actually referenced by the ETL SQL."""
+    refs = extract_table_refs(sql)
+    all_slugs = {r[0] for r in conn.execute("SELECT slug FROM _tools").fetchall()}
+    return [r for r in refs if r in all_slugs]
+
+
+def extract_table_aliases(sql: str) -> dict[str, str]:
+    """
+    Return {alias: table_name} for FROM/JOIN clauses.
+    E.g. 'FROM instrument_list il' → {"il": "instrument_list", "instrument_list": "instrument_list"}
+    """
+    c = clean_sql(sql)
+    aliases: dict[str, str] = {}
+    pattern = r'\b(?:FROM|JOIN)\s+(?:"([^"]+)"|`([^`]+)`|(\w+))(?:\s+(?:AS\s+)?(?!"|\()(\w+))?'
+    for m in re.finditer(pattern, c, re.IGNORECASE):
+        tbl = m.group(1) or m.group(2) or m.group(3)
+        alias = m.group(4)
+        if tbl and tbl.upper() not in _SQL_KEYWORDS:
+            aliases[tbl] = tbl
+            if alias and alias.upper() not in _SQL_KEYWORDS:
+                aliases[alias] = tbl
+    return aliases
+
+
+def extract_col_lineage(sql: str) -> dict[str, str]:
+    """
+    Parse SELECT column list and return {output_col: source_expr}.
+
+    Examples:
+      SELECT il.tag, il.service AS svc
+        → {"tag": "il.tag", "svc": "il.service"}
+      SELECT *, COALESCE(a, b) AS c
+        → {"c": "COALESCE(a, b)"}   (* skipped — no usable alias)
+    """
+    c = clean_sql(sql)
+    sel_match = re.search(r'\bSELECT\b(.+?)(?:\bFROM\b)', c, re.IGNORECASE | re.DOTALL)
+    if not sel_match:
+        return {}
+
+    col_list_raw = sel_match.group(1).strip()
+
+    # Split on commas at depth 0 (ignore commas inside parentheses)
+    items = []
+    depth = 0
+    current: list[str] = []
+    for ch in col_list_raw:
+        if ch == '(':
+            depth += 1
+            current.append(ch)
+        elif ch == ')':
+            depth -= 1
+            current.append(ch)
+        elif ch == ',' and depth == 0:
+            items.append(''.join(current).strip())
+            current = []
+        else:
+            current.append(ch)
+    if current:
+        items.append(''.join(current).strip())
+
+    lineage: dict[str, str] = {}
+    for item in items:
+        item = item.strip()
+        if not item or item == '*':
+            continue
+
+        alias_match = re.search(
+            r'\bAS\s+("([^"]+)"|`([^`]+)`|(\w+))\s*$',
+            item, re.IGNORECASE
+        )
+        if alias_match:
+            alias = alias_match.group(2) or alias_match.group(3) or alias_match.group(4)
+            lineage[alias.lower()] = item[:alias_match.start()].strip()
+            continue
+
+        simple = re.match(r'^(\w+)\.(\w+)$', item)
+        if simple:
+            lineage[simple.group(2).lower()] = item
+            continue
+
+        bare = re.match(r'^(\w+)$', item)
+        if bare:
+            lineage[bare.group(1).lower()] = item
+
+    return lineage
+
+
+def lineage_to_source(expr: str, aliases: dict[str, str]) -> dict:
+    """
+    Resolve a source expression like 'il.service' to its tool slug.
+    aliases: {table_alias: tool_slug}, e.g. {"il": "instrument_list"}
+    """
+    tbl_match = re.match(r'^(\w+)\.(\w+)$', expr.strip())
+    if tbl_match:
+        tbl_alias = tbl_match.group(1)
+        from_tool = aliases.get(tbl_alias) or tbl_alias
+        return {"source_expr": expr, "from_tool": from_tool}
+    return {"source_expr": expr, "from_tool": None}

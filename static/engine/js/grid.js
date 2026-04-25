@@ -571,20 +571,8 @@ const GridManager = (() => {
             </tr>`;
     }
 
-    function _escHtml(str) {
-        return String(str)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;");
-    }
-
-    function _escAttr(str) {
-        return String(str)
-            .replace(/&/g, "&amp;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#39;");
-    }
+    const _escHtml = Utils.escHtml;
+    const _escAttr = Utils.escAttr;
 
     /**
      * Aggiorna i dati di una riga nel array locale
@@ -647,14 +635,5 @@ const GridManager = (() => {
 })();
 
 
-// ============================================================
-// TOAST — funzione globale usata da tutti i moduli
-// ============================================================
-
-function showToast(message, type = "info") {
-    const toast = document.createElement("div");
-    toast.className = `toast toast-${type}`;
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3500);
-}
+// showToast — alias globale per compatibilità con chiamate dirette nei template
+const showToast = Utils.showToast;

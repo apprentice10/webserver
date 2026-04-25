@@ -193,6 +193,12 @@ const ApiClient = (() => {
         });
     }
 
+    async function etlRunSaved() {
+        return request(`/api/tools/${TOOL_ID}/etl/run?project_id=${PROJECT_ID}`, {
+            method: "POST"
+        });
+    }
+
     async function etlLoadConfig() {
         return request(`/api/tools/${TOOL_ID}/etl/config?project_id=${PROJECT_ID}`);
     }
@@ -242,6 +248,7 @@ const ApiClient = (() => {
         exportExcel,
         etlPreview,
         etlApply,
+        etlRunSaved,
         etlSave,
         etlLoadConfig,
         etlLoadSchema,

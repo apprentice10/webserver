@@ -47,14 +47,31 @@ const ColumnsManager = (() => {
         _columns.forEach(col => {
             const draggable = col.is_system ? "" : 'draggable="true"';
             const dragClass = col.is_system ? "" : " th-draggable";
+
+            let lineageTitle = "";
+            if (col.lineage_info) {
+                try {
+                    const li = typeof col.lineage_info === "string"
+                        ? JSON.parse(col.lineage_info)
+                        : col.lineage_info;
+                    if (li.from_tool) {
+                        lineageTitle = `title="Fonte: ${_escAttr(li.from_tool)}.${_escAttr(li.source_expr.replace(/^\w+\./, ''))}"`;
+                    } else if (li.source_expr) {
+                        lineageTitle = `title="Fonte: ${_escAttr(li.source_expr)}"`;
+                    }
+                } catch (_) {}
+            }
+
             html += `
                 <th style="width:${col.width}px;min-width:40px"
                     data-column-id="${col.id}"
                     data-slug="${col.slug}"
                     data-is-system="${col.is_system ? 1 : 0}"
-                    ${draggable}>
+                    ${draggable}
+                    ${lineageTitle}>
                     <div class="th-content${dragClass}">
                         <span class="th-label">${_escHtml(col.name)}</span>
+                        ${lineageTitle ? '<span class="th-lineage-dot" aria-hidden="true">⬡</span>' : ""}
                     </div>
                     <div class="resize-handle" data-column-id="${col.id}" draggable="false"></div>
                 </th>`;
@@ -259,12 +276,7 @@ const ColumnsManager = (() => {
             .substring(0, 50);
     }
 
-    function _escHtml(str) {
-        return String(str)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;");
-    }
+    const _escHtml = Utils.escHtml;
 
     function _escAttr(str) {
         return String(str)

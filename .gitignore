@@ -46,3 +46,6 @@ build/
 
 # Legacy / archived code (pre-refactoring, do not read or index)
 _legacy/
+
+# Claude Code local settings
+.claude/

@@ -134,16 +134,7 @@ const SqlEditor = (() => {
 
 
     // --------------------------------------------------------
-    // UTILITY
-    // --------------------------------------------------------
-
-    function _escHtml(str) {
-        return String(str)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;");
-    }
+    const _escHtml = Utils.escHtml;
 
 
     // --------------------------------------------------------

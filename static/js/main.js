@@ -265,6 +265,7 @@ function _renderSidebarTools(tools, projectId) {
            onclick="openToolById(${tool.id}, ${projectId}); return false;">
             <span class="sidebar-icon">${escapeHtml(tool.icon || "📄")}</span>
             <span>${escapeHtml(tool.name)}</span>
+            ${tool.is_stale ? '<span class="stale-badge" title="Dati non aggiornati">●</span>' : ''}
         </a>
     `).join("");
 }

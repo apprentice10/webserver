@@ -511,20 +511,8 @@ const EtlEditor = (() => {
         return editor ? editor.value.trim() : "";
     }
 
-    function _formatTs(isoString) {
-        try {
-            return new Date(isoString).toLocaleString("it-IT", {
-                day: "2-digit", month: "2-digit", year: "numeric",
-                hour: "2-digit", minute: "2-digit"
-            });
-        } catch { return isoString; }
-    }
-
-    function _esc(str) {
-        return String(str)
-            .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-    }
+    const _formatTs = Utils.formatTimestamp;
+    const _esc = Utils.escHtml;
 
     function _escAttr(str) {
         return String(str).replace(/'/g, "\\'").replace(/"/g, "&quot;");

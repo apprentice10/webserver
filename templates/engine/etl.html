@@ -236,27 +236,11 @@ WHERE 1=1"
     const PROJECT_ID = {{ project_id }};
     const TOOL_ID    = {{ tool_id }};
 </script>
+<script src="/static/engine/js/utils.js"></script>
 <script src="/static/engine/js/api.js"></script>
 <script src="/static/engine/js/etl_editor.js"></script>
 <script>
-    // Funzione showToast minima (non c'è toolbar.js qui)
-    function showToast(message, type = "info") {
-        const colors = {
-            info: "#4a9eff", success: "#22c55e",
-            error: "#ef4444", warning: "#f59e0b"
-        };
-        const toast = document.createElement("div");
-        toast.style.cssText = `
-            position:fixed;bottom:24px;right:24px;z-index:9999;
-            padding:10px 18px;border-radius:6px;font-size:13px;
-            background:${colors[type]||colors.info};color:#fff;
-            box-shadow:0 4px 12px rgba(0,0,0,.3);
-            animation:fadeIn .2s ease;
-        `;
-        toast.textContent = message;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3500);
-    }
+    const showToast = Utils.showToast;
 
     document.addEventListener("DOMContentLoaded", async () => {
         // Carica nome tool

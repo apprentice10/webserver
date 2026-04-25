@@ -1,0 +1,190 @@
+-TABLE NAME: instrument_list
+
+SELECT
+      NULL    AS fase,
+      NULL    AS reparto,
+      NULL    AS pid,
+      NULL    AS utenza,
+      NULL    AS posizione,
+      'INIT'  AS tag,    
+      NULL    AS servizio,
+      NULL    AS tipo_strumento,
+      NULL    AS intervallo,
+      NULL    AS unita,
+      NULL    AS classe_linea,
+      NULL    AS attacco_processo,
+      NULL    AS classificazione_area,
+      NULL    AS note
+  WHERE 1 = 0
+
+-TABLE NAME: std_cable
+
+SELECT DISTINCT
+    TRIM(
+        COALESCE(tipo_strumento, '') || ' ' ||
+        COALESCE(intervallo, '') || ' ' ||
+        COALESCE(classe_linea, '') || ' ' ||
+        COALESCE(attacco_processo, '') || ' ' ||
+        COALESCE(classificazione_area, '')
+    ) AS tag,
+
+    NULL AS certificato,
+    NULL AS alimentazione,
+    NULL AS cavo,
+    NULL AS note
+
+FROM instrument_list
+WHERE
+    tipo_strumento IS NOT NULL
+    OR intervallo IS NOT NULL
+    OR classe_linea IS NOT NULL
+    OR attacco_processo IS NOT NULL
+    OR classificazione_area IS NOT NULL;
+
+-TABLE NAME: cable_list
+
+WITH standard_match AS (
+    SELECT
+        il.tag                                      AS original_tag,
+        TRIM(
+            COALESCE(il.tipo_strumento,      '') || ' ' ||
+            COALESCE(il.intervallo,          '') || ' ' ||
+            COALESCE(il.classe_linea,        '') || ' ' ||
+            COALESCE(il.attacco_processo,    '') || ' ' ||
+            COALESCE(il.classificazione_area,'')
+        )                                           AS standard,
+        sc.certificato,
+        sc.alimentazione,
+        sc.cavo,
+        sc.note
+    FROM instrument_list il
+    INNER JOIN std_cable sc
+        ON TRIM(
+               COALESCE(il.tipo_strumento,      '') || ' ' ||
+               COALESCE(il.intervallo,          '') || ' ' ||
+               COALESCE(il.classe_linea,        '') || ' ' ||
+               COALESCE(il.attacco_processo,    '') || ' ' ||
+               COALESCE(il.classificazione_area,'')
+           ) = sc.tag
+    WHERE
+        sc.certificato   IS NOT NULL OR
+        sc.alimentazione IS NOT NULL OR
+        sc.cavo          IS NOT NULL
+),
+
+-- Aggiunge '|' sentinella finale per rendere uniforme l'estrazione
+padded AS (
+    SELECT
+        original_tag,
+        standard,
+        COALESCE(certificato,   '') || '|' AS cert_p,
+        COALESCE(alimentazione, '') || '|' AS alim_p,
+        COALESCE(cavo,          '') || '|' AS cavo_p,
+        note,
+        -- Numero di segmenti = max dei '|' nelle tre colonne originali
+        MAX(
+            LENGTH(COALESCE(certificato,  '')) - LENGTH(REPLACE(COALESCE(certificato,  ''), '|', '')) + 1,
+            LENGTH(COALESCE(alimentazione,'')) - LENGTH(REPLACE(COALESCE(alimentazione,''), '|', '')) + 1,
+            LENGTH(COALESCE(cavo,         '')) - LENGTH(REPLACE(COALESCE(cavo,         ''), '|', '')) + 1
+        ) AS num_segments
+    FROM standard_match
+),
+
+-- Generatore di indici 1..N (estendi se prevedi più di 5 cavi per riga)
+idx(n) AS (
+    SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3
+    UNION ALL SELECT 4 UNION ALL SELECT 5
+),
+
+-- Funzione di split per SQLite:
+-- Estrae il token numero n da una stringa con separatore '|' (già con sentinella finale)
+-- token(n) = SUBSTR(str, pos_pipe(n-1)+1, pos_pipe(n) - pos_pipe(n-1) - 1)
+-- pos_pipe(0) = 0  (virtuale, prima del primo carattere)
+-- pos_pipe(1) = INSTR(str, '|')
+-- pos_pipe(2) = INSTR(str, '|', pos_pipe(1)+1)  -- ma SQLite non ha INSTR a 3 argomenti!
+-- Soluzione: si usa INSTR sulla sottostringa residua dopo aver rimosso i primi (n-1) token
+
+expanded AS (
+    SELECT
+        p.original_tag,
+        p.standard,
+        p.num_segments,
+        i.n,
+
+        -- ── CERTIFICATO ──────────────────────────────────────────────────
+        NULLIF(TRIM(
+            CASE i.n
+                WHEN 1 THEN
+                    SUBSTR(p.cert_p, 1, INSTR(p.cert_p, '|') - 1)
+                WHEN 2 THEN
+                    SUBSTR(
+                        SUBSTR(p.cert_p, INSTR(p.cert_p, '|') + 1),
+                        1,
+                        INSTR(SUBSTR(p.cert_p, INSTR(p.cert_p, '|') + 1), '|') - 1
+                    )
+                WHEN 3 THEN
+                    SUBSTR(
+                        SUBSTR(SUBSTR(p.cert_p, INSTR(p.cert_p,'|')+1),
+                               INSTR(SUBSTR(p.cert_p, INSTR(p.cert_p,'|')+1),'|')+1),
+                        1,
+                        INSTR(
+                            SUBSTR(SUBSTR(p.cert_p, INSTR(p.cert_p,'|')+1),
+                                   INSTR(SUBSTR(p.cert_p, INSTR(p.cert_p,'|')+1),'|')+1),
+                            '|'
+                        ) - 1
+                    )
+                WHEN 4 THEN
+                    SUBSTR(
+                        SUBSTR(SUBSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),INSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),INSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),'|')+1),'|')+1),
+                        1,
+                        INSTR(SUBSTR(SUBSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),INSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),INSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),'|')+1),'|')+1),'|') - 1
+                    )
+                WHEN 5 THEN
+                    SUBSTR(
+                        SUBSTR(SUBSTR(SUBSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),INSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),INSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),INSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),INSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),'|')+1),'|')+1),'|')+1),
+                        1,
+                        INSTR(SUBSTR(SUBSTR(SUBSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),INSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),INSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),INSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),INSTR(SUBSTR(p.cert_p,INSTR(p.cert_p,'|')+1),'|')+1),'|')+1),'|')+1),'|') - 1
+                    )
+            END
+        ), '') AS certificato,
+
+        -- ── ALIMENTAZIONE ────────────────────────────────────────────────
+        NULLIF(TRIM(
+            CASE i.n
+                WHEN 1 THEN SUBSTR(p.alim_p, 1, INSTR(p.alim_p,'|')-1)
+                WHEN 2 THEN SUBSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),1,INSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),'|')-1)
+                WHEN 3 THEN SUBSTR(SUBSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),INSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),'|')+1),1,INSTR(SUBSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),INSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),'|')+1),'|')-1)
+                WHEN 4 THEN SUBSTR(SUBSTR(SUBSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),INSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),INSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),'|')+1),'|')+1),1,INSTR(SUBSTR(SUBSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),INSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),INSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),'|')+1),'|')+1),'|')-1)
+                WHEN 5 THEN SUBSTR(SUBSTR(SUBSTR(SUBSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),INSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),INSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),INSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),INSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),'|')+1),'|')+1),'|')+1),1,INSTR(SUBSTR(SUBSTR(SUBSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),INSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),INSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),INSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),INSTR(SUBSTR(p.alim_p,INSTR(p.alim_p,'|')+1),'|')+1),'|')+1),'|')+1),'|')-1)
+            END
+        ), '') AS alimentazione,
+
+        -- ── CAVO ─────────────────────────────────────────────────────────
+        NULLIF(TRIM(
+            CASE i.n
+                WHEN 1 THEN SUBSTR(p.cavo_p, 1, INSTR(p.cavo_p,'|')-1)
+                WHEN 2 THEN SUBSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),1,INSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),'|')-1)
+                WHEN 3 THEN SUBSTR(SUBSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),INSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),'|')+1),1,INSTR(SUBSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),INSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),'|')+1),'|')-1)
+                WHEN 4 THEN SUBSTR(SUBSTR(SUBSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),INSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),INSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),'|')+1),'|')+1),1,INSTR(SUBSTR(SUBSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),INSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),INSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),'|')+1),'|')+1),'|')-1)
+                WHEN 5 THEN SUBSTR(SUBSTR(SUBSTR(SUBSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),INSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),INSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),INSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),INSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),'|')+1),'|')+1),'|')+1),1,INSTR(SUBSTR(SUBSTR(SUBSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),INSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),INSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),INSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),'|')+1),INSTR(SUBSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),INSTR(SUBSTR(p.cavo_p,INSTR(p.cavo_p,'|')+1),'|')+1),'|')+1),'|')+1),'|')-1)
+            END
+        ), '') AS cavo,
+
+        p.note
+    FROM padded p
+    INNER JOIN idx i ON i.n <= p.num_segments
+)
+
+SELECT
+    'C-' || original_tag ||
+        CASE WHEN num_segments > 1 THEN '.' || n ELSE '' END   AS tag,
+
+    certificato,
+    alimentazione,
+    original_tag                                                AS partenza,
+    NULL                                                        AS arrivo,
+    cavo,
+    NULL                                                        AS distanza,
+    note
+FROM expanded
+ORDER BY original_tag, n;

@@ -37,6 +37,7 @@ const ToolbarManager = (() => {
         try {
             _tool = await ApiClient.loadTool();
             _updateToolUI();
+            _updateEtlButton();
 
             const noteEl = document.getElementById("tool-note");
             if (noteEl) noteEl.value = _tool.note || "";
@@ -173,6 +174,46 @@ const ToolbarManager = (() => {
 
 
     // --------------------------------------------------------
+    // ETL — RICARICA
+    // --------------------------------------------------------
+
+    function _updateEtlButton() {
+        const btn = document.getElementById("btn-run-etl");
+        if (!btn || !_tool) return;
+        if (!_tool.has_etl) {
+            btn.style.display = "none";
+            return;
+        }
+        btn.style.display = "";
+        btn.classList.toggle("btn-stale", !!_tool.is_stale);
+        btn.title = _tool.is_stale
+            ? "Dati non aggiornati — clicca per rieseguire l'ETL"
+            : "Riesegui ETL salvato";
+    }
+
+    async function runEtl() {
+        const btn = document.getElementById("btn-run-etl");
+        const label = btn ? btn.textContent : "";
+        if (btn) { btn.disabled = true; btn.textContent = "↺ Aggiornamento..."; }
+
+        try {
+            const result = await ApiClient.etlRunSaved();
+            _tool.is_stale = false;
+            _updateEtlButton();
+            await GridManager.init();
+            showToast(
+                `ETL completato — ${result.created} inseriti, ${result.updated} aggiornati.`,
+                "success"
+            );
+        } catch (err) {
+            showToast("Errore ETL: " + err.message, "error");
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = label || "↺ Ricarica"; }
+        }
+    }
+
+
+    // --------------------------------------------------------
     // EXPORT
     // --------------------------------------------------------
 
@@ -197,7 +238,8 @@ const ToolbarManager = (() => {
         addColumn,
         exportExcel,
         selectIcon,
-        getToolType
+        getToolType,
+        runEtl
     };
 
 })();

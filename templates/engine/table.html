@@ -46,6 +46,12 @@
                 class="btn btn-ghost btn-sm"
                 onclick="SqlEditor.toggle()"
             >⚡ SQL</button>
+            <button
+                class="btn btn-ghost btn-sm"
+                id="btn-run-etl"
+                style="display:none"
+                onclick="ToolbarManager.runEtl()"
+            >↺ Ricarica</button>
             <a
                 class="btn btn-ghost btn-sm"
                 id="btn-etl-editor"
@@ -177,6 +183,7 @@
     const PROJECT_ID = {{ project_id }};
     const TOOL_ID    = {{ tool_id }};
 </script>
+<script src="/static/engine/js/utils.js"></script>
 <script src="/static/engine/js/api.js"></script>
 <script src="/static/engine/js/columns.js"></script>
 <script src="/static/engine/js/resize.js"></script>
