@@ -1,0 +1,83 @@
+/* ============================================================
+   TABLE ENGINE — Layout, container, topbar, pulsanti globali
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   CONTAINER E LAYOUT
+   ------------------------------------------------------------ */
+.tool-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* ------------------------------------------------------------
+   TOPBAR ACTIONS
+   ------------------------------------------------------------ */
+.topbar-tool-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tool-name-badge {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin-right: 4px;
+}
+
+.rev-badge {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--color-accent);
+    letter-spacing: 1px;
+}
+
+.btn-sm {
+    padding: 5px 12px;
+    font-size: 12px;
+}
+
+.btn-accent {
+    background: var(--color-accent);
+    color: white;
+}
+
+.btn-accent:hover {
+    background: var(--color-accent-hover);
+}
+
+.btn-ghost {
+    background: transparent;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+}
+
+.btn-ghost:hover {
+    background: var(--color-surface);
+    color: var(--color-text);
+}
+
+.btn-ghost.active {
+    background: var(--color-surface-2);
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+}
+
+.btn-stale {
+    color: var(--color-warning) !important;
+    border-color: var(--color-warning) !important;
+    animation: pulse-stale 2s ease-in-out infinite;
+}
+
+@keyframes pulse-stale {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.6; }
+}

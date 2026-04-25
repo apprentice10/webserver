@@ -1,0 +1,37 @@
+/* ============================================================
+   TABLE ENGINE — Area nota del tool
+   ============================================================ */
+
+.tool-note-area {
+    flex-shrink: 0;
+    border-top: 2px solid var(--color-border);
+    background: var(--color-surface);
+    padding: 7px 12px;
+}
+
+.tool-note-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.tool-note-input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--color-text);
+    font-family: var(--font-main);
+    font-size: 13px;
+    resize: none;
+    outline: none;
+    min-height: 40px;
+    max-height: 100px;
+    line-height: 1.5;
+}
+
+.tool-note-input::placeholder {
+    color: var(--color-text-muted);
+}

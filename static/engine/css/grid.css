@@ -1,0 +1,334 @@
+/* ============================================================
+   TABLE ENGINE — Griglia dati, celle, col-toggle, context menu, drag
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   GRIGLIA
+   ------------------------------------------------------------ */
+.grid-wrapper {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+.grid-scroll-container {
+    flex: 1;
+    overflow: auto;
+}
+
+.data-grid {
+    border-collapse: collapse;
+    font-size: 13px;
+    table-layout: fixed;
+    width: max-content;
+    min-width: 100%;
+}
+
+/* Intestazioni */
+.data-grid thead tr {
+    background: var(--color-surface);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.data-grid th {
+    padding: 0;
+    text-align: left;
+    border-bottom: 2px solid var(--color-border);
+    border-right: 1px solid var(--color-border);
+    white-space: nowrap;
+    overflow: hidden;
+    user-select: none;
+    position: relative;
+}
+
+.th-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    gap: 4px;
+}
+
+.th-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Pulsanti header colonne — rimossi, gestiti da ETL Editor */
+.th-actions  { display: none; }
+.th-btn      { display: none; }
+
+/* Lineage dot — indica che la colonna ha un'origine ETL tracciata */
+.th-lineage-dot {
+    font-size: 9px;
+    opacity: 0.4;
+    cursor: default;
+    flex-shrink: 0;
+}
+
+/* Resize handle */
+.resize-handle {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    cursor: col-resize;
+    z-index: 1;
+    transition: background var(--transition);
+}
+
+.resize-handle:hover,
+.resize-handle.resizing {
+    background: var(--color-accent);
+}
+
+/* Righe */
+.data-grid tbody tr {
+    border-bottom: 1px solid var(--color-border);
+    transition: background var(--transition);
+}
+
+.data-grid tbody tr:hover {
+    background: var(--color-surface);
+}
+
+.data-grid tbody tr.row-deleted {
+    opacity: 0.5;
+}
+
+.data-grid tbody tr.row-deleted .cell-input {
+    text-decoration: line-through;
+    color: var(--color-text-muted);
+}
+
+.data-grid tbody tr.row-ghost {
+    opacity: 0.4;
+}
+
+.data-grid tbody tr.row-ghost:hover {
+    opacity: 0.7;
+}
+
+.data-grid td {
+    padding: 0;
+    border-right: 1px solid var(--color-border);
+    vertical-align: middle;
+    overflow: hidden;
+}
+
+/* ------------------------------------------------------------
+   CELLA INPUT
+   ------------------------------------------------------------ */
+.cell-input {
+    width: 100%;
+    height: 100%;
+    min-height: 30px;
+    background: transparent;
+    border: none;
+    color: var(--color-text);
+    font-family: var(--font-main);
+    font-size: 13px;
+    padding: 5px 8px;
+    box-sizing: border-box;
+    resize: none;
+    outline: none;
+    overflow: hidden;
+    white-space: nowrap;
+    cursor: default;
+}
+
+.cell-input:focus {
+    background: rgba(233, 69, 96, 0.06);
+    outline: 2px solid var(--color-accent);
+    outline-offset: -2px;
+    white-space: normal;
+    cursor: text;
+}
+
+.cell-input[readonly] {
+    cursor: default;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+/* Celle editabili in select mode — aspetto normale (non muted) */
+.cell-input[data-editable][readonly] {
+    color: var(--color-text);
+    font-family: var(--font-main);
+    font-size: 13px;
+    cursor: default;
+}
+
+/* Select mode: focus più leggero (cella selezionata ma non in editing) */
+.cell-input[data-editable][readonly]:focus {
+    background: rgba(233, 69, 96, 0.03);
+    outline: 1px solid var(--color-accent);
+    outline-offset: -1px;
+    cursor: default;
+}
+
+/* Cella TAG */
+.cell-tag {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--color-accent);
+}
+
+/* Cella LOG */
+.cell-log-preview {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+    padding: 5px 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+.cell-log-preview:hover {
+    color: var(--color-text);
+}
+
+/* ------------------------------------------------------------
+   COLONNA AZIONI PER RIGA
+   ------------------------------------------------------------ */
+.col-actions {
+    width: 56px;
+    min-width: 56px;
+}
+
+.cell-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    height: 30px;
+    padding: 0 4px;
+}
+
+.btn-row-action {
+    background: none;
+    border: none;
+    color: transparent;
+    cursor: pointer;
+    font-size: 13px;
+    padding: 3px 5px;
+    border-radius: 4px;
+    transition: color var(--transition), background var(--transition);
+    line-height: 1;
+}
+
+tr:hover .btn-row-action {
+    color: var(--color-text-muted);
+}
+
+.btn-row-delete:hover {
+    color: var(--color-danger) !important;
+    background: rgba(231, 76, 60, 0.1);
+}
+
+.btn-row-restore:hover {
+    color: var(--color-success) !important;
+    background: rgba(46, 204, 113, 0.1);
+}
+
+.btn-row-hard-delete:hover {
+    color: var(--color-danger) !important;
+    background: rgba(231, 76, 60, 0.2);
+}
+
+/* Riga ghost (vuota, pronta per input) */
+.row-ghost .cell-input {
+    color: var(--color-text-muted);
+}
+
+/* Loading / empty */
+.grid-loading td,
+.grid-empty td {
+    text-align: center;
+    color: var(--color-text-muted);
+    padding: 40px;
+    font-size: 13px;
+}
+
+/* ------------------------------------------------------------
+   TOGGLE COLONNE (LOG / REV)
+   ------------------------------------------------------------ */
+
+/* LOG column hidden via CSS class toggled by toggleLog() */
+.data-grid.log-hidden [data-slug="log"] {
+    display: none;
+}
+
+/* REV column hidden via CSS class toggled by toggleRev() */
+.data-grid.rev-hidden [data-slug="rev"] {
+    display: none;
+}
+
+/* ------------------------------------------------------------
+   CONTEXT MENU
+   ------------------------------------------------------------ */
+.context-menu {
+    position: fixed;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 4px 0;
+    z-index: 500;
+    min-width: 195px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+    display: none;
+    animation: modal-in 0.1s ease;
+}
+.context-menu.visible {
+    display: block;
+}
+.ctx-item {
+    padding: 7px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--color-text);
+    transition: background var(--transition);
+    user-select: none;
+}
+.ctx-item:hover {
+    background: var(--color-surface-2);
+}
+.ctx-item.ctx-danger {
+    color: var(--color-danger);
+}
+.ctx-separator {
+    border-top: 1px solid var(--color-border);
+    margin: 4px 0;
+}
+
+/* ------------------------------------------------------------
+   COLUMN DRAG-AND-DROP
+   ------------------------------------------------------------ */
+.th-draggable {
+    cursor: grab;
+}
+.th-draggable:active {
+    cursor: grabbing;
+}
+th.col-dragging {
+    opacity: 0.4;
+}
+th.col-dragover {
+    border-left: 2px solid var(--color-accent);
+    background: rgba(233, 69, 96, 0.08);
+}

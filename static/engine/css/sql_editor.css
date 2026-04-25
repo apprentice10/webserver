@@ -1,0 +1,88 @@
+/* ============================================================
+   TABLE ENGINE — Power SQL Editor (pannello inline)
+   ============================================================ */
+
+.sql-editor-panel {
+    flex-shrink: 0;
+    border-top: 2px solid var(--color-accent);
+    background: var(--color-surface);
+    max-height: 300px;
+    display: flex;
+    flex-direction: column;
+}
+
+.sql-editor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-accent);
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.sql-editor-body {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    align-items: flex-start;
+    flex-shrink: 0;
+}
+
+.sql-input {
+    flex: 1;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    color: var(--color-text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 7px 10px;
+    resize: vertical;
+    min-height: 56px;
+    max-height: 120px;
+    outline: none;
+    transition: border-color var(--transition);
+}
+
+.sql-input:focus {
+    border-color: var(--color-accent);
+}
+
+.sql-editor-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.sql-results {
+    flex: 1;
+    overflow: auto;
+    padding: 0 12px 8px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+}
+
+.sql-results table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.sql-results th,
+.sql-results td {
+    border: 1px solid var(--color-border);
+    padding: 3px 8px;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.sql-results th {
+    background: var(--color-surface-2);
+    color: var(--color-text-muted);
+    font-size: 11px;
+}
+
+.sql-error   { color: var(--color-danger);  padding: 6px 0; }
+.sql-success { color: var(--color-success); padding: 6px 0; }

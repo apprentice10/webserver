@@ -130,6 +130,13 @@ API: `GET /api/tools/templates?project_id=N&type_slug=X`
 | `engine/sql_parser.py` | SQL parsing: `extract_table_refs`, `extract_col_lineage`, `clean_sql` |
 | `engine/catalog.py` | Static list of available tool types (TOOL_CATALOG) |
 | `_legacy/instrument_list/` | Dead code — **do not read** |
+| `static/engine/css/layout.css` | Container, topbar, pulsanti globali (btn-ghost, btn-stale…) |
+| `static/engine/css/toolbar.css` | Toolbar secondaria, search input |
+| `static/engine/css/grid.css` | Griglia, celle, select/edit mode, toggle LOG/REV, context menu, drag |
+| `static/engine/css/note.css` | Area nota del tool |
+| `static/engine/css/sql_editor.css` | Power SQL Editor panel inline |
+| `static/engine/css/modal.css` | Modal log, form-select, toast, icon picker, settings tabs |
+| `static/engine/css/etl.css` | ETL Editor — layout, editor area, preview, storico, schema browser |
 
 ### `engine/service.py` navigation guide (~700 lines)
 
@@ -143,6 +150,17 @@ API: `GET /api/tools/templates?project_id=N&type_slug=X`
 | ~555 | `mark_tool_stale(conn, tool_id)` |
 | ~565 | `mark_dependents_stale(conn, source_slug)` — called after every row mutation |
 | 610–700 | Private helpers + Template CRUD (registry DB) |
+
+---
+
+## Companion `.md` per ogni file sorgente
+
+Per ogni file sorgente rilevante esiste un file `<nome>.<ext>.md` nella stessa directory. Contiene:
+- **Indice** — tabella sezioni/classi principali con riferimenti a righe o nomi
+- **Descrizione** — scopo del file in 1-2 frasi
+- **Decisioni** — scelte non ovvie, alternative scartate, vincoli che condizionano modifiche future
+
+Aggiornare il `.md` companion ogni volta che si aggiunge una sezione significativa o si prende una decisione architetturale sul file.
 
 ---
 
