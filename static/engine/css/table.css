@@ -159,6 +159,7 @@
     border-collapse: collapse;
     font-size: 13px;
     table-layout: fixed;
+    width: max-content;
     min-width: 100%;
 }
 
