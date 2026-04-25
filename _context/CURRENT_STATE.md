@@ -1,5 +1,5 @@
 # CURRENT_STATE.md
-_Last updated: 2026-04-25_
+_Last updated: 2026-04-25 (session 2)_
 
 ---
 
@@ -26,17 +26,20 @@ _Last updated: 2026-04-25_
 - Tool creation with ETL SQL from file + template scoping by tool type
 - Schema browser in ETL editor
 - Toolbar: stale badge, run ETL button, settings access
+- Horizontal scrollbar for wide tables (`grid-scroll-container` + `width: max-content`)
+- Toggle REV column visibility (CSS `.rev-hidden` class, same pattern as LOG toggle)
+- Toolbar toggle buttons unified: icona + etichetta fissa, `.active` CSS segnala stato (no text mutation); pulsante eliminati aggiunge icona 🗑
 
 ## In Progress
 
-- **Horizontal scrollbar** (A.1) — `width: max-content` aggiunto a `table.css`; manca il wrapper scrollabile in `table.html`
+_(none)_
 
 ## Next Priorities (ordered by value/effort)
 
 ### Gruppo A — Quick UX wins (basso sforzo, alto impatto)
 
-1. **Horizontal scrollbar** for wide tables (CSS/layout, low effort)
-2. **Toggle REV column visibility** (same CSS pattern as LOG toggle)
+1. ~~**Horizontal scrollbar** for wide tables (CSS/layout, low effort)~~ ✓
+2. ~~**Toggle REV column visibility** (same CSS pattern as LOG toggle)~~ ✓
 3. **Double-click column border** to auto-fit width (resize.js)
 4. **Single click = selezione cella, double click = modalità modifica** — attualmente il click apre subito l'edit; invertire il comportamento in `grid.js` (`_onCellFocus`, `_renderCell`)
 5. **Row numbers** — aggiungere colonna indice stile Excel (colonna fissa sinistra, stile uguale agli header colonna, non editabile)

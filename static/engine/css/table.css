@@ -1096,6 +1096,11 @@ tr:hover .btn-row-action {
     display: none;
 }
 
+/* REV column hidden via CSS class toggled by toggleRev() */
+.data-grid.rev-hidden [data-slug="rev"] {
+    display: none;
+}
+
 /* ------------------------------------------------------------
    CONTEXT MENU
    ------------------------------------------------------------ */

@@ -393,10 +393,7 @@ const GridManager = (() => {
     function toggleDeleted() {
         _showDeleted = !_showDeleted;
         const btn = document.getElementById("btn-show-deleted");
-        if (btn) {
-            btn.textContent = _showDeleted ? "Nascondi eliminati" : "Mostra eliminati";
-            btn.classList.toggle("active", _showDeleted);
-        }
+        if (btn) btn.classList.toggle("active", _showDeleted);
         _applyFilters();
         render();
     }
@@ -410,10 +407,14 @@ const GridManager = (() => {
         const table  = document.getElementById("data-grid");
         const hidden = table.classList.toggle("log-hidden");
         const btn    = document.getElementById("btn-toggle-log");
-        if (btn) {
-            btn.textContent = hidden ? "📋 LOG (nascosta)" : "📋 LOG";
-            btn.classList.toggle("active", hidden);
-        }
+        if (btn) btn.classList.toggle("active", hidden);
+    }
+
+    function toggleRev() {
+        const table  = document.getElementById("data-grid");
+        const hidden = table.classList.toggle("rev-hidden");
+        const btn    = document.getElementById("btn-toggle-rev");
+        if (btn) btn.classList.toggle("active", hidden);
     }
 
 
@@ -627,6 +628,7 @@ const GridManager = (() => {
         hardDeleteRow,
         toggleDeleted,
         toggleLog,
+        toggleRev,
         search,
         showRowLog,
         openContextMenu
