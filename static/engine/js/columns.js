@@ -129,15 +129,9 @@ const ColumnsManager = (() => {
                 const [moved] = userCols.splice(srcIdx, 1);
                 userCols.splice(tgtIdx, 0, moved);
 
-                // Aggiorna posizioni nel array completo
-                let pos = 2;
-                _columns = _columns.map(c => {
-                    if (!c.is_system) {
-                        const updated = userCols.find(u => u.id === c.id);
-                        return updated ? { ...updated, position: pos++ } : c;
-                    }
-                    return c;
-                });
+                // Assegna posizioni in base al nuovo ordine di userCols
+                userCols.forEach((col, i) => { col.position = 2 + i; });
+
                 _columns.sort((a, b) => {
                     if (a.slug === "log") return 1;
                     if (b.slug === "log") return -1;

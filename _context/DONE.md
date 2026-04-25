@@ -29,3 +29,4 @@ _Feature log — completato e verificato in produzione._
 - Toolbar toggle buttons unified: icona + etichetta fissa, `.active` CSS segnala stato; pulsante eliminati aggiunge icona 🗑
 - Double-click su `.resize-handle` → auto-fit larghezza colonna al contenuto più largo (header + celle visibili), salva nel backend
 - Single click = selezione cella (select mode, readonly + leggero outline), double click / Enter / char = edit mode; Escape annulla; blur salva e torna select mode
+- Fix: drag-and-drop reorder colonne non aveva effetto visivo — `_columns.map` iterava in ordine originale e assegnava posizioni nell'ordine sbagliato; fix con `userCols.forEach` che muta posizioni in-place sui riferimenti condivisi, poi `_columns.sort`
