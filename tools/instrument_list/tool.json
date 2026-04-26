@@ -1,0 +1,6 @@
+{
+  "type_slug": "instrument-list",
+  "name": "Instrument List",
+  "description": "Lista strumenti di processo: TAG, tipo, range, P&ID e note tecniche.",
+  "icon": "📋"
+}

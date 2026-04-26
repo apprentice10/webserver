@@ -1,14 +1,34 @@
+import re
+from datetime import datetime, timezone
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
 
-from database import get_db
-from core.models import Project
-from engine.project_db import create_project_db, DATA_DIR
+from engine.project_db import create_project_db, open_project_db, DATA_DIR
+from engine.project_index import (
+    init_index, add_project, remove_project,
+    list_projects as _list_projects,
+    get_project as _get_project,
+    get_db_path,
+)
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
+
+
+def _slugify(text: str) -> str:
+    text = text.lower().strip()
+    text = re.sub(r"[^\w\s]", "", text)
+    text = re.sub(r"\s+", "_", text)
+    return text or "progetto"
+
+
+def _make_db_filename(client: str, name: str) -> str:
+    parts = []
+    if client and client.strip():
+        parts.append(_slugify(client.strip()))
+    parts.append(_slugify(name.strip()) or "progetto")
+    return "_".join(parts) + ".db"
 
 
 class ProjectCreate(BaseModel):
@@ -29,57 +49,57 @@ class ProjectResponse(BaseModel):
 
 
 @router.get("/", response_model=list[ProjectResponse])
-def list_projects(db: Session = Depends(get_db)):
-    return db.query(Project).order_by(Project.created_at.desc()).all()
+def list_projects():
+    return _list_projects()
 
 
 @router.post("/", response_model=ProjectResponse)
-def create_project(data: ProjectCreate, db: Session = Depends(get_db)):
-    base_name = Project.make_db_filename(data.client or "", data.name)
+def create_project(data: ProjectCreate):
+    base = _make_db_filename(data.client or "", data.name)
 
     # Garantisce unicità del filename
-    db_filename = base_name
-    counter = 1
-    while db.query(Project).filter(Project.db_path == db_filename).first():
-        stem = base_name[:-3]
+    db_filename = base
+    db_path = DATA_DIR / db_filename
+    counter = 2
+    while db_path.exists():
+        stem = base[:-3]
         db_filename = f"{stem}_{counter}.db"
+        db_path = DATA_DIR / db_filename
         counter += 1
 
-    project = Project(
-        name=data.name,
-        client=data.client,
-        description=data.description,
-        db_path=db_filename
+    # Crea il file DB per-progetto con DDL di sistema
+    create_project_db(db_path)
+
+    # Popola _project nel nuovo DB
+    conn = open_project_db(db_path)
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "INSERT INTO _project (name, client, description, created_at, updated_at) VALUES (?,?,?,?,?)",
+        (data.name, data.client or "", data.description or "", now, now),
     )
-    db.add(project)
-    db.commit()
-    db.refresh(project)
+    conn.commit()
+    conn.close()
 
-    # Crea il file DB del progetto
-    create_project_db(DATA_DIR / db_filename)
-
-    return project
+    # Registra nell'indice
+    project_id = add_project(data.name, data.client or "", db_filename)
+    return {
+        "id": project_id,
+        "name": data.name,
+        "client": data.client,
+        "description": data.description,
+        "db_path": db_filename,
+    }
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
-def get_project(project_id: int, db: Session = Depends(get_db)):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Progetto non trovato")
-    return project
+def get_project(project_id: int):
+    return _get_project(project_id)
 
 
 @router.delete("/{project_id}")
-def delete_project(project_id: int, db: Session = Depends(get_db)):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Progetto non trovato")
-
-    # Elimina il file DB del progetto
-    db_path = DATA_DIR / project.db_path
+def delete_project(project_id: int):
+    db_path = get_db_path(project_id)
+    remove_project(project_id)
     if db_path.exists():
         db_path.unlink()
-
-    db.delete(project)
-    db.commit()
     return {"ok": True, "deleted_id": project_id}

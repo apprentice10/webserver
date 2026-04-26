@@ -3,13 +3,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 
-from database import engine as db_engine, Base
 from core.routes import router as core_router
 from engine.routes import router as engine_router
-
-# Importa i modelli perché Base.metadata li veda
-import core.models        # noqa: F401
-import engine.models      # noqa: F401
+from engine.project_index import init_index
 
 app = FastAPI(
     title="Instrument Manager",
@@ -17,8 +13,8 @@ app = FastAPI(
     description="Web application per la progettazione elettro-strumentale"
 )
 
-# Crea le tabelle del registry al primo avvio
-Base.metadata.create_all(bind=db_engine)
+# Inizializza l'indice progetti al primo avvio
+init_index()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")

@@ -13,8 +13,6 @@ import json
 from pathlib import Path
 from typing import Generator, TYPE_CHECKING
 from fastapi import HTTPException, Depends, Request
-from sqlalchemy.orm import Session
-from database import get_db
 
 DATA_DIR = Path("data")
 
@@ -77,6 +75,24 @@ CREATE TABLE IF NOT EXISTS _audit (
     old_val   TEXT,
     new_val   TEXT
 );
+
+CREATE TABLE IF NOT EXISTS _project (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL,
+    client      TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    created_at  TEXT DEFAULT (datetime('now')),
+    updated_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS _templates (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    type_slug   TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    etl_sql     TEXT NOT NULL DEFAULT '',
+    created_at  TEXT DEFAULT (datetime('now'))
+);
 """
 
 SYSTEM_COLUMN_DEFS = [
@@ -116,6 +132,19 @@ def _migrate_project_db(conn: sqlite3.Connection) -> None:
     if "etl_value" not in ovr_cols:
         conn.execute("ALTER TABLE _overrides ADD COLUMN etl_value TEXT")
 
+    existing_tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    if "_project" not in existing_tables:
+        conn.execute("""CREATE TABLE _project (
+            id INTEGER PRIMARY KEY, name TEXT NOT NULL, client TEXT NOT NULL DEFAULT '',
+            description TEXT NOT NULL DEFAULT '', created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now')))""")
+    if "_templates" not in existing_tables:
+        conn.execute("""CREATE TABLE _templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, type_slug TEXT NOT NULL,
+            name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+            etl_sql TEXT NOT NULL DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now')))""")
+
     conn.commit()
 
 
@@ -136,10 +165,8 @@ def open_project_db(db_path: Path) -> sqlite3.Connection:
 
 def get_project_conn(
     request: "Request",
-    registry_db: Session = Depends(get_db)
 ) -> Generator[sqlite3.Connection, None, None]:
-    from fastapi import Request as _Request
-    from core.models import Project
+    from engine.project_index import get_db_path
 
     # project_id può venire dal path (/project/{project_id}) o dal query string
     pid_raw = (
@@ -153,10 +180,7 @@ def get_project_conn(
     except ValueError:
         raise HTTPException(status_code=400, detail="project_id non valido")
 
-    project = registry_db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Progetto non trovato")
-    db_path = DATA_DIR / project.db_path
+    db_path = get_db_path(project_id)
     conn = open_project_db(db_path)
     try:
         yield conn

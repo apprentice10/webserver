@@ -11,6 +11,7 @@ Gli override ETL vivono in _overrides.
 
 import json
 import sqlite3
+from datetime import datetime
 from typing import Optional
 from fastapi import HTTPException
 
@@ -20,9 +21,7 @@ from engine.project_db import (
     serialize_active_row, serialize_trash_row,
     get_row_overrides, get_tool_overrides,
 )
-from engine.models import ToolTemplate
 from engine.utils import now_str as _now_str, slugify as _slugify, format_log_entry as _format_log_entry, append_log as _append_log
-from sqlalchemy.orm import Session
 
 
 def _unique_slug(conn: sqlite3.Connection, base_slug: str) -> str:
@@ -76,19 +75,18 @@ def create_tool(
     icon: str = "📄",
     template_id: int = None,
     default_columns: list[dict] = None,
-    registry_db: Session = None,
     etl_sql: str = None
 ) -> dict:
     if not slug:
         slug = _unique_slug(conn, _slugify(name))
 
     query_config = None
-    if template_id and registry_db:
-        tmpl = registry_db.query(ToolTemplate).filter(
-            ToolTemplate.id == template_id
-        ).first()
+    if template_id:
+        tmpl = conn.execute(
+            "SELECT * FROM _templates WHERE id = ?", (template_id,)
+        ).fetchone()
         if tmpl:
-            query_config = json.dumps({"etl_sql": tmpl.etl_sql, "etl_history": []})
+            query_config = json.dumps({"etl_sql": tmpl["etl_sql"], "etl_history": []})
     elif etl_sql:
         query_config = json.dumps({"etl_sql": etl_sql, "etl_history": []})
 
@@ -682,52 +680,47 @@ def _validate_tag_unique(
 
 
 # ============================================================
-# TEMPLATE — nel registry DB (SQLAlchemy)
+# TEMPLATE — nel per-project DB (sqlite3, tabella _templates)
 # ============================================================
 
 def get_templates(
-    registry_db: Session,
+    conn: sqlite3.Connection,
     type_slug: str = None,
-    tool_id: int = None,
-    project_id: int = None
-) -> list[ToolTemplate]:
-    q = registry_db.query(ToolTemplate)
-    if tool_id:
-        q = q.filter(ToolTemplate.tool_id == tool_id)
-    elif project_id and type_slug:
-        q = q.filter(ToolTemplate.project_id == project_id,
-                     ToolTemplate.type_slug == type_slug)
-    elif type_slug:
-        q = q.filter(ToolTemplate.type_slug == type_slug)
-    return q.order_by(ToolTemplate.created_at.desc()).all()
+) -> list[dict]:
+    if type_slug:
+        rows = conn.execute(
+            "SELECT * FROM _templates WHERE type_slug = ? ORDER BY id DESC",
+            (type_slug,)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM _templates ORDER BY id DESC"
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def create_template(
-    registry_db: Session,
+    conn: sqlite3.Connection,
     type_slug: str,
     name: str,
-    etl_sql: str,
-    description: str = None,
-    project_id: int = None,
-    tool_id: int = None
-) -> ToolTemplate:
-    t = ToolTemplate(
-        type_slug=type_slug,
-        name=name,
-        description=description,
-        etl_sql=etl_sql,
-        project_id=project_id,
-        tool_id=tool_id
+    etl_sql: str = "",
+    description: str = "",
+) -> dict:
+    cur = conn.execute(
+        "INSERT INTO _templates (type_slug, name, etl_sql, description) VALUES (?, ?, ?, ?)",
+        (type_slug, name, etl_sql or "", description or ""),
     )
-    registry_db.add(t)
-    registry_db.commit()
-    registry_db.refresh(t)
-    return t
+    conn.commit()
+    return dict(conn.execute(
+        "SELECT * FROM _templates WHERE id = ?", (cur.lastrowid,)
+    ).fetchone())
 
 
-def delete_template(registry_db: Session, template_id: int) -> None:
-    t = registry_db.query(ToolTemplate).filter(ToolTemplate.id == template_id).first()
-    if not t:
+def delete_template(conn: sqlite3.Connection, template_id: int) -> None:
+    row = conn.execute(
+        "SELECT id FROM _templates WHERE id = ?", (template_id,)
+    ).fetchone()
+    if not row:
         raise HTTPException(status_code=404, detail="Template non trovato")
-    registry_db.delete(t)
-    registry_db.commit()
+    conn.execute("DELETE FROM _templates WHERE id = ?", (template_id,))
+    conn.commit()

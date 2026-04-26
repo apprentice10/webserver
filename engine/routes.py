@@ -7,19 +7,15 @@ Endpoints HTTP del Table Engine — thin layer su service.py ed etl.py.
 import io
 import json
 import sqlite3
-import sqlalchemy
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, Any
 from datetime import datetime
 
-from database import get_db
 from engine.project_db import get_project_conn
 from engine import service
 from engine.catalog import TOOL_CATALOG
-from engine.models import ToolTemplate
 
 router = APIRouter(prefix="/api/tools", tags=["engine"])
 
@@ -181,29 +177,34 @@ def get_tool_types():
 @router.get("/templates", response_model=list[TemplateResponse])
 def list_templates(
     type_slug:  Optional[str] = Query(None),
-    tool_id:    Optional[int] = Query(None),
     project_id: Optional[int] = Query(None),
-    registry_db: Session = Depends(get_db)
+    conn: sqlite3.Connection = Depends(get_project_conn),
 ):
-    return service.get_templates(registry_db, type_slug, tool_id, project_id)
+    return service.get_templates(conn, type_slug)
 
 
 @router.post("/templates", response_model=TemplateResponse)
-def create_template(data: TemplateCreate, registry_db: Session = Depends(get_db)):
+def create_template(
+    data: TemplateCreate,
+    project_id: Optional[int] = Query(None),
+    conn: sqlite3.Connection = Depends(get_project_conn),
+):
     return service.create_template(
-        registry_db,
+        conn,
         type_slug=data.type_slug,
         name=data.name,
         etl_sql=data.etl_sql,
         description=data.description,
-        project_id=data.project_id,
-        tool_id=data.tool_id
     )
 
 
 @router.delete("/templates/{template_id}")
-def delete_template(template_id: int, registry_db: Session = Depends(get_db)):
-    service.delete_template(registry_db, template_id)
+def delete_template(
+    template_id: int,
+    project_id: Optional[int] = Query(None),
+    conn: sqlite3.Connection = Depends(get_project_conn),
+):
+    service.delete_template(conn, template_id)
     return {"ok": True}
 
 
@@ -225,7 +226,6 @@ def create_tool(
     project_id: int,
     data: ToolCreate,
     conn: sqlite3.Connection = Depends(get_project_conn),
-    registry_db: Session = Depends(get_db)
 ):
     tool = service.create_tool(
         conn=conn,
@@ -235,7 +235,6 @@ def create_tool(
         icon=data.icon,
         template_id=data.template_id,
         default_columns=data.default_columns,
-        registry_db=registry_db,
         etl_sql=data.etl_sql
     )
     return _tool_to_response(tool, project_id)
