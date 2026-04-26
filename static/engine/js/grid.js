@@ -396,6 +396,20 @@ const GridManager = (() => {
             // Aggiorna solo la cella LOG senza re-render
             _updateLogCell(rowId, updatedRow.row_log);
 
+            // Aggiorna attributo override sulla td (triangolo rosso) senza re-render
+            const td = inputEl.closest("td");
+            if (td) {
+                const isOverridden = updatedRow.overridden_cols != null && field in updatedRow.overridden_cols;
+                if (isOverridden) {
+                    const etlVal = updatedRow.overridden_cols[field] ?? "";
+                    td.setAttribute("data-overridden", "true");
+                    td.setAttribute("title", `Valore ETL: ${Utils.escAttr(etlVal)}`);
+                } else {
+                    td.removeAttribute("data-overridden");
+                    td.removeAttribute("title");
+                }
+            }
+
             inputEl.style.opacity = "1";
             inputEl.dataset.originalValue = newValue;
 
@@ -543,7 +557,7 @@ const GridManager = (() => {
 
         // Voce override: visibile solo se click su una cella con data-overridden="true"
         const td = e.target.closest("td[data-overridden='true']");
-        _ctxColSlug = td ? td.querySelector("[data-slug]")?.dataset.slug ?? null : null;
+        _ctxColSlug = td ? td.querySelector("[data-field]")?.dataset.field ?? null : null;
         const showOverride = !isDeleted && _ctxColSlug !== null;
         menu.querySelector('[data-action="remove-override"]').style.display = showOverride ? "" : "none";
         menu.querySelector('.ctx-sep-override').style.display               = showOverride ? "" : "none";
