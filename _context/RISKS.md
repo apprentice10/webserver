@@ -3,13 +3,14 @@ _Known technical risks and dangerous areas. Check before touching flagged module
 
 ---
 
-## R01 — `engine/service.py` at 683 lines [HIGH]
+## R01 — `engine/service.py` oversized [HIGH]
 
 **Rule violated:** No file > 400 lines (project rule).  
+**Current size:** ~650 lines post-refactor (template CRUD rewritten to sqlite3, ~50 lines saved).  
 **Risk:** High AI token cost per task that touches this file; growing harder to navigate.  
 **Safe split candidates:**
 - L555–600 staleness helpers → `engine/staleness.py`
-- L610–700 template CRUD → `engine/templates.py`
+- L570–650 template CRUD → `engine/templates.py`
 - L436–550 delete/restore/paste → `engine/row_ops.py`  
 **Action needed:** Split before next major feature addition. Do NOT add more code to service.py without splitting first.
 

@@ -72,43 +72,36 @@ uvicorn main:app --reload
 # Docs: http://127.0.0.1:8000/docs
 ```
 
-## Database migrations (Alembic)
-
-Alembic manages only the **registry DB** (`data/registry.db`). Per-project DBs are managed programmatically.
-
-```bash
-alembic revision --autogenerate -m "describe change"
-alembic upgrade head
-```
-
-Models imported in `migrations/env.py`: `core.models`, `engine.models`.
-
----
-
 ## Architecture
 
-### Two-database design
+### Database design
 
-**Registry DB** (`data/registry.db`, SQLAlchemy): `projects` + `tool_templates` tables.
+**Project index** (`data/projects.db`, raw sqlite3): single `projects` table mapping `id → db_path`. No ORM. Managed by `engine/project_index.py`.
 
 **Per-project DB** (`data/{client}_{project}.db`, raw sqlite3):
+- `_project` — project metadata (name, client, description, created_at, updated_at)
+- `_templates` — ETL templates scoped to this project (type_slug, name, etl_sql)
 - `_tools` — tool metadata (name, slug, tool_type, icon, rev, query_config, **is_stale**)
 - `_columns` — column definitions (name, slug, type, width, position, is_system)
 - `_trash` — soft-deleted rows as JSON
-- `_overrides(tool_slug, row_tag, col_slug)` — manually-edited cells ETL skips
+- `_overrides(tool_slug, row_tag, col_slug, etl_value)` — manually-edited cells ETL skips
 - `_audit` — change log
 - `"{tool_slug}"` — one flat table per tool
 
 System columns (tag/rev/log) and internal `__` columns → see `memory/project_system_columns.md`.
 ETL staleness, `etl_deps`, topological run → see `memory/project_etl_staleness.md`.
 
+### Plugin discovery (`engine/catalog.py`)
+
+`TOOL_CATALOG` is built at startup by scanning `tools/*/tool.json`. Each manifest contains `type_slug`, `name`, `description`, `icon`. Adding a new tool type = drop a folder with `tool.json` under `tools/`.
+
 ### FastAPI dependency: `get_project_conn`
 
 `engine/project_db.py`. Reads `project_id` from `request.path_params` OR `request.query_params`. Never use `Query(...)` for `project_id` in route signatures that also use it as path param.
 
-### ETL Templates (`engine/models.py::ToolTemplate`)
+### ETL Templates
 
-Scoped by `type_slug + project_id` (not per tool instance). `tool_id` field is legacy — ignored.
+Stored in `_templates` inside each project's own DB. Scoped by `type_slug` within the project.  
 API: `GET /api/tools/templates?project_id=N&type_slug=X`
 
 ---
@@ -117,18 +110,17 @@ API: `GET /api/tools/templates?project_id=N&type_slug=X`
 
 | Module | Responsibility |
 |--------|----------------|
-| `main.py` | FastAPI app setup, static files, page routes |
-| `database.py` | SQLAlchemy engine for registry DB, `get_db()` dependency |
-| `core/models.py` | `Project` model (id, name, client, db_path) |
-| `core/routes.py` | `/api/projects/` CRUD |
-| `engine/models.py` | `ToolTemplate` SQLAlchemy model |
+| `main.py` | FastAPI app setup, static files, page routes, `init_index()` call |
+| `core/routes.py` | `/api/projects/` CRUD (no ORM — uses `project_index` + `project_db`) |
+| `engine/project_index.py` | `data/projects.db` — thin project registry (id → db_path), raw sqlite3 |
 | `engine/project_db.py` | Per-project DB setup, `get_project_conn`, `SYSTEM_COLUMN_DEFS`, `audit()` |
 | `engine/routes.py` | `/api/tools/` endpoints — thin layer, delegates to service |
 | `engine/service.py` | All business logic — see navigation guide below |
 | `engine/etl.py` | ETL preview/apply/save/schema, version history, dependency parsing |
 | `engine/utils.py` | Shared utilities: `slugify`, `now_str`, `format_log_entry`, `append_log` |
 | `engine/sql_parser.py` | SQL parsing: `extract_table_refs`, `extract_col_lineage`, `clean_sql` |
-| `engine/catalog.py` | Static list of available tool types (TOOL_CATALOG) |
+| `engine/catalog.py` | Dynamic scanner: reads `tools/*/tool.json`, builds `TOOL_CATALOG` at startup |
+| `tools/instrument_list/tool.json` | Plugin manifest for Instrument List tool type |
 | `_legacy/instrument_list/` | Dead code — **do not read** |
 | `static/engine/css/layout.css` | Container, topbar, pulsanti globali (btn-ghost, btn-stale…) |
 | `static/engine/css/toolbar.css` | Toolbar secondaria, search input |
@@ -149,7 +141,7 @@ API: `GET /api/tools/templates?project_id=N&type_slug=X`
 | 436–550 | Soft-delete / restore / hard-delete / paste |
 | ~555 | `mark_tool_stale(conn, tool_id)` |
 | ~565 | `mark_dependents_stale(conn, source_slug)` — called after every row mutation |
-| 610–700 | Private helpers + Template CRUD (registry DB) |
+| 570–650 | Template CRUD (`get_templates`, `create_template`, `delete_template`) — raw sqlite3 on `_templates` |
 
 ---
 
@@ -197,8 +189,6 @@ Module dependency map and patterns → see `memory/feedback_frontend_patterns.md
 
 4. **`get_project_conn`**: reads `project_id` from path params OR query params. Never use `Query(...)` for it in route signatures that also list it as a path param.
 
-5. **SQLAlchemy `engine` name collision**: in `main.py`, import as `from database import engine as db_engine`.
+5. **Circular import `etl.py` ↔ `service.py`**: fix is deferred import `from engine.service import mark_dependents_stale` inside `etl_run_saved` body, not at module top.
 
-6. **Circular import `etl.py` ↔ `service.py`**: fix is deferred import `from engine.service import mark_dependents_stale` inside `etl_run_saved` body, not at module top.
-
-7. **ETL deps resolved at save time**: `etl_deps` reflects SQL at last `save_etl_version` call. Always save before relying on deps.
+6. **ETL deps resolved at save time**: `etl_deps` reflects SQL at last `save_etl_version` call. Always save before relying on deps.

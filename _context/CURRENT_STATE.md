@@ -1,5 +1,5 @@
 # CURRENT_STATE.md
-_Last updated: 2026-04-25 (session 2)_
+_Last updated: 2026-04-26 (refactor architetturale completato)_
 
 Storico feature completate → `_context/DONE.md`
 
@@ -76,10 +76,12 @@ Studio e implementazione della relazione bidirezionale Tabella → SQL.
 38. **Eliminazione colonna → aggiornamento SQL** — se una colonna ETL-generata viene eliminata, rimuovere la clausola SQL corrispondente
 39. **Trasformazioni visive → SQL** — prefix/suffix/replace/formula generano SQL equivalente automaticamente
 
-### Gruppo I — Gestione file progetto (alto sforzo, dipende da architettura)
+### Gruppo I — Gestione file progetto (alto sforzo, architettura pronta)
+
+Il refactor (2026-04-26) ha reso ogni project DB autosufficiente (`_project` + `_templates` dentro il file). L'infrastruttura per il file portabile è ora in place.
 
 40. **Salva progetto come file** — copia del `.db` di progetto in posizione scelta dall'utente (API `GET /projects/{id}/export`)
-41. **Apri progetto da file** — upload/path di un `.db` esistente, registra nel registry (API `POST /projects/import`)
+41. **Apri progetto da file** — upload/path di un `.db` esistente, registra in `projects.db` via `add_project()` (API `POST /projects/import`)
 42. **Backup automatico** — backup periodico o pre-operazione distruttiva
 
 ### Gruppo J — Compatibilità DB ↔ Webserver (alto sforzo, dipende da I)

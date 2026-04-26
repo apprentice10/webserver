@@ -44,11 +44,11 @@ _Architectural decisions and rejected alternatives. Consult before proposing cha
 
 ---
 
-## D06 — SQLAlchemy only for registry DB
+## D06 — No ORM: all DBs use raw sqlite3
 
-**Decision:** Registry DB (`data/registry.db`) uses SQLAlchemy ORM. Per-project DBs use raw `sqlite3`.  
-**Rationale:** Per-project DBs require dynamic DDL (`ALTER TABLE`, dynamic column names) that SQLAlchemy Core handles awkwardly. Raw sqlite3 gives full control.  
-**Rejected:** SQLAlchemy for both. Per-project schema is too dynamic for ORM mapping.
+**Decision:** SQLAlchemy has been completely removed. Both the project index (`data/projects.db`) and per-project DBs use raw `sqlite3`.  
+**Rationale:** Per-project DBs require dynamic DDL (`ALTER TABLE`, dynamic column names) that ORM handles awkwardly. The project index is a single-table lookup — ORM is overkill. Raw sqlite3 gives full control everywhere.  
+**Rejected:** SQLAlchemy for the index only. Inconsistency without benefit; per-project DBs would still need raw sqlite3.
 
 ---
 
@@ -65,3 +65,12 @@ _Architectural decisions and rejected alternatives. Consult before proposing cha
 **Decision:** Manual cell edits are recorded in `_overrides`; ETL skips those cells.  
 **Rationale:** Allows hybrid rows: some cells from ETL source, some manually corrected.  
 **Rejected:** Per-row override flag. Too coarse — would block ETL from updating any column in a touched row.
+
+---
+
+## D09 — Plugin discovery via `tools/*/tool.json` manifests
+
+**Decision:** Tool types are discovered at startup by scanning `tools/*/tool.json`. `TOOL_CATALOG` in `engine/catalog.py` is built dynamically, not hardcoded.  
+**Rationale:** Adding a new tool type (Cable List, I/O List) requires only creating a folder with a manifest — no code change. The ETL engine is generic and works for any type_slug.  
+**What is NOT in the manifest:** `SYSTEM_COLUMN_DEFS` (tag/rev/log) — these are engine contracts, not per-plugin. ETL merge logic and `SYSTEM_SLUGS` depend on them being universal.  
+**Rejected:** Hardcoded list in catalog.py. Requires code change + redeploy for each new tool type.
