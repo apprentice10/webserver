@@ -30,3 +30,4 @@ _Feature log — completato e verificato in produzione._
 - Double-click su `.resize-handle` → auto-fit larghezza colonna al contenuto più largo (header + celle visibili), salva nel backend
 - Single click = selezione cella (select mode, readonly + leggero outline), double click / Enter / char = edit mode; Escape annulla; blur salva e torna select mode
 - Fix: drag-and-drop reorder colonne non aveva effetto visivo — `_columns.map` iterava in ordine originale e assegnava posizioni nell'ordine sbagliato; fix con `userCols.forEach` che muta posizioni in-place sui riferimenti condivisi, poi `_columns.sort`
+- Row numbers: colonna indice stile Excel (fissa a sinistra, sfondo/testo come header, non editabile, non partecipa al keyboard nav); numero 1-based basato sull'index di `_filteredRows`; cella vuota nella ghost row

@@ -63,12 +63,12 @@ const GridManager = (() => {
 
         if (_filteredRows.length === 0 && _rows.filter(r => !r.is_deleted).length === 0) {
             html = `<tr class="grid-empty">
-                        <td colspan="${columns.length}">
+                        <td colspan="${columns.length + 1}">
                             Nessuna riga. Inizia a digitare nella riga vuota qui sotto.
                         </td>
                     </tr>`;
         } else {
-            html = _filteredRows.map(row => _renderRow(row, columns)).join("");
+            html = _filteredRows.map((row, i) => _renderRow(row, columns, i)).join("");
         }
 
         // Ghost row sempre in fondo
@@ -81,7 +81,7 @@ const GridManager = (() => {
     /**
      * Renderizza una riga dati.
      */
-    function _renderRow(row, columns) {
+    function _renderRow(row, columns, rowIndex) {
         const isDeleted = row.is_deleted;
         const rowClass  = isDeleted ? "row-deleted" : "";
         const cells     = columns.map(col => _renderCell(row, col, isDeleted)).join("");
@@ -90,6 +90,7 @@ const GridManager = (() => {
             <tr data-row-id="${row.id}"
                 class="${rowClass}"
                 oncontextmenu="GridManager.openContextMenu(event, ${row.id})">
+                <td class="row-num">${rowIndex + 1}</td>
                 ${cells}
             </tr>`;
     }
@@ -155,6 +156,7 @@ const GridManager = (() => {
 
         return `
             <tr class="row-ghost" id="ghost-row">
+                <td class="row-num"></td>
                 ${cells}
             </tr>`;
     }

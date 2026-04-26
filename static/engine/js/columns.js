@@ -42,7 +42,7 @@ const ColumnsManager = (() => {
     function renderHeader() {
         const headerRow = document.getElementById("grid-header-row");
 
-        let html = "";
+        let html = `<th class="col-row-num"></th>`;
 
         _columns.forEach(col => {
             const draggable = col.is_system ? "" : 'draggable="true"';

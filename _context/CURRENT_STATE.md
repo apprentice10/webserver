@@ -15,7 +15,7 @@ _(none)_
 2. ~~**Toggle REV column visibility** (same CSS pattern as LOG toggle)~~ ✓
 3. ~~**Double-click column border** to auto-fit width (resize.js)~~ ✓
 4. ~~**Single click = selezione cella, double click = modalità modifica**~~ ✓
-5. **Row numbers** — aggiungere colonna indice stile Excel (colonna fissa sinistra, stile uguale agli header colonna, non editabile)
+5. ~~**Row numbers** — aggiungere colonna indice stile Excel (colonna fissa sinistra, stile uguale agli header colonna, non editabile)~~ ✓
 
 ### Gruppo B — Indicatori visivi celle (medio sforzo, dipende da A.4)
 
