@@ -291,7 +291,7 @@ def get_rows(
     ).fetchall()
     override_map = get_tool_overrides(conn, slug)
     result = [
-        serialize_active_row(r, tool_id, project_id, override_map.get(dict(r).get("tag", ""), set()))
+        serialize_active_row(r, tool_id, project_id, override_map.get(dict(r).get("tag", ""), {}))
         for r in active
     ]
 
@@ -400,11 +400,11 @@ def update_cell(
         (new_value, row_id)
     )
 
-    # Override
+    # Override — etl_value salvato solo al primo insert (OR IGNORE preserva il valore originale)
     tag_val = row.get("tag", "")
     conn.execute(
-        "INSERT OR IGNORE INTO _overrides (tool_slug, row_tag, col_slug) VALUES (?,?,?)",
-        (tool_slug, tag_val, slug)
+        "INSERT OR IGNORE INTO _overrides (tool_slug, row_tag, col_slug, etl_value) VALUES (?,?,?,?)",
+        (tool_slug, tag_val, slug, str(old_value) if old_value is not None else None)
     )
 
     # Row log

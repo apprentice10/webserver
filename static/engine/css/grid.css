@@ -159,6 +159,7 @@
     border-color: #e05 transparent transparent transparent;
     z-index: 2;
     pointer-events: none;
+    cursor: help;
 }
 
 .data-grid td {

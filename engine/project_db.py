@@ -60,9 +60,10 @@ CREATE TABLE IF NOT EXISTS _trash (
 );
 
 CREATE TABLE IF NOT EXISTS _overrides (
-    tool_slug TEXT NOT NULL,
-    row_tag   TEXT NOT NULL,
-    col_slug  TEXT NOT NULL,
+    tool_slug  TEXT NOT NULL,
+    row_tag    TEXT NOT NULL,
+    col_slug   TEXT NOT NULL,
+    etl_value  TEXT,
     PRIMARY KEY (tool_slug, row_tag, col_slug)
 );
 
@@ -110,6 +111,10 @@ def _migrate_project_db(conn: sqlite3.Connection) -> None:
     col_cols = {row[1] for row in conn.execute("PRAGMA table_info(_columns)").fetchall()}
     if "lineage_info" not in col_cols:
         conn.execute("ALTER TABLE _columns ADD COLUMN lineage_info TEXT")
+
+    ovr_cols = {row[1] for row in conn.execute("PRAGMA table_info(_overrides)").fetchall()}
+    if "etl_value" not in ovr_cols:
+        conn.execute("ALTER TABLE _overrides ADD COLUMN etl_value TEXT")
 
     conn.commit()
 
@@ -221,7 +226,7 @@ def serialize_active_row(
         "row_log":        d.get("__log"),
         "created_at":     d.get("__created_at"),
         "updated_at":     None,
-        "overridden_cols": list(overridden_cols) if overridden_cols else [],
+        "overridden_cols": overridden_cols if overridden_cols else {},
     }
     # Tutti i campi non-interno
     for k, v in d.items():
@@ -231,23 +236,24 @@ def serialize_active_row(
     return result
 
 
-def get_row_overrides(conn: sqlite3.Connection, tool_slug: str, row_tag: str) -> set:
+def get_row_overrides(conn: sqlite3.Connection, tool_slug: str, row_tag: str) -> dict:
+    """Ritorna {col_slug: etl_value} per la riga specificata."""
     rows = conn.execute(
-        "SELECT col_slug FROM _overrides WHERE tool_slug = ? AND row_tag = ?",
+        "SELECT col_slug, etl_value FROM _overrides WHERE tool_slug = ? AND row_tag = ?",
         (tool_slug, row_tag)
     ).fetchall()
-    return {r["col_slug"] for r in rows}
+    return {r["col_slug"]: r["etl_value"] for r in rows}
 
 
 def get_tool_overrides(conn: sqlite3.Connection, tool_slug: str) -> dict:
-    """Ritorna {row_tag: {col_slug, ...}} per tutti gli override del tool."""
+    """Ritorna {row_tag: {col_slug: etl_value}} per tutti gli override del tool."""
     rows = conn.execute(
-        "SELECT row_tag, col_slug FROM _overrides WHERE tool_slug = ?",
+        "SELECT row_tag, col_slug, etl_value FROM _overrides WHERE tool_slug = ?",
         (tool_slug,)
     ).fetchall()
     result: dict = {}
     for r in rows:
-        result.setdefault(r["row_tag"], set()).add(r["col_slug"])
+        result.setdefault(r["row_tag"], {})[r["col_slug"]] = r["etl_value"]
     return result
 
 

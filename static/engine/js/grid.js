@@ -118,8 +118,13 @@ const GridManager = (() => {
             ? "readonly tabindex='-1'"
             : "readonly data-editable='true'";
         const cellClass = isTag ? "cell-input cell-tag" : "cell-input";
-        const isOverridden = Array.isArray(row.overridden_cols) && row.overridden_cols.includes(col.slug);
-        const overriddenAttr = isOverridden ? ' data-overridden="true"' : "";
+        const etlValue = row.overridden_cols && col.slug in row.overridden_cols
+            ? row.overridden_cols[col.slug]
+            : null;
+        const isOverridden = etlValue !== null;
+        const overriddenAttr = isOverridden
+            ? ` data-overridden="true" title="Valore ETL: ${Utils.escAttr(etlValue ?? "")}"`
+            : "";
 
         return `
             <td style="width:${col.width}px"${overriddenAttr}>
