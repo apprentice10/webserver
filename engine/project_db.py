@@ -205,23 +205,49 @@ def audit(
 # SERIALIZZAZIONE ROW
 # ============================================================
 
-def serialize_active_row(row: sqlite3.Row, tool_id: int, project_id: int) -> dict:
+def serialize_active_row(
+    row: sqlite3.Row,
+    tool_id: int,
+    project_id: int,
+    overridden_cols: set | None = None,
+) -> dict:
     d = dict(row)
     result = {
-        "id":         d["__id"],
-        "tool_id":    tool_id,
-        "project_id": project_id,
-        "position":   d.get("__position", 0),
-        "is_deleted": False,
-        "row_log":    d.get("__log"),
-        "created_at": d.get("__created_at"),
-        "updated_at": None,
+        "id":             d["__id"],
+        "tool_id":        tool_id,
+        "project_id":     project_id,
+        "position":       d.get("__position", 0),
+        "is_deleted":     False,
+        "row_log":        d.get("__log"),
+        "created_at":     d.get("__created_at"),
+        "updated_at":     None,
+        "overridden_cols": list(overridden_cols) if overridden_cols else [],
     }
     # Tutti i campi non-interno
     for k, v in d.items():
         if not k.startswith("__"):
             result[k] = v if v is not None else ""
     result["log"] = d.get("__log", "") or ""
+    return result
+
+
+def get_row_overrides(conn: sqlite3.Connection, tool_slug: str, row_tag: str) -> set:
+    rows = conn.execute(
+        "SELECT col_slug FROM _overrides WHERE tool_slug = ? AND row_tag = ?",
+        (tool_slug, row_tag)
+    ).fetchall()
+    return {r["col_slug"] for r in rows}
+
+
+def get_tool_overrides(conn: sqlite3.Connection, tool_slug: str) -> dict:
+    """Ritorna {row_tag: {col_slug, ...}} per tutti gli override del tool."""
+    rows = conn.execute(
+        "SELECT row_tag, col_slug FROM _overrides WHERE tool_slug = ?",
+        (tool_slug,)
+    ).fetchall()
+    result: dict = {}
+    for r in rows:
+        result.setdefault(r["row_tag"], set()).add(r["col_slug"])
     return result
 
 

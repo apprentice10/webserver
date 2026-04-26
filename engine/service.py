@@ -17,7 +17,8 @@ from fastapi import HTTPException
 from engine.project_db import (
     SYSTEM_COLUMNS, SYSTEM_COLUMN_DEFS,
     create_tool_table, add_column_to_table, audit,
-    serialize_active_row, serialize_trash_row
+    serialize_active_row, serialize_trash_row,
+    get_row_overrides, get_tool_overrides,
 )
 from engine.models import ToolTemplate
 from engine.utils import now_str as _now_str, slugify as _slugify, format_log_entry as _format_log_entry, append_log as _append_log
@@ -288,7 +289,11 @@ def get_rows(
     active = conn.execute(
         f'SELECT * FROM "{slug}" ORDER BY __position ASC'
     ).fetchall()
-    result = [serialize_active_row(r, tool_id, project_id) for r in active]
+    override_map = get_tool_overrides(conn, slug)
+    result = [
+        serialize_active_row(r, tool_id, project_id, override_map.get(dict(r).get("tag", ""), set()))
+        for r in active
+    ]
 
     if include_deleted:
         trash = conn.execute(
@@ -427,7 +432,9 @@ def update_cell(
     updated = conn.execute(
         f'SELECT * FROM "{tool_slug}" WHERE __id = ?', (row_id,)
     ).fetchone()
-    return serialize_active_row(updated, tool_id, project_id)
+    tag_after = dict(updated).get("tag", tag_val)
+    overrides = get_row_overrides(conn, tool_slug, tag_after)
+    return serialize_active_row(updated, tool_id, project_id, overrides)
 
 
 def soft_delete_row(

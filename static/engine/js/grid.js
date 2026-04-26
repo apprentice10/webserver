@@ -118,9 +118,11 @@ const GridManager = (() => {
             ? "readonly tabindex='-1'"
             : "readonly data-editable='true'";
         const cellClass = isTag ? "cell-input cell-tag" : "cell-input";
+        const isOverridden = Array.isArray(row.overridden_cols) && row.overridden_cols.includes(col.slug);
+        const overriddenAttr = isOverridden ? ' data-overridden="true"' : "";
 
         return `
-            <td style="width:${col.width}px">
+            <td style="width:${col.width}px"${overriddenAttr}>
                 <input
                     type="text"
                     class="${cellClass}"
