@@ -218,7 +218,8 @@ const ToolbarManager = (() => {
     // --------------------------------------------------------
 
     function exportExcel() {
-        showToast("Export Excel — disponibile nella prossima fase.", "info");
+        const url = `/api/tools/${TOOL_ID}/export/excel?project_id=${PROJECT_ID}`;
+        window.location.href = url;
     }
 
     // --------------------------------------------------------
