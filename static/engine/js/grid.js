@@ -27,6 +27,7 @@ const GridManager = (() => {
     let _showDeleted  = false;  // Mostra righe eliminate?
     let _searchQuery  = "";     // Query ricerca corrente
     let _ctxRowId     = null;   // Row ID del context menu aperto
+    let _ctxColSlug   = null;   // Col slug della cella su cui è stato aperto il context menu
     let _editingInput = null;   // Input correntemente in edit mode (non readonly)
 
 
@@ -118,10 +119,8 @@ const GridManager = (() => {
             ? "readonly tabindex='-1'"
             : "readonly data-editable='true'";
         const cellClass = isTag ? "cell-input cell-tag" : "cell-input";
-        const etlValue = row.overridden_cols && col.slug in row.overridden_cols
-            ? row.overridden_cols[col.slug]
-            : null;
-        const isOverridden = etlValue !== null;
+        const isOverridden = row.overridden_cols != null && col.slug in row.overridden_cols;
+        const etlValue = isOverridden ? row.overridden_cols[col.slug] : null;
         const overriddenAttr = isOverridden
             ? ` data-overridden="true" title="Valore ETL: ${Utils.escAttr(etlValue ?? "")}"`
             : "";
@@ -448,6 +447,20 @@ const GridManager = (() => {
         }
     }
 
+    async function removeOverride(rowId, colSlug) {
+        if (!colSlug) return;
+        try {
+            const updated = await ApiClient.removeOverride(rowId, colSlug);
+            const idx = _rows.findIndex(r => r.id === rowId);
+            if (idx !== -1) _rows[idx] = updated;
+            _applyFilters();
+            render();
+            showToast("Modifica manuale rimossa.", "success");
+        } catch (err) {
+            showToast(err.message, "error");
+        }
+    }
+
 
     // --------------------------------------------------------
     // TOGGLE ELIMINATI
@@ -492,14 +505,16 @@ const GridManager = (() => {
         menu.addEventListener("click", async e => {
             const item = e.target.closest("[data-action]");
             if (!item || _ctxRowId === null) return;
-            const action = item.dataset.action;
-            const rowId  = _ctxRowId;
+            const action  = item.dataset.action;
+            const rowId   = _ctxRowId;
+            const colSlug = _ctxColSlug;
             _closeContextMenu();
 
-            if (action === "delete")      await softDeleteRow(rowId);
-            if (action === "restore")     await restoreRow(rowId);
-            if (action === "hard-delete") await hardDeleteRow(rowId);
-            if (action === "log")         showRowLog(rowId);
+            if (action === "delete")          await softDeleteRow(rowId);
+            if (action === "restore")         await restoreRow(rowId);
+            if (action === "hard-delete")     await hardDeleteRow(rowId);
+            if (action === "remove-override") await removeOverride(rowId, colSlug);
+            if (action === "log")             showRowLog(rowId);
         });
 
         document.addEventListener("click", e => {
@@ -526,6 +541,13 @@ const GridManager = (() => {
         menu.querySelector('[data-action="restore"]').style.display     = isDeleted ? "" : "none";
         menu.querySelector('[data-action="hard-delete"]').style.display = isDeleted ? "" : "none";
 
+        // Voce override: visibile solo se click su una cella con data-overridden="true"
+        const td = e.target.closest("td[data-overridden='true']");
+        _ctxColSlug = td ? td.querySelector("[data-slug]")?.dataset.slug ?? null : null;
+        const showOverride = !isDeleted && _ctxColSlug !== null;
+        menu.querySelector('[data-action="remove-override"]').style.display = showOverride ? "" : "none";
+        menu.querySelector('.ctx-sep-override').style.display               = showOverride ? "" : "none";
+
         const x = Math.min(e.clientX, window.innerWidth  - 210);
         const y = Math.min(e.clientY, window.innerHeight - 140);
         menu.style.left = x + "px";
@@ -535,7 +557,8 @@ const GridManager = (() => {
 
     function _closeContextMenu() {
         document.getElementById("row-context-menu")?.classList.remove("visible");
-        _ctxRowId = null;
+        _ctxRowId   = null;
+        _ctxColSlug = null;
     }
 
 

@@ -139,6 +139,13 @@ const ApiClient = (() => {
         );
     }
 
+    async function removeOverride(rowId, colSlug) {
+        return request(
+            `/api/tools/${TOOL_ID}/rows/${rowId}/override?col=${encodeURIComponent(colSlug)}&project_id=${PROJECT_ID}`,
+            { method: "DELETE" }
+        );
+    }
+
     async function pasteRows(rows) {
         return request(`/api/tools/${TOOL_ID}/rows/paste?project_id=${PROJECT_ID}`, {
             method: "POST",
@@ -243,6 +250,7 @@ const ApiClient = (() => {
         softDeleteRow,
         restoreRow,
         hardDeleteRow,
+        removeOverride,
         pasteRows,
         runSql,
         exportExcel,

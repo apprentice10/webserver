@@ -437,6 +437,49 @@ def update_cell(
     return serialize_active_row(updated, tool_id, project_id, overrides)
 
 
+def remove_override(
+    conn: sqlite3.Connection,
+    tool_id: int,
+    row_id: int,
+    col_slug: str,
+    project_id: int
+) -> dict:
+    tool = get_tool(conn, tool_id)
+    slug = tool["slug"]
+
+    row = conn.execute(
+        f'SELECT * FROM "{slug}" WHERE __id = ?', (row_id,)
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Riga non trovata")
+    row = dict(row)
+
+    tag_val = row.get("tag", "")
+    override = conn.execute(
+        "SELECT etl_value FROM _overrides WHERE tool_slug = ? AND row_tag = ? AND col_slug = ?",
+        (slug, tag_val, col_slug)
+    ).fetchone()
+    if not override:
+        raise HTTPException(status_code=404, detail="Nessun override trovato per questa cella")
+
+    etl_value = override["etl_value"]
+    conn.execute(
+        f'UPDATE "{slug}" SET "{col_slug}" = ? WHERE __id = ?',
+        (etl_value, row_id)
+    )
+    conn.execute(
+        "DELETE FROM _overrides WHERE tool_slug = ? AND row_tag = ? AND col_slug = ?",
+        (slug, tag_val, col_slug)
+    )
+    conn.commit()
+
+    updated = conn.execute(
+        f'SELECT * FROM "{slug}" WHERE __id = ?', (row_id,)
+    ).fetchone()
+    overrides = get_row_overrides(conn, slug, tag_val)
+    return serialize_active_row(updated, tool_id, project_id, overrides)
+
+
 def soft_delete_row(
     conn: sqlite3.Connection,
     tool_id: int,

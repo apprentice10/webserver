@@ -409,6 +409,17 @@ def restore_row(
     return service.restore_row(conn, tool_id, row_id, project_id)
 
 
+@router.delete("/{tool_id}/rows/{row_id}/override")
+def remove_override(
+    tool_id: int,
+    row_id: int,
+    col: str = Query(...),
+    project_id: int = Query(...),
+    conn: sqlite3.Connection = Depends(get_project_conn)
+):
+    return service.remove_override(conn, tool_id, row_id, col, project_id)
+
+
 @router.post("/{tool_id}/rows/{row_id}/hard-delete")
 def hard_delete_row(
     tool_id: int,

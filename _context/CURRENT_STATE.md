@@ -21,7 +21,7 @@ _(none)_
 
 6. ~~**Triangolo `is_overridden`** — il flag esiste già in DB; aggiungere indicatore visivo (triangolo rosso top-left, CSS `::before`) sulle celle dove `is_overridden = true`~~ ✓
 7. ~~**Tooltip valore originale ETL** — su hover del triangolo, mostrare il valore ETL precedente alla modifica manuale (recuperato da `_audit` o campo dedicato)~~ ✓
-8. **Azione "Rimuovi modifica manuale"** — nel context menu/sidebar, ripristina valore originale ETL e resetta `is_overridden`
+8. ~~**Azione "Rimuovi modifica manuale"** — nel context menu, ripristina valore originale ETL e cancella da `_overrides`~~ ✓
 9. **Export to Excel** (openpyxl, medium effort)
 
 ### Gruppo C — Range selection e clipboard (alto sforzo, dipende da A.4)
