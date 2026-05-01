@@ -15,7 +15,8 @@ Cuore del Table Engine: griglia dati, intestazioni, resize handle, righe, celle 
 | Celle speciali | `.cell-tag`, `.cell-log-preview` |
 | Azioni per riga | `.col-actions`, `.cell-actions`, `.btn-row-action` |
 | Toggle colonne | `.data-grid.log-hidden`, `.data-grid.rev-hidden` |
-| Context menu | `.context-menu`, `.ctx-item`, `.ctx-separator` |
+| Context menu | `.context-menu`, `.ctx-item`, `.ctx-separator`, `.ctx-item-has-sub`, `.ctx-submenu`, `.ctx-submenu-arrow`, `.submenu-left` |
+| Flag submenu items | `.ctx-flag-item`, `.ctx-flag-dot`, `.ctx-flag-check`, `.ctx-flag-mixed` |
 | Drag colonne | `.th-draggable`, `.col-dragging`, `.col-dragover` |
 
 ## Decisioni

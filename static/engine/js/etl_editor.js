@@ -19,6 +19,7 @@ const EtlEditor = (() => {
     let _previewData     = null;
     let _cachedTemplates = [];
     let _toolType        = null;
+    let _cmEditor        = null;   // CodeMirror instance (null if CM not loaded)
 
 
     // --------------------------------------------------------
@@ -43,25 +44,51 @@ const EtlEditor = (() => {
             _currentSql = config.etl_sql  || "";
             _history    = config.etl_history || [];
 
-            const editor = document.getElementById("etl-sql-input");
-            if (editor) editor.value = _currentSql;
-
             _renderHistory();
         } catch (err) {
             console.warn("ETL config non disponibile:", err.message);
+        }
+
+        // Initialize CodeMirror if available, otherwise fall back to plain textarea
+        const textarea = document.getElementById("etl-sql-input");
+        if (textarea) {
+            if (typeof CodeMirror !== "undefined") {
+                _cmEditor = CodeMirror.fromTextArea(textarea, {
+                    mode: "text/x-sql",
+                    lineNumbers: true,
+                    tabSize: 2,
+                    indentWithTabs: false,
+                    matchBrackets: true,
+                    autoCloseBrackets: true,
+                    lineWrapping: false,
+                    extraKeys: {
+                        "Ctrl-Enter": () => preview(),
+                        "Tab":        cm => cm.execCommand("indentMore"),
+                        "Shift-Tab":  cm => cm.execCommand("indentLess")
+                    }
+                });
+                _cmEditor.setValue(_currentSql);
+                _cmEditor.refresh();
+            } else {
+                textarea.value = _currentSql;
+                // Fallback Ctrl+Enter on plain textarea
+                document.addEventListener("keydown", e => {
+                    if (e.ctrlKey && e.key === "Enter" && document.activeElement === textarea) {
+                        preview();
+                    }
+                });
+            }
         }
 
         // Carica schema e template subito (siamo su pagina dedicata)
         await refreshSchema();
         await refreshTemplates();
 
-        // Ctrl+Enter → preview
-        document.addEventListener("keydown", e => {
-            if (e.ctrlKey && e.key === "Enter") {
-                const editor = document.getElementById("etl-sql-input");
-                if (editor && document.activeElement === editor) {
-                    preview();
-                }
+        // Avvisa se si esce con modifiche non salvate
+        window.addEventListener("beforeunload", e => {
+            if (_getSql() !== _currentSql.trim()) {
+                e.preventDefault();
+                e.returnValue = "";
             }
         });
     }
@@ -145,6 +172,13 @@ const EtlEditor = (() => {
     }
 
     function insertColumn(text) {
+        if (_cmEditor) {
+            const doc    = _cmEditor.getDoc();
+            const cursor = doc.getCursor();
+            doc.replaceRange(text, cursor);
+            _cmEditor.focus();
+            return;
+        }
         const editor = document.getElementById("etl-sql-input");
         if (!editor) return;
         const start = editor.selectionStart;
@@ -214,6 +248,8 @@ const EtlEditor = (() => {
                     ? `, ${result.columns_created} colonne aggiunte` : "") + ".",
                 "success"
             );
+            // Salva la query silenziosamente dopo un apply riuscito
+            ApiClient.etlSaveDraft(sql).then(() => { _currentSql = sql; }).catch(() => {});
         } catch (err) {
             _showPreviewMessage(`⚠ ${err.message}`, "error");
             showToast("Errore ETL: " + err.message, "error");
@@ -330,11 +366,8 @@ const EtlEditor = (() => {
                     const parsed = JSON.parse(text);
                     sql = parsed.etl_sql || parsed.sql || text;
                 }
-                const editor = document.getElementById("etl-sql-input");
-                if (editor) {
-                    editor.value = sql;
-                    _currentSql = sql;
-                }
+                _setSql(sql);
+                _currentSql = sql;
                 showToast(`File "${file.name}" caricato.`, "success");
             } catch (err) {
                 showToast("Errore lettura file: " + err.message, "error");
@@ -364,11 +397,8 @@ const EtlEditor = (() => {
             if (!confirm(`Sostituire la query corrente con il template "${template.name}"?`)) return;
         }
 
-        const editor = document.getElementById("etl-sql-input");
-        if (editor) {
-            editor.value = template.etl_sql;
-            _currentSql  = template.etl_sql;
-        }
+        _setSql(template.etl_sql);
+        _currentSql = template.etl_sql;
         showToast(`Template "${template.name}" caricato.`, "success");
     }
 
@@ -389,13 +419,10 @@ const EtlEditor = (() => {
     function loadVersion(index) {
         const version = _history[index];
         if (!version) return;
-        const editor = document.getElementById("etl-sql-input");
-        if (editor) {
-            editor.value = version.sql;
-            _previewData  = null;
-            const preview = document.getElementById("etl-preview-container");
-            if (preview) preview.innerHTML = "";
-        }
+        _setSql(version.sql);
+        _previewData = null;
+        const previewEl = document.getElementById("etl-preview-container");
+        if (previewEl) previewEl.innerHTML = "";
         showToast(`Versione '${version.label}' caricata.`, "info");
     }
 
@@ -507,8 +534,39 @@ const EtlEditor = (() => {
     // --------------------------------------------------------
 
     function _getSql() {
+        if (_cmEditor) return _cmEditor.getValue().trim();
         const editor = document.getElementById("etl-sql-input");
         return editor ? editor.value.trim() : "";
+    }
+
+    function _setSql(sql) {
+        if (_cmEditor) {
+            _cmEditor.setValue(sql || "");
+            return;
+        }
+        const editor = document.getElementById("etl-sql-input");
+        if (editor) editor.value = sql || "";
+    }
+
+    function formatSql() {
+        if (typeof sqlFormatter === "undefined") {
+            Utils.showToast("sql-formatter non disponibile.", "error");
+            return;
+        }
+        const sql = _getSql();
+        if (!sql) return;
+        try {
+            const formatted = sqlFormatter.format(sql, {
+                language:    "sql",
+                tabWidth:    2,
+                keywordCase: "upper",
+                linesBetweenQueries: 1
+            });
+            _setSql(formatted);
+            Utils.showToast("SQL formattato.", "success");
+        } catch (e) {
+            Utils.showToast("Errore formattazione: " + e.message, "error");
+        }
     }
 
     const _formatTs = Utils.formatTimestamp;
@@ -532,6 +590,7 @@ const EtlEditor = (() => {
         saveAsTemplate,
         importFromFile,
         exportToFile,
+        formatSql,
         loadVersion,
         loadTemplate,
         deleteTemplate,

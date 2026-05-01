@@ -146,6 +146,13 @@ const ApiClient = (() => {
         );
     }
 
+    async function keepRow(rowId) {
+        return request(
+            `/api/tools/${TOOL_ID}/rows/${rowId}/keep?project_id=${PROJECT_ID}`,
+            { method: "POST" }
+        );
+    }
+
     async function pasteRows(rows) {
         return request(`/api/tools/${TOOL_ID}/rows/paste?project_id=${PROJECT_ID}`, {
             method: "POST",
@@ -216,18 +223,61 @@ const ApiClient = (() => {
 
 
     // --------------------------------------------------------
+    // FLAGS
+    // --------------------------------------------------------
+
+    async function listFlags() {
+        return request(`/api/tools/flags?project_id=${PROJECT_ID}`);
+    }
+
+    async function createFlag(name, color) {
+        return request(`/api/tools/flags?project_id=${PROJECT_ID}`, {
+            method: "POST",
+            body: JSON.stringify({ name, color })
+        });
+    }
+
+    async function updateFlag(flagId, data) {
+        return request(`/api/tools/flags/${flagId}?project_id=${PROJECT_ID}`, {
+            method: "PATCH",
+            body: JSON.stringify(data)
+        });
+    }
+
+    async function deleteFlag(flagId) {
+        return request(`/api/tools/flags/${flagId}?project_id=${PROJECT_ID}`, {
+            method: "DELETE"
+        });
+    }
+
+    async function toggleCellFlags(flagId, cells) {
+        return request(`/api/tools/${TOOL_ID}/cell-flags/toggle?project_id=${PROJECT_ID}`, {
+            method: "POST",
+            body: JSON.stringify({ flag_id: flagId, cells })
+        });
+    }
+
+
+    // --------------------------------------------------------
     // TEMPLATE
     // --------------------------------------------------------
 
     async function saveTemplate(data) {
-        return request("/api/tools/templates", {
+        return request(`/api/tools/templates?project_id=${PROJECT_ID}`, {
             method: "POST",
             body: JSON.stringify(data)
         });
     }
 
     async function deleteTemplate(templateId) {
-        return request(`/api/tools/templates/${templateId}`, { method: "DELETE" });
+        return request(`/api/tools/templates/${templateId}?project_id=${PROJECT_ID}`, { method: "DELETE" });
+    }
+
+    async function etlSaveDraft(sql) {
+        return request(`/api/tools/${TOOL_ID}/etl/config?project_id=${PROJECT_ID}`, {
+            method: "PATCH",
+            body: JSON.stringify({ sql })
+        });
     }
 
 
@@ -238,6 +288,11 @@ const ApiClient = (() => {
     return {
         loadTool,
         updateToolSettings,
+        listFlags,
+        createFlag,
+        updateFlag,
+        deleteFlag,
+        toggleCellFlags,
         loadColumns,
         addColumn,
         updateColumn,
@@ -251,6 +306,7 @@ const ApiClient = (() => {
         restoreRow,
         hardDeleteRow,
         removeOverride,
+        keepRow,
         pasteRows,
         runSql,
         exportExcel,
@@ -261,7 +317,8 @@ const ApiClient = (() => {
         etlLoadConfig,
         etlLoadSchema,
         saveTemplate,
-        deleteTemplate
+        deleteTemplate,
+        etlSaveDraft
     };
 
 })();

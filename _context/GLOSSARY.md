@@ -1,5 +1,6 @@
 # GLOSSARY.md
-_Domain-specific and codebase-specific terms. Read when unsure about naming._
+
+*Domain-specific and codebase-specific terms. Read when unsure about naming.*
 
 ---
 
@@ -44,3 +45,4 @@ _Domain-specific and codebase-specific terms. Read when unsure about naming._
 **query_config** — JSON blob stored in `_tools.query_config`. Contains `etl_sql`, `etl_history`, `etl_deps`. The ETL system's configuration per tool.
 
 **lineage_info** — JSON blob on `_columns.lineage_info`. Stores which source table/column an ETL-created column was derived from (used in schema browser).
+

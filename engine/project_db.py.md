@@ -9,7 +9,7 @@
 |---------|-------------|
 | `DATA_DIR` | `Path` → `data/` nella root del progetto |
 | `SYSTEM_COLUMN_DEFS` | Lista colonne sistema obbligatorie (tag, rev, log) — contratto architetturale |
-| `DDL_SYSTEM_TABLES` | SQL per creare `_project`, `_templates`, `_tools`, `_columns`, `_trash`, `_overrides`, `_audit` |
+| `DDL_SYSTEM_TABLES` | SQL per creare `_project`, `_templates`, `_tools`, `_columns`, `_trash`, `_overrides`, `_audit`, `_flags`, `_cell_flags` |
 | `create_project_db(path)` | Crea un nuovo per-project DB con lo schema completo |
 | `open_project_db(path)` | Apre DB esistente + chiama `_migrate_project_db` per aggiornare schema |
 | `_migrate_project_db(conn)` | Migrazione non-distruttiva: aggiunge colonne/tabelle mancanti, non tocca dati |
@@ -22,3 +22,5 @@
 - **`_migrate_project_db` è sempre non-distruttiva**: usa `CREATE TABLE IF NOT EXISTS` e `ALTER TABLE ADD COLUMN IF NOT EXISTS`. Mai DROP, mai riscrittura dati.
 - **`get_project_conn` non usa `Query(...)`** per `project_id`: legge da `request.path_params` o `request.query_params` direttamente per evitare conflitti con route che hanno `project_id` sia come path param che come query param.
 - **Post-refactor**: rimossa dipendenza da SQLAlchemy. `get_project_conn` ora usa `engine.project_index.get_db_path` invece di `core.models.Project` via ORM.
+- **`_flags` / `_cell_flags`**: sistema flag (Group E). `_flags` registra flag disponibili con nome, colore, `is_system`. `_cell_flags` associa flag a (tool_slug, row_tag, col_slug) — `col_slug=''` per flag a livello riga. System flags "manual_edit" e "ETL: Eliminated" sono seedati in `_migrate_project_db` con `INSERT OR IGNORE` (idempotente).
+- **col_slug='' per flag riga**: invece di NULL nel PK (che SQLite non garantisce unique), si usa stringa vuota come sentinel per flag applicati a una riga intera.

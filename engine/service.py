@@ -288,10 +288,26 @@ def get_rows(
         f'SELECT * FROM "{slug}" ORDER BY __position ASC'
     ).fetchall()
     override_map = get_tool_overrides(conn, slug)
-    result = [
-        serialize_active_row(r, tool_id, project_id, override_map.get(dict(r).get("tag", ""), {}))
-        for r in active
-    ]
+
+    # Bulk load all cell flags for this tool: {row_tag: {col_slug: [{id, name, color}]}}
+    flag_rows = conn.execute(
+        """SELECT cf.row_tag, cf.col_slug, f.id, f.name, f.color
+           FROM _cell_flags cf
+           JOIN _flags f ON f.id = cf.flag_id
+           WHERE cf.tool_slug = ?""",
+        (slug,)
+    ).fetchall()
+    flags_map: dict = {}
+    for fr in flag_rows:
+        flags_map.setdefault(fr["row_tag"], {}).setdefault(fr["col_slug"], []).append(
+            {"id": fr["id"], "name": fr["name"], "color": fr["color"]}
+        )
+
+    result = []
+    for r in active:
+        row = serialize_active_row(r, tool_id, project_id, override_map.get(dict(r).get("tag", ""), {}))
+        row["cell_flags"] = flags_map.get(row["tag"], {})
+        result.append(row)
 
     if include_deleted:
         trash = conn.execute(

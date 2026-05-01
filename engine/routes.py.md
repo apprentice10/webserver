@@ -7,12 +7,12 @@
 
 | Righe | Sezione |
 |-------|---------|
-| 1–143 | Schema Pydantic: `ToolCreate`, `ToolResponse`, `ColumnCreate`, `CellUpdate`, `TemplateCreate`, ecc. |
-| 144–175 | Tool list/get/create/update/delete endpoints |
-| 176–207 | Template endpoints: `GET /templates`, `POST /templates`, `DELETE /templates/{id}` |
-| 208–241 | `POST /project/{project_id}` — crea tool (con o senza template) |
-| 242–380 | Column endpoints (add, update, delete, reorder, resize) |
-| 381–520 | Row endpoints (get, create, update cell, delete, restore, paste, export Excel) |
+| 1–160 | Schema Pydantic: `ToolCreate`, `ToolResponse`, `ColumnCreate`, `CellUpdate`, `TemplateCreate`, `FlagCreate`, `FlagUpdate`, `CellFlagEntry`, `CellFlagToggleRequest` |
+| 222–360 | FLAGS endpoints: `GET /flags`, `POST /flags`, `PATCH /flags/{id}`, `DELETE /flags/{id}`, `POST /{tool_id}/cell-flags/toggle` |
+| 360–420 | TOOL endpoints: `GET /project/{id}`, `POST /project/{id}`, `GET /{tool_id}`, `PATCH /{tool_id}/settings` |
+| 420–500 | Column endpoints (add, update, delete, reorder, resize) |
+| 500–620 | Row endpoints (get, create, update cell, delete, restore, paste, export Excel) |
+| 620–760 | ETL endpoints |
 
 ## Decisioni
 

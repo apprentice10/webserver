@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="/static/engine/css/note.css">
 <link rel="stylesheet" href="/static/engine/css/sql_editor.css">
 <link rel="stylesheet" href="/static/engine/css/modal.css">
+<link rel="stylesheet" href="/static/engine/css/sidebar.css">
 {% endblock %}
 
 {% block topbar_actions %}
@@ -58,6 +59,15 @@
             >⚡ SQL</button>
             <button
                 class="btn btn-ghost btn-sm"
+                onclick="FlagsManager.show()"
+            >⚑ Flags</button>
+            <button
+                class="btn btn-ghost btn-sm"
+                id="btn-toggle-sidebar"
+                onclick="SidebarManager.toggle()"
+            >▶ Info</button>
+            <button
+                class="btn btn-ghost btn-sm"
                 id="btn-run-etl"
                 style="display:none"
                 onclick="ToolbarManager.runEtl()"
@@ -70,53 +80,74 @@
         </div>
     </div>
 
-    <!-- GRIGLIA PRINCIPALE -->
-    <div class="grid-wrapper" id="grid-wrapper">
-        <div class="grid-scroll-container" id="grid-scroll-container">
-            <table class="data-grid" id="data-grid">
-                <thead>
-                    <tr id="grid-header-row"></tr>
-                </thead>
-                <tbody id="grid-body">
-                    <tr class="grid-loading">
-                        <td colspan="20">Caricamento...</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
+    <!-- BODY: main content + sidebar -->
+    <div class="tool-body">
 
-    <!-- NOTA DEL TOOL -->
-    <div class="tool-note-area">
-        <div class="tool-note-label">NOTE GENERALI</div>
-        <textarea
-            id="tool-note"
-            class="tool-note-input"
-            placeholder="Note generali per questo documento..."
-            onblur="ToolbarManager.saveNote(this.value)"
-        ></textarea>
-    </div>
+        <!-- MAIN CONTENT -->
+        <div class="tool-main">
 
-    <!-- SQL EDITOR -->
-    <div class="sql-editor-panel" id="sql-editor-panel" style="display:none">
-        <div class="sql-editor-header">
-            <span>⚡ Power SQL Editor</span>
-            <button class="btn btn-ghost btn-sm" onclick="SqlEditor.toggle()">✕</button>
-        </div>
-        <div class="sql-editor-body">
-            <textarea
-                id="sql-input"
-                class="sql-input"
-                placeholder="SELECT * FROM tool_rows WHERE tool_id = ..."
-                spellcheck="false"
-            ></textarea>
-            <div class="sql-editor-actions">
-                <button class="btn btn-primary btn-sm" onclick="SqlEditor.run()">▶ Esegui</button>
-                <button class="btn btn-ghost btn-sm" onclick="SqlEditor.clear()">Pulisci</button>
+            <!-- GRIGLIA PRINCIPALE -->
+            <div class="grid-wrapper" id="grid-wrapper">
+                <div class="grid-scroll-container" id="grid-scroll-container">
+                    <table class="data-grid" id="data-grid">
+                        <thead>
+                            <tr id="grid-header-row"></tr>
+                        </thead>
+                        <tbody id="grid-body">
+                            <tr class="grid-loading">
+                                <td colspan="20">Caricamento...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </div>
-        <div class="sql-results" id="sql-results"></div>
-    </div>
+
+            <!-- NOTA DEL TOOL -->
+            <div class="tool-note-area">
+                <div class="tool-note-label">NOTE GENERALI</div>
+                <textarea
+                    id="tool-note"
+                    class="tool-note-input"
+                    placeholder="Note generali per questo documento..."
+                    onblur="ToolbarManager.saveNote(this.value)"
+                ></textarea>
+            </div>
+
+            <!-- SQL EDITOR -->
+            <div class="sql-editor-panel" id="sql-editor-panel" style="display:none">
+                <div class="sql-editor-header">
+                    <span>⚡ Power SQL Editor</span>
+                    <button class="btn btn-ghost btn-sm" onclick="SqlEditor.toggle()">✕</button>
+                </div>
+                <div class="sql-editor-body">
+                    <textarea
+                        id="sql-input"
+                        class="sql-input"
+                        placeholder="SELECT * FROM tool_rows WHERE tool_id = ..."
+                        spellcheck="false"
+                    ></textarea>
+                    <div class="sql-editor-actions">
+                        <button class="btn btn-primary btn-sm" onclick="SqlEditor.run()">▶ Esegui</button>
+                        <button class="btn btn-ghost btn-sm" onclick="SqlEditor.clear()">Pulisci</button>
+                    </div>
+                </div>
+                <div class="sql-results" id="sql-results"></div>
+            </div>
+
+        </div><!-- /.tool-main -->
+
+        <!-- SIDEBAR PANEL (collapsible, starts closed) -->
+        <div class="sidebar-panel sidebar-closed" id="sidebar-panel">
+            <div class="sidebar-header">
+                <span class="sidebar-title" id="sidebar-title">Info</span>
+                <button class="btn btn-ghost btn-sm" onclick="SidebarManager.close()">✕</button>
+            </div>
+            <div class="sidebar-body" id="sidebar-body">
+                <p class="sidebar-empty">Seleziona una cella o un intervallo.</p>
+            </div>
+        </div><!-- /.sidebar-panel -->
+
+    </div><!-- /.tool-body -->
 
 </div>
 
@@ -168,9 +199,23 @@
     <div class="ctx-item" data-action="restore">↩ Ripristina riga</div>
     <div class="ctx-item ctx-danger" data-action="hard-delete">🗑 Elimina definitivamente</div>
     <div class="ctx-separator"></div>
+    <div class="ctx-item ctx-keep-row" data-action="keep-row" style="display:none">✓ Keep row</div>
+    <div class="ctx-separator ctx-sep-keep-row" style="display:none"></div>
     <div class="ctx-item" data-action="remove-override" style="display:none">↩ Rimuovi modifica manuale</div>
     <div class="ctx-separator ctx-sep-override" style="display:none"></div>
     <div class="ctx-item" data-action="log">📋 Vedi LOG riga</div>
+    <div class="ctx-separator ctx-sep-cell-log" style="display:none"></div>
+    <div class="ctx-item" data-action="cell-log" style="display:none">📋 View cell LOG</div>
+    <div class="ctx-item" data-action="range-log" style="display:none">📋 View selection LOG</div>
+    <div class="ctx-separator ctx-sep-flags" style="display:none"></div>
+    <div class="ctx-item ctx-item-has-sub" data-action="flags-trigger" style="display:none">
+        🏷 Flags <span class="ctx-submenu-arrow">▶</span>
+        <div id="ctx-flags-submenu" class="ctx-submenu">
+            <div class="ctx-item" data-action="open-flag-manager">⚙ Open flag manager</div>
+            <div class="ctx-separator"></div>
+            <div id="ctx-flags-list"></div>
+        </div>
+    </div>
 </div>
 
 <!-- MODAL LOG RIGA -->
@@ -202,6 +247,8 @@
 <script src="/static/engine/js/paste.js"></script>
 <script src="/static/engine/js/grid.js"></script>
 <script src="/static/engine/js/toolbar.js"></script>
+<script src="/static/engine/js/sidebar.js"></script>
+<script src="/static/engine/js/flags.js"></script>
 <script src="/static/engine/js/sql_editor.js"></script>
 <script>
     document.addEventListener("DOMContentLoaded", async () => {

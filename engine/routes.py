@@ -140,6 +140,26 @@ class EtlQuery(BaseModel):
     label: Optional[str] = None
 
 
+class FlagCreate(BaseModel):
+    name:  str
+    color: str = "#888888"
+
+
+class FlagUpdate(BaseModel):
+    name:  Optional[str] = None
+    color: Optional[str] = None
+
+
+class CellFlagEntry(BaseModel):
+    row_tag:  str
+    col_slug: str = ""
+
+
+class CellFlagToggleRequest(BaseModel):
+    flag_id: int
+    cells:   list[CellFlagEntry]
+
+
 # ============================================================
 # HELPER — adatta il dict _tools al formato ToolResponse
 # ============================================================
@@ -206,6 +226,139 @@ def delete_template(
 ):
     service.delete_template(conn, template_id)
     return {"ok": True}
+
+
+# ============================================================
+# FLAGS (project-level, must come before /{tool_id} routes)
+# ============================================================
+
+@router.get("/flags")
+def list_flags(
+    project_id: Optional[int] = Query(None),
+    conn: sqlite3.Connection = Depends(get_project_conn),
+):
+    rows = conn.execute(
+        "SELECT id, name, color, is_system FROM _flags ORDER BY is_system ASC, name ASC"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.post("/flags", status_code=201)
+def create_flag(
+    data: FlagCreate,
+    project_id: Optional[int] = Query(None),
+    conn: sqlite3.Connection = Depends(get_project_conn),
+):
+    from fastapi import HTTPException as _HTTP
+    try:
+        cur = conn.execute(
+            "INSERT INTO _flags (name, color, is_system) VALUES (?, ?, 0)",
+            (data.name.strip(), data.color),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT id, name, color, is_system FROM _flags WHERE id = ?", (cur.lastrowid,)
+        ).fetchone()
+        return dict(row)
+    except sqlite3.IntegrityError:
+        raise _HTTP(status_code=409, detail=f"Flag '{data.name}' already exists")
+
+
+@router.patch("/flags/{flag_id}")
+def update_flag(
+    flag_id: int,
+    data: FlagUpdate,
+    project_id: Optional[int] = Query(None),
+    conn: sqlite3.Connection = Depends(get_project_conn),
+):
+    from fastapi import HTTPException as _HTTP
+    flag = conn.execute(
+        "SELECT id, name, color, is_system FROM _flags WHERE id = ?", (flag_id,)
+    ).fetchone()
+    if not flag:
+        raise _HTTP(status_code=404, detail="Flag not found")
+    if flag["is_system"] and data.name is not None:
+        raise _HTTP(status_code=400, detail="Cannot rename system flags")
+    new_name  = data.name.strip() if data.name  is not None else flag["name"]
+    new_color = data.color         if data.color is not None else flag["color"]
+    try:
+        conn.execute("UPDATE _flags SET name = ?, color = ? WHERE id = ?", (new_name, new_color, flag_id))
+        conn.commit()
+        row = conn.execute(
+            "SELECT id, name, color, is_system FROM _flags WHERE id = ?", (flag_id,)
+        ).fetchone()
+        return dict(row)
+    except sqlite3.IntegrityError:
+        raise _HTTP(status_code=409, detail=f"Flag name '{new_name}' already exists")
+
+
+@router.delete("/flags/{flag_id}", status_code=204)
+def delete_flag(
+    flag_id: int,
+    project_id: Optional[int] = Query(None),
+    conn: sqlite3.Connection = Depends(get_project_conn),
+):
+    from fastapi import HTTPException as _HTTP
+    flag = conn.execute(
+        "SELECT id, is_system FROM _flags WHERE id = ?", (flag_id,)
+    ).fetchone()
+    if not flag:
+        raise _HTTP(status_code=404, detail="Flag not found")
+    if flag["is_system"]:
+        raise _HTTP(status_code=400, detail="Cannot delete system flags")
+    conn.execute("DELETE FROM _flags WHERE id = ?", (flag_id,))
+    conn.commit()
+
+
+@router.post("/{tool_id}/cell-flags/toggle", status_code=200)
+def toggle_cell_flags(
+    tool_id:    int,
+    project_id: int = Query(...),
+    data:       CellFlagToggleRequest = ...,
+    conn:       sqlite3.Connection = Depends(get_project_conn),
+):
+    from fastapi import HTTPException as _HTTP
+    tool      = service.get_tool(conn, tool_id)
+    tool_slug = tool["slug"]
+
+    flag = conn.execute(
+        "SELECT id, is_system FROM _flags WHERE id = ?", (data.flag_id,)
+    ).fetchone()
+    if not flag:
+        raise _HTTP(status_code=404, detail="Flag not found")
+    if flag["is_system"]:
+        raise _HTTP(status_code=400, detail="Cannot assign system flags manually")
+
+    row_tags = [c.row_tag for c in data.cells]
+    placeholders = ",".join("?" * len(row_tags))
+    existing = conn.execute(
+        f"""SELECT row_tag, col_slug FROM _cell_flags
+            WHERE tool_slug = ? AND flag_id = ?
+            AND row_tag IN ({placeholders})""",
+        [tool_slug, data.flag_id] + row_tags,
+    ).fetchall()
+
+    existing_set = {(r["row_tag"], r["col_slug"]) for r in existing}
+    all_have = all((c.row_tag, c.col_slug) in existing_set for c in data.cells)
+
+    if all_have:
+        for c in data.cells:
+            conn.execute(
+                "DELETE FROM _cell_flags WHERE tool_slug=? AND row_tag=? AND col_slug=? AND flag_id=?",
+                (tool_slug, c.row_tag, c.col_slug, data.flag_id),
+            )
+        action = "removed"
+    else:
+        for c in data.cells:
+            if (c.row_tag, c.col_slug) not in existing_set:
+                conn.execute(
+                    "INSERT OR IGNORE INTO _cell_flags (tool_slug, row_tag, col_slug, flag_id) VALUES (?,?,?,?)",
+                    (tool_slug, c.row_tag, c.col_slug, data.flag_id),
+                )
+        action = "added"
+
+    conn.commit()
+    return {"action": action, "flag_id": data.flag_id, "cells_affected": len(data.cells)}
 
 
 # ============================================================
@@ -421,6 +574,32 @@ def remove_override(
     return service.remove_override(conn, tool_id, row_id, col, project_id)
 
 
+@router.post("/{tool_id}/rows/{row_id}/keep")
+def keep_row(
+    tool_id: int,
+    row_id: int,
+    project_id: int = Query(...),
+    conn: sqlite3.Connection = Depends(get_project_conn)
+):
+    from fastapi import HTTPException as _HTTP
+    from engine.project_db import audit
+    tool = service.get_tool(conn, tool_id)
+    slug = tool["slug"]
+    row = conn.execute(f'SELECT tag FROM "{slug}" WHERE __id = ?', (row_id,)).fetchone()
+    if not row:
+        raise _HTTP(status_code=404, detail="Row not found")
+    tag = row["tag"]
+    flag = conn.execute("SELECT id FROM _flags WHERE name = 'ETL: Eliminated'").fetchone()
+    if flag:
+        conn.execute(
+            "DELETE FROM _cell_flags WHERE tool_slug=? AND row_tag=? AND col_slug='' AND flag_id=?",
+            (slug, tag, flag["id"])
+        )
+        audit(conn, slug, "KEEP_ROW", row_tag=tag)
+        conn.commit()
+    return {"kept": True, "row_tag": tag}
+
+
 @router.post("/{tool_id}/rows/{row_id}/hard-delete")
 def hard_delete_row(
     tool_id: int,
@@ -592,6 +771,17 @@ def etl_config(
 ):
     from engine.etl import get_etl_config
     return get_etl_config(conn, tool_id)
+
+
+@router.patch("/{tool_id}/etl/config")
+def etl_save_draft(
+    tool_id: int,
+    project_id: int = Query(...),
+    data: EtlQuery = ...,
+    conn: sqlite3.Connection = Depends(get_project_conn)
+):
+    from engine.etl import etl_save_draft as _save_draft
+    return _save_draft(conn, tool_id, data.sql)
 
 
 @router.get("/{tool_id}/etl/schema")

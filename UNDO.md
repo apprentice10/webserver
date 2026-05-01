@@ -1,49 +1,49 @@
-# UNDO.md — Rollback del Refactor Architetturale
+# UNDO.md — Rollback of Architectural Refactor
 
-Questo file descrive come annullare il refactor completato il 2026-04-26 e tornare alla versione stabile precedente.
-
----
-
-## Cosa ha cambiato il refactor
-
-| Categoria | Prima | Dopo |
-|-----------|-------|------|
-| Registry progetti | `data/registry.db` (SQLAlchemy ORM) | `data/projects.db` (sqlite3 raw) |
-| Modello progetto | `core/models.py::Project` (ORM) | `engine/project_index.py` (raw) |
-| Template ETL | `data/registry.db::tool_templates` (ORM) | `_templates` dentro ogni project DB |
-| Catalog tool types | Lista statica in `engine/catalog.py` | Scanner dinamico `tools/*/tool.json` |
-| File eliminati | — | `database.py`, `core/models.py`, `core/audit.py`, `engine/models.py` |
-| File nuovi | — | `engine/project_index.py`, `tools/instrument_list/tool.json`, `tools/instrument_list/__init__.py` |
+This file describes how to undo the refactor completed on 2026-04-26 and return to the previous stable version.
 
 ---
 
-## Rollback via Git (metodo raccomandato)
+## What the refactor changed
 
-Il tag `v-pre-refactor` punta alla versione stabile precedente al refactor.
+| Category           | Before                                   | After                                                                                             |
+| ------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Project registry   | `data/registry.db` (SQLAlchemy ORM)      | `data/projects.db` (sqlite3 raw)                                                                  |
+| Project model      | `core/models.py::Project` (ORM)          | `engine/project_index.py` (raw)                                                                   |
+| ETL templates      | `data/registry.db::tool_templates` (ORM) | `_templates` inside each project DB                                                               |
+| Tool types catalog | Static list in `engine/catalog.py`       | Dynamic scanner `tools/*/tool.json`                                                               |
+| Deleted files      | —                                        | `database.py`, `core/models.py`, `core/audit.py`, `engine/models.py`                              |
+| New files          | —                                        | `engine/project_index.py`, `tools/instrument_list/tool.json`, `tools/instrument_list/__init__.py` |
+
+---
+
+## Rollback via Git (recommended method)
+
+The tag `v-pre-refactor` points to the stable version before the refactor.
 
 ```bash
-# Verifica che il tag esista
+# Verify that the tag exists
 git tag | grep v-pre-refactor
 
-# Opzione A — checkout temporaneo (non distruttivo)
+# Option A — temporary checkout (non-destructive)
 git checkout v-pre-refactor
-# Lavora, testa, poi torna a main:
+# Work, test, then go back to main:
 git checkout main
 
-# Opzione B — reset hard a v-pre-refactor (DISTRUTTIVO — perdi tutto il lavoro post-tag)
+# Option B — hard reset to v-pre-refactor (DESTRUCTIVE — you lose all post-tag work)
 git reset --hard v-pre-refactor
-git push --force origin main   # solo se necessario aggiornare il remote
+git push --force origin main   # only if necessary to update the remote
 ```
 
-**Attenzione:** dopo il rollback il server userà di nuovo `data/registry.db`. Se hai creato progetti dopo il refactor, i loro file `.db` sono compatibili ma non saranno nell'indice SQLAlchemy. Dovrai re-inserirli manualmente o cancellarli.
+**Warning:** after the rollback the server will use `data/registry.db` again. If you created projects after the refactor, their `.db` files are compatible but will not be in the SQLAlchemy index. You will need to re-insert them manually or delete them.
 
 ---
 
-## Rollback manuale (se Git non è disponibile)
+## Manual rollback (if Git is not available)
 
-### 1. Ripristina i file eliminati
+### 1. Restore deleted files
 
-Recupera da git i file eliminati:
+Recover the deleted files from git:
 
 ```bash
 git show v-pre-refactor:database.py > database.py
@@ -52,7 +52,7 @@ git show v-pre-refactor:core/audit.py > core/audit.py
 git show v-pre-refactor:engine/models.py > engine/models.py
 ```
 
-### 2. Ripristina i file modificati
+### 2. Restore modified files
 
 ```bash
 git show v-pre-refactor:engine/catalog.py > engine/catalog.py
@@ -63,33 +63,35 @@ git show v-pre-refactor:core/routes.py > core/routes.py
 git show v-pre-refactor:main.py > main.py
 ```
 
-### 3. Elimina i file nuovi
+### 3. Delete new files
 
 ```bash
 del engine\project_index.py
 del tools\instrument_list\tool.json
 del tools\instrument_list\__init__.py
-rmdir /s /q tools\instrument_list   # se vuoi rimuovere la cartella
+rmdir /s /q tools\instrument_list   # if you want to remove the folder
 ```
 
-### 4. Ricrea il registry DB
+### 4. Recreate the registry DB
 
 ```bash
 venv\Scripts\activate
 alembic upgrade head
 ```
 
-### 5. Avvia il server e verifica
+### 5. Start the server and verify
 
 ```bash
 uvicorn main:app --reload
-# GET http://127.0.0.1:8000/api/projects/ deve rispondere con lista progetti
+# GET http://127.0.0.1:8000/api/projects/ must respond with the project list
 ```
 
 ---
 
-## Nota sui dati
+## Notes on data
 
-- I file per-project `.db` (in `data/`) sono **compatibili** con entrambe le versioni: le tabelle `_project` e `_templates` aggiunte dal refactor sono additive e non interferiscono con il vecchio schema.
-- `data/projects.db` (creato dal refactor) può essere ignorato nella versione pre-refactor — il server userà solo `data/registry.db`.
-- I template ETL creati post-refactor (in `_templates`) non saranno visibili dopo il rollback (erano in `_templates` inside project DB, non in `registry.db::tool_templates`).
+* Per-project `.db` files (in `data/`) are **compatible** with both versions: the `_project` and `_templates` tables added by the refactor are additive and do not interfere with the old schema.
+* `data/projects.db` (created by the refactor) can be ignored in the pre-refactor version — the server will only use `data/registry.db`.
+* ETL templates created post-refactor (in `_templates`) will not be visible after the rollback (they were in `_templates` inside the project DB, not in `registry.db::tool_templates`).
+
+---

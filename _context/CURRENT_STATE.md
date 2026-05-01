@@ -1,106 +1,146 @@
 # CURRENT_STATE.md
-_Last updated: 2026-04-26 (refactor architetturale completato)_
 
-Storico feature completate → `_context/DONE.md`
+*Last updated: 2026-04-26 (architectural refactor completed)*
+
+Completed feature history → `_context/DONE.md`
 
 ## In Progress
 
-_(none)_
+*(none)*
 
 ## Next Priorities (ordered by value/effort)
 
-### Gruppo A — Quick UX wins (basso sforzo, alto impatto)
+### Group A — Quick UX wins (low effort, high impact)
 
 1. ~~**Horizontal scrollbar** for wide tables (CSS/layout, low effort)~~ ✓
 2. ~~**Toggle REV column visibility** (same CSS pattern as LOG toggle)~~ ✓
 3. ~~**Double-click column border** to auto-fit width (resize.js)~~ ✓
-4. ~~**Single click = selezione cella, double click = modalità modifica**~~ ✓
-5. ~~**Row numbers** — aggiungere colonna indice stile Excel (colonna fissa sinistra, stile uguale agli header colonna, non editabile)~~ ✓
+4. ~~**Single click = cell selection, double click = edit mode**~~ ✓
+5. ~~**Row numbers** — add index column Excel-style (fixed left column, same style as column headers, not editable)~~ ✓
 
-### Gruppo B — Indicatori visivi celle (medio sforzo, dipende da A.4)
+### Group B — Cell visual indicators (medium effort, depends on A.4)
 
-6. ~~**Triangolo `is_overridden`** — il flag esiste già in DB; aggiungere indicatore visivo (triangolo rosso top-left, CSS `::before`) sulle celle dove `is_overridden = true`~~ ✓
-7. ~~**Tooltip valore originale ETL** — su hover del triangolo, mostrare il valore ETL precedente alla modifica manuale (recuperato da `_audit` o campo dedicato)~~ ✓
-8. ~~**Azione "Rimuovi modifica manuale"** — nel context menu, ripristina valore originale ETL e cancella da `_overrides`~~ ✓
+6. ~~**`is_overridden` triangle** — the flag already exists in DB; add visual indicator (red triangle top-left, CSS `::before`) on cells where `is_overridden = true`~~ ✓
+7. ~~**Original ETL value tooltip** — on triangle hover, show the ETL value prior to manual modification (retrieved from `_audit` or dedicated field)~~ ✓
+8. ~~**Action "Remove manual edit"** — in the context menu, restore original ETL value and delete from `_overrides`~~ ✓
 9. ~~**Export to Excel** (openpyxl, medium effort)~~ ✓
 
-### Gruppo C — Range selection e clipboard (alto sforzo, dipende da A.4)
+### Group C — Range selection and clipboard (high effort, depends on A.4)
 
-10. **Range selection base** — click+drag per selezionare range di celle; highlight visivo del range selezionato (`grid.js`)
-11. **Shift+click per estendere range** — estensione selezione con Shift+click
-12. **Ctrl+click per selezione discontinua** — selezione multipla non contigua
-13. **Click su header colonna = seleziona colonna intera** — click sinistro su `<th>` seleziona tutte le celle della colonna
-14. **Click su row number = seleziona riga intera** — click sinistro sul numero di riga seleziona la riga completa
-15. **Copia range stile Excel** — `Ctrl+C` su range selezionato copia in clipboard con struttura righe/colonne (tab-separated, clipboard API)
-16. **Right-click dentro range = mantieni selezione + context menu range** — non perdere la selezione al click destro
-17. **Right-click fuori range = nuova selezione + context menu singola cella**
+10. ~~**Base range selection** — click+drag to select a range of cells; visual highlight of selected range (`grid.js`)~~ ✓
+11. ~~**Shift+click to extend range** — extend selection with Shift+click~~ ✓
+12. ~~**Ctrl+click for discontinuous selection** — non-contiguous multi-selection~~ ✓
+13. ~~**Click on column header = select entire column** — left-click on `<th>` selects all cells in the column~~ ✓
+14. ~~**Click on row number = select entire row** — left-click on row number selects the full row~~ ✓
+15. ~~**Excel-style range copy** — `Ctrl+C` on selected range copies to clipboard with row/column structure (tab-separated, clipboard API)~~ ✓
+16. ~~**Right-click inside range = keep selection + range context menu** — do not lose selection on right-click~~ ✓
+17. ~~**Right-click outside range = new selection + single cell context menu**~~ ✓
 
-### Gruppo D — Sidebar contestuale (alto sforzo, dipende da B e C)
+### Group D — Contextual sidebar (high effort, depends on B and C)
 
-Sostituisce/affianca il context menu attuale con una sidebar destra dinamica.
+Collapsible right-side panel. Complements the existing context menu (which remains unchanged). Replaces modal windows (e.g. current LOG modal). Hosts LOG and FLAG manager.
 
-18. **Sidebar shell** — pannello collassabile lato destro, toggle da toolbar; struttura HTML/CSS in `table.html`
-19. **Sidebar: stato singola cella** — modifica, visualizza log cella, ripristina valore originale
-20. **Sidebar: stato range** — elimina righe selezionate, log del range
-21. **Sidebar: stato riga** — elimina riga, ripristina riga
-22. **Sidebar: stato colonna** — visualizza provenienza ETL della colonna (da `etl_deps`)
-23. **Right-click su header colonna** — apre strumenti colonna nella sidebar (provenienza ETL)
-24. **Right-click su row number** — apre strumenti riga nella sidebar (elimina riga)
+18. ~~**Sidebar shell** — collapsible panel on the right side, toggle from toolbar; HTML/CSS structure in `table.html`~~ ✓
+19. ~~**Sidebar: single cell LOG** — visualization of selected cell log (tree structure, see Group G); rollback original values (see Group G); cell editing remains direct on the cell, not from the sidebar~~ ✓
+20. ~~**Sidebar: range LOG** — same structure as single cell LOG (Group G) but aggregated over the entire selected range; if LOG is opened from a cell → that cell log, if from a range → aggregated range log~~ ✓
 
-### Gruppo E — Sistema FLAG (alto sforzo, dipende da B e D)
+### Group E — FLAG system (high effort, depends on B and D)
 
-25. **Schema DB flag** — tabella `_cell_flags(tool_slug, row_tag, col_slug, flag_id)` + tabella `_flags(id, name, color, is_system)` nel DB di progetto; flag di sistema "manual_edit" pre-inserito
-26. **Flag management window** — pagina/modale dedicata: crea/modifica/elimina flag con nome+colore; flag di sistema: solo colore modificabile
-27. **Indicatore visivo multi-flag** — celle con flag mostrano triangoli/badge colorati (stacking multiplo)
-28. **Tooltip flag** — hover su triangolo sistema → valore originale ETL; hover su flag utente → nome flag
-29. **Sidebar: sezione FLAG** — aggiungi flag, lista flag presenti nella cella, rimuovi singolo flag
+25. ~~**Flag DB schema** — table `_cell_flags(tool_slug, row_tag, col_slug, flag_id)` + table `_flags(id, name, color, is_system)` in project DB; system flag "manual_edit" pre-inserted; system flag `ETL: Eliminated` pre-inserted (see Group F.1)~~ ✓
+26. ~~**Flag management sidebar** — panel in the sidebar: create/edit/delete flags with name+color; system flags: only color is editable~~ ✓
+27. ~~**Multi-flag visual indicator** — cells with flags show colored triangles/badges (stacking supported)~~ ✓
+28. ~~**Cumulative flag tooltip** — each flag circle has its own tooltip; manual_edit dot shows "ETL: {value}" or "ETL: (empty)"~~ ✓
+29. ~~**FLAG context menu** — submenu "Flag" in the context menu~~ ✓
 
-### Gruppo F — ETL SQL Editor migliorato (medio sforzo, indipendente)
+### Group F — Improved ETL SQL Editor (medium effort, independent)
 
-30. **SQL syntax highlighting** — integrare CodeMirror o Monaco Editor in `etl_editor.js`; mantenere compatibilità con il salvataggio esistente
-31. **SQL auto-formatting** — indentazione automatica SQL al caricamento e on-demand
-32. **Code folding + validazione sintassi** (opzionale, dopo highlighting)
+30. ~~**SQL syntax highlighting** — integrate CodeMirror or Monaco Editor in `etl_editor.js`; maintain compatibility with existing saving~~ ✓
+31. ~~**SQL auto-formatting** — automatic SQL indentation on load and on-demand~~ ✓
+32. **Code folding + syntax validation** (optional, after highlighting)
 
-### Gruppo G — LOG come sistema Undo (alto sforzo, dipende da B e C)
+### Group F.1 — ETL: orphan row management (medium effort, depends on Group E)
 
-33. **Rollback singola cella** — da LOG, ripristina valore precedente di una cella (nuova API `POST /rows/{row_id}/rollback?col=X&rev=N`)
-34. **Rollback riga** — ripristina tutti i valori di una riga a una revisione precedente
-35. **Rollback range** — rollback su range selezionato
-36. **Studio impatto performance** — valutare se il log crescente richiede paginazione o pruning
+When a row imported via ETL from a source table is deleted from the source, the row in the destination table is not automatically deleted. It is instead marked with a system flag to leave the final decision to the operator.
 
-### Gruppo H — ETL bidirezionale (molto alto sforzo, dipende da F)
+33. ~~**System flag `ETL: Eliminated`** — when ETL detects that a previously imported row no longer exists in the source, it automatically applies the system flag `ETL: Eliminated` to the row in the destination table; the row remains present and visible~~ ✓
+34. ~~**Orphan row visual indicator** — the row with flag `ETL: Eliminated` receives a visual indicator consistent with the flag system (triangle/badge, configurable color)~~ ✓
+35. ~~**Context menu: entry "Keep row"** — entry visible only on rows with flag `ETL: Eliminated`; removes the flag and confirms that the operator wants to keep the row even if it no longer exists in the source; the existing "Delete row" entry remains unchanged~~ ✓
+36. ~~**Architectural consistency** — verify that orphan row detection logic is integrated into the ETL apply cycle (`etl.py`), is compatible with `is_overridden`, and is tracked in LOG/audit for future rollback~~ ✓
 
-Studio e implementazione della relazione bidirezionale Tabella → SQL.
+### Group G — LOG as revision system (high effort, depends on D and C)
 
-37. **Analisi fattibilità** — mappare quali operazioni sulla tabella hanno corrispondenza SQL univoca
-38. **Eliminazione colonna → aggiornamento SQL** — se una colonna ETL-generata viene eliminata, rimuovere la clausola SQL corrispondente
-39. **Trasformazioni visive → SQL** — prefix/suffix/replace/formula generano SQL equivalente automaticamente
+The LOG is displayed in the sidebar (see Group D). The structure is a navigable tree.
 
-### Gruppo I — Gestione file progetto (alto sforzo, architettura pronta)
+37. **LOG architectural replacement** — migrate from `log TEXT` column in tool table to a dedicated table `_audit_log` (or extension of `_audit`); proposed schema:
 
-Il refactor (2026-04-26) ha reso ogni project DB autosufficiente (`_project` + `_templates` dentro il file). L'infrastruttura per il file portabile è ora in place.
+    * `id`, `tool_slug`, `row_id`, `row_tag`, `column_slug`
+    * `old_value`, `new_value`, `revision`, `changed_at`, `changed_by`
+    * `change_type`: `manual_edit | etl_update | restore | delete | bulk_paste | undo | system`
 
-40. **Salva progetto come file** — copia del `.db` di progetto in posizione scelta dall'utente (API `GET /projects/{id}/export`)
-41. **Apri progetto da file** — upload/path di un `.db` esistente, registra in `projects.db` via `add_project()` (API `POST /projects/import`)
-42. **Backup automatico** — backup periodico o pre-operazione distruttiva
+38. **Unchanged UI compatibility** — context menu entry "View row LOG" continues to work by opening the LOG sidebar instead of the current modal
 
-### Gruppo J — Compatibilità DB ↔ Webserver (alto sforzo, dipende da I)
+39. **Tree structure LOG** — the LOG in the sidebar is organized:
 
-43. **Schema versioning** — campo `schema_version` in ogni progetto DB; tabella `_schema_version` con numero versione corrente
-44. **Verifica compatibilità all'apertura** — controllo versione al `open_project_db()`, warning se mismatch
-45. **Migrazioni automatiche** — runner di migrazioni per portare DB vecchi alla versione corrente
-46. **Rollback sicurezza** — backup automatico pre-migrazione
-47. **Futura compatibilità PostgreSQL** — astrarre query raw sqlite3 in layer compatibile
+    ```
+    - Column
+        - Row
+            - Log entry 1 (timestamp, old→new)
+            - Log entry 2
+    ```
+
+    Right-click on a log entry → context menu with entry "Restore original value"
+
+40. **Single cell rollback** — from LOG entry, restore that cell value to the `old_value` of the selected entry (API `POST /rows/{row_id}/rollback?col=X&entry_id=N`)
+
+41. **Export LOG** — button under the tree view in the sidebar; generates a downloadable text file with the displayed LOG content
+
+42. **Advanced LOG filtering** — future UI: filter by column, filter by change type, before/after diff
+
+43. **Performance note** — goal: avoid heavy SQLite rows and degradation on large datasets (+10,000 rows); evaluate pagination or pruning
+
+### Group G.1 — Refactor LOG → Audit System (high priority, prerequisite for Group G)
+
+> **Note:** the DB already has a `_audit` table. This section describes its structured evolution.
+> **Rule:** LOG visible in UI → yes. LOG as a dataset column → no. LOG as audit/versioning system → yes, mandatory.
+
+*(Tasks in this group are now incorporated in Group G — see tasks 37–43)*
+
+### Group H — Bidirectional ETL (very high effort, depends on F)
+
+Study and implementation of the bidirectional Table → SQL relationship.
+
+44. **Feasibility analysis** — map which table operations have a unique SQL correspondence
+45. **Column deletion → SQL update** — if an ETL-generated column is deleted, remove the corresponding SQL clause
+46. **Visual transformations → SQL** — prefix/suffix/replace/formula automatically generate equivalent SQL
+
+### Group I — Project file management (high effort, architecture ready)
+
+The refactor (2026-04-26) made each project DB self-contained (`_project` + `_templates` inside the file). The infrastructure for portable files is now in place.
+
+47. **Save project as file** — copy of project `.db` to user-selected location (API `GET /projects/{id}/export`)
+48. **Open project from file** — upload/path of an existing `.db`, register in `projects.db` via `add_project()` (API `POST /projects/import`)
+49. **Automatic backup** — periodic or pre-destructive-operation backup
+
+### Group J — DB ↔ Webserver compatibility (high effort, depends on I)
+
+50. **Schema versioning** — `schema_version` field in each project DB; `_schema_version` table with current version number
+51. **Compatibility check on open** — version check at `open_project_db()`, warning on mismatch
+52. **Automatic migrations** — migration runner to bring old DBs to current version
+53. **Safety rollback** — automatic backup pre-migration
+54. **Future PostgreSQL compatibility** — abstract raw sqlite3 queries into a compatible layer
 
 ---
 
-### Backlog strumenti (bassa priorità)
+### Tools backlog (low priority)
 
-- **Cable List tool** (new type_slug, custom system columns)
-- **I/O List tool** (new type_slug)
-- **Workspace file system** (`.imanager` files — largest effort)
+* **Cable List tool** (new type_slug, custom system columns)
+* **I/O List tool** (new type_slug)
+* **Workspace file system** (`.imanager` files — largest effort)
 
 ## Paused / Deferred
 
-- EAV→flat migration tooling (already migrated, no active need)
-- Multi-user / concurrency (single-user app for now)
+* EAV→flat migration tooling (already migrated, no active need)
+* Multi-user / concurrency (single-user app for now)
+
+---
+

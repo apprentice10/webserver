@@ -93,6 +93,21 @@ CREATE TABLE IF NOT EXISTS _templates (
     etl_sql     TEXT NOT NULL DEFAULT '',
     created_at  TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS _flags (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    name      TEXT UNIQUE NOT NULL,
+    color     TEXT NOT NULL DEFAULT '#888888',
+    is_system INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS _cell_flags (
+    tool_slug TEXT NOT NULL,
+    row_tag   TEXT NOT NULL,
+    col_slug  TEXT NOT NULL DEFAULT '',
+    flag_id   INTEGER NOT NULL REFERENCES _flags(id) ON DELETE CASCADE,
+    PRIMARY KEY (tool_slug, row_tag, col_slug, flag_id)
+);
 """
 
 SYSTEM_COLUMN_DEFS = [
@@ -144,6 +159,28 @@ def _migrate_project_db(conn: sqlite3.Connection) -> None:
             name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
             etl_sql TEXT NOT NULL DEFAULT '',
             created_at TEXT DEFAULT (datetime('now')))""")
+
+    if "_flags" not in existing_tables:
+        conn.execute("""CREATE TABLE _flags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            color TEXT NOT NULL DEFAULT '#888888',
+            is_system INTEGER NOT NULL DEFAULT 0)""")
+
+    if "_cell_flags" not in existing_tables:
+        conn.execute("""CREATE TABLE _cell_flags (
+            tool_slug TEXT NOT NULL,
+            row_tag   TEXT NOT NULL,
+            col_slug  TEXT NOT NULL DEFAULT '',
+            flag_id   INTEGER NOT NULL REFERENCES _flags(id) ON DELETE CASCADE,
+            PRIMARY KEY (tool_slug, row_tag, col_slug, flag_id))""")
+
+    # Idempotent seed: system flags must always exist
+    conn.execute("""
+        INSERT OR IGNORE INTO _flags (name, color, is_system) VALUES
+            ('manual_edit',     '#FF8C00', 1),
+            ('ETL: Eliminated', '#DC143C', 1)
+    """)
 
     conn.commit()
 

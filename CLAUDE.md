@@ -4,30 +4,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Session Strategy
 
-**Project index files — read before non-trivial tasks:**
-- In-progress / next priorities → `_context/CURRENT_STATE.md`
-- Feature log (completato) → `_context/DONE.md`
-- Architectural decisions + rejected alternatives → `_context/DECISIONS.md` (consult before any structural change)
-- Known technical risks + dangerous files → `_context/RISKS.md`
-- Domain terms and data contracts → `_context/GLOSSARY.md`
+**Read before non-trivial tasks:**
 
-**After completing a feature:** append it to `_context/DONE.md`, remove from `_context/CURRENT_STATE.md`.  
-**After an architectural decision:** add a row to `_context/DECISIONS.md`.  
+| What | Where |
+|------|-------|
+| In-progress / next priorities | `_context/CURRENT_STATE.md` |
+| Feature log (completed) | `_context/DONE.md` |
+| Architectural decisions + rejected alternatives | `_context/DECISIONS.md` |
+| Known technical risks + dangerous files | `_context/RISKS.md` |
+| Domain terms and data contracts | `_context/GLOSSARY.md` |
+
+**After completing a feature:** append to `_context/DONE.md`, remove from `_context/CURRENT_STATE.md`.
+**After an architectural decision:** add a row to `_context/DECISIONS.md`.
 **After splitting an oversized file:** update `_context/RISKS.md` to remove/downgrade the entry.
 
-Before starting any task, check memory files for relevant context (already loaded in context):
-- ETL staleness, topological run, circular deps → `memory/project_etl_staleness.md`
-- System columns, internal `__` columns → `memory/project_system_columns.md`
-- Cell edit / ETL apply / staleness propagation flows → `memory/project_data_flows.md`
-- All API URLs, project_id convention, git workflow → `memory/project_url_structure.md`
-- Frontend IIFE pattern, script load order, showToast → `memory/feedback_frontend_patterns.md`
-
 **Per-task context guide:**
-- Aggiunta/modifica colonna → `service.py` L157–280, `project_db.py` L162–181
-- Row CRUD / cell edit → `service.py` L282–550, `project_data_flows.md`
-- ETL logic → `etl.py`, `project_etl_staleness.md`
-- Frontend grid → `grid.js`, `columns.js`
-- Frontend ETL editor → `etl_editor.js`, `api.js`
+
+| Task | Read |
+|------|------|
+| ETL staleness, topological run, circular deps | `_context/ETL_STALENESS.md` |
+| System columns, `__` internal columns | `_context/SYSTEM_COLUMNS.md` |
+| Cell edit / ETL apply / staleness propagation | `_context/DATA_FLOWS.md` |
+| All API URLs, project_id convention, git workflow | `_context/URL_STRUCTURE.md` |
+| Frontend IIFE pattern, script load order, showToast | `_context/FRONTEND_PATTERNS.md` |
+| Column add/edit | `engine/service.py` L157–280, `engine/project_db.py` L162–181 |
+| Row CRUD / cell edit | `engine/service.py` L282–550, `_context/DATA_FLOWS.md` |
+| ETL logic | `engine/etl.py.md`, `_context/ETL_STALENESS.md` |
+| Frontend grid | `static/engine/js/grid.js.md`, `static/engine/js/columns.js.md` |
+| Frontend ETL editor | `static/engine/js/etl_editor.js.md`, `static/engine/js/api.js.md` |
+| Sidebar shell, LOG sidebar, FLAG sidebar | `static/engine/js/sidebar.js.md`, `static/engine/css/sidebar.css` |
 
 ---
 
@@ -35,32 +40,7 @@ Before starting any task, check memory files for relevant context (already loade
 
 **Instrument Manager** — web app for electro-instrumental engineering design of pharmaceutical plants. Each "tool" (Instrument List, Cable List, I/O List…) is an independent technical document sharing the same universal Table Engine.
 
-### Working features
-
-- Project management (create/open/delete, persisted in `sessionStorage`)
-- Universal Table Engine: inline cell editing, keyboard nav (Tab/Enter/Arrows)
-- Ghost row at grid bottom for fast row insertion
-- Paste from Excel/CSV (range paste + append paste)
-- Soft delete (strikethrough, restorable) + hard delete (trash only)
-- Per-row LOG column: records every cell change with timestamp, rev, old→new
-- Column resize + reorder by drag (saved to DB)
-- Settings panel: tool name, icon picker, revision
-- ETL Editor (`/tool/{pid}/{tid}/etl`): SQL → Preview → Apply
-- ETL: auto-creates columns, merges by TAG, respects `is_overridden` cells
-- ETL version history, template save/load (scoped by tool type), schema browser
-- Power SQL Editor (arbitrary SELECT/DML, no DDL)
-- Right-click context menu (delete, restore, hard-delete, log)
-- Toggle LOG column visibility (CSS class, no re-render)
-- ETL staleness tracking + dependency graph + topological auto-run
-
-### Known backlog
-
-- Double-click column border to auto-fit width
-- Toggle REV column visibility
-- Horizontal scrollbar for wide tables
-- Export to Excel
-- Cable List and I/O List tools
-- Workspace file system (`.imanager` files)
+Feature list → `_context/DONE.md`. Backlog → `_context/CURRENT_STATE.md`.
 
 ---
 
@@ -72,87 +52,178 @@ uvicorn main:app --reload
 # Docs: http://127.0.0.1:8000/docs
 ```
 
+---
+
 ## Architecture
 
-### Database design
-
-**Project index** (`data/projects.db`, raw sqlite3): single `projects` table mapping `id → db_path`. No ORM. Managed by `engine/project_index.py`.
-
-**Per-project DB** (`data/{client}_{project}.db`, raw sqlite3):
-- `_project` — project metadata (name, client, description, created_at, updated_at)
-- `_templates` — ETL templates scoped to this project (type_slug, name, etl_sql)
-- `_tools` — tool metadata (name, slug, tool_type, icon, rev, query_config, **is_stale**)
-- `_columns` — column definitions (name, slug, type, width, position, is_system)
-- `_trash` — soft-deleted rows as JSON
-- `_overrides(tool_slug, row_tag, col_slug, etl_value)` — manually-edited cells ETL skips
-- `_audit` — change log
-- `"{tool_slug}"` — one flat table per tool
-
-System columns (tag/rev/log) and internal `__` columns → see `memory/project_system_columns.md`.
-ETL staleness, `etl_deps`, topological run → see `memory/project_etl_staleness.md`.
-
-### Plugin discovery (`engine/catalog.py`)
-
-`TOOL_CATALOG` is built at startup by scanning `tools/*/tool.json`. Each manifest contains `type_slug`, `name`, `description`, `icon`. Adding a new tool type = drop a folder with `tool.json` under `tools/`.
-
-### FastAPI dependency: `get_project_conn`
-
-`engine/project_db.py`. Reads `project_id` from `request.path_params` OR `request.query_params`. Never use `Query(...)` for `project_id` in route signatures that also use it as path param.
-
-### ETL Templates
-
-Stored in `_templates` inside each project's own DB. Scoped by `type_slug` within the project.  
-API: `GET /api/tools/templates?project_id=N&type_slug=X`
+- **Database design** → `_context/DECISIONS.md` (D01, D02, D06, D07, D08)
+- **Plugin discovery (`engine/catalog.py`)** → `engine/catalog.py.md`, `_context/DECISIONS.md` D09
+- **FastAPI dependency `get_project_conn`** → `engine/project_db.py.md`
+- **ETL Templates** → `engine/etl.py.md`, `_context/DECISIONS.md` D04
 
 ---
 
 ## Module layout
 
-| Module | Responsibility |
-|--------|----------------|
-| `main.py` | FastAPI app setup, static files, page routes, `init_index()` call |
-| `core/routes.py` | `/api/projects/` CRUD (no ORM — uses `project_index` + `project_db`) |
-| `engine/project_index.py` | `data/projects.db` — thin project registry (id → db_path), raw sqlite3 |
-| `engine/project_db.py` | Per-project DB setup, `get_project_conn`, `SYSTEM_COLUMN_DEFS`, `audit()` |
-| `engine/routes.py` | `/api/tools/` endpoints — thin layer, delegates to service |
-| `engine/service.py` | All business logic — see navigation guide below |
-| `engine/etl.py` | ETL preview/apply/save/schema, version history, dependency parsing |
-| `engine/utils.py` | Shared utilities: `slugify`, `now_str`, `format_log_entry`, `append_log` |
-| `engine/sql_parser.py` | SQL parsing: `extract_table_refs`, `extract_col_lineage`, `clean_sql` |
-| `engine/catalog.py` | Dynamic scanner: reads `tools/*/tool.json`, builds `TOOL_CATALOG` at startup |
-| `tools/instrument_list/tool.json` | Plugin manifest for Instrument List tool type |
-| `_legacy/instrument_list/` | Dead code — **do not read** |
-| `static/engine/css/layout.css` | Container, topbar, pulsanti globali (btn-ghost, btn-stale…) |
-| `static/engine/css/toolbar.css` | Toolbar secondaria, search input |
-| `static/engine/css/grid.css` | Griglia, celle, select/edit mode, toggle LOG/REV, context menu, drag |
-| `static/engine/css/note.css` | Area nota del tool |
-| `static/engine/css/sql_editor.css` | Power SQL Editor panel inline |
-| `static/engine/css/modal.css` | Modal log, form-select, toast, icon picker, settings tabs |
-| `static/engine/css/etl.css` | ETL Editor — layout, editor area, preview, storico, schema browser |
-
-### `engine/service.py` navigation guide (~700 lines)
-
-| Lines | Section |
-|-------|---------|
-| 1–40 | Imports (utilities now in `engine/utils.py`) |
-| 64–155 | Tool CRUD (`get_tool`, `get_tools_for_project`, `create_tool`, `update_tool_settings`) |
-| 157–280 | Column CRUD (`get_columns`, `add_column`, `update_column`, `delete_column`, `reorder_columns`, `update_column_width`) |
-| 282–430 | Row CRUD (`get_rows`, `create_row`, `update_cell`) |
-| 436–550 | Soft-delete / restore / hard-delete / paste |
-| ~555 | `mark_tool_stale(conn, tool_id)` |
-| ~565 | `mark_dependents_stale(conn, source_slug)` — called after every row mutation |
-| 570–650 | Template CRUD (`get_templates`, `create_template`, `delete_template`) — raw sqlite3 on `_templates` |
+| Module | Responsibility | Companion |
+|--------|---------------|-----------|
+| `main.py` | FastAPI app setup, static files, page routes, `init_index()` | — |
+| `core/routes.py` | `/api/projects/` CRUD | — |
+| `engine/project_index.py` | `data/projects.db` — thin project registry | `engine/project_index.py.md` |
+| `engine/project_db.py` | Per-project DB setup, `get_project_conn`, `SYSTEM_COLUMN_DEFS`, `audit()` | `engine/project_db.py.md` |
+| `engine/routes.py` | `/api/tools/` endpoints — thin layer, delegates to service | `engine/routes.py.md` |
+| `engine/service.py` | All business logic | `engine/service.py.md` |
+| `engine/etl.py` | ETL preview/apply/run/save/schema | `engine/etl.py.md` |
+| `engine/utils.py` | `slugify`, `now_str`, `format_log_entry`, `append_log` | `engine/utils.py.md` |
+| `engine/sql_parser.py` | SQL parsing: table refs, col lineage, alias resolution | `engine/sql_parser.py.md` |
+| `engine/catalog.py` | Dynamic scanner: `tools/*/tool.json` → `TOOL_CATALOG` | `engine/catalog.py.md` |
+| `tools/instrument_list/tool.json` | Plugin manifest for Instrument List | — |
+| `_legacy/instrument_list/` | Dead code — **do not read** | — |
+| `static/engine/css/layout.css` | Container, topbar, global buttons | `static/engine/css/layout.css.md` |
+| `static/engine/css/toolbar.css` | Secondary toolbar, search input | `static/engine/css/toolbar.css.md` |
+| `static/engine/css/grid.css` | Grid, cells, select/edit mode, context menu, drag | `static/engine/css/grid.css.md` |
+| `static/engine/css/note.css` | Tool note area | `static/engine/css/note.css.md` |
+| `static/engine/css/sql_editor.css` | Power SQL Editor inline panel | `static/engine/css/sql_editor.css.md` |
+| `static/engine/css/modal.css` | Modal log, toast, icon picker, settings tabs | `static/engine/css/modal.css.md` |
+| `static/engine/css/etl.css` | ETL Editor layout | `static/engine/css/etl.css.md` |
+| `static/engine/css/sidebar.css` | Sidebar panel layout, open/close transition | — |
+| `static/engine/js/utils.js` | `escHtml`, `escAttr`, `showToast`, `formatTimestamp` | `static/engine/js/utils.js.md` |
+| `static/engine/js/api.js` | HTTP client — sole module allowed to `fetch` | `static/engine/js/api.js.md` |
+| `static/engine/js/columns.js` | Column management IIFE | `static/engine/js/columns.js.md` |
+| `static/engine/js/resize.js` | Column resize + auto-fit | `static/engine/js/resize.js.md` |
+| `static/engine/js/paste.js` | Excel/CSV paste (range + append) | `static/engine/js/paste.js.md` |
+| `static/engine/js/grid.js` | Grid render, keyboard nav, cell save, context menu | `static/engine/js/grid.js.md` |
+| `static/engine/js/toolbar.js` | Toolbar actions, settings, ETL run | `static/engine/js/toolbar.js.md` |
+| `static/engine/js/sidebar.js` | Collapsible sidebar IIFE: toggle, open/close, content injection | `static/engine/js/sidebar.js.md` |
+| `static/engine/js/sql_editor.js` | Power SQL Editor panel | `static/engine/js/sql_editor.js.md` |
+| `static/engine/js/etl_editor.js` | ETL Editor standalone page | `static/engine/js/etl_editor.js.md` |
 
 ---
 
-## Companion `.md` per ogni file sorgente
+## Information Loading Rules
 
-Per ogni file sorgente rilevante esiste un file `<nome>.<ext>.md` nella stessa directory. Contiene:
-- **Indice** — tabella sezioni/classi principali con riferimenti a righe o nomi
-- **Descrizione** — scopo del file in 1-2 frasi
-- **Decisioni** — scelte non ovvie, alternative scartate, vincoli che condizionano modifiche future
+* Start from CLAUDE.md only
+* Do NOT automatically read `memory/` or `_context/` files
+* Use `_context/INDEX.md` to locate relevant information
+* Open files ONLY if required by the current task
+* Never open multiple files covering the same topic
+* Prefer the most specific file over general ones
+* Stop reading as soon as sufficient information is found
 
-Aggiornare il `.md` companion ogni volta che si aggiunge una sezione significativa o si prende una decisione architetturale sul file.
+### Memory Usage Rules
+
+* Do NOT proactively read or recall `memory/` files
+* Access `memory/` only if explicitly required by the task
+* Treat `memory/` as low-priority hints, not primary sources
+* Never load multiple `memory/` files
+* Prefer `_context/` over `memory/` in all cases
+
+## File Access Strategy
+
+For every task, follow this sequence:
+
+1. Identify the topic
+2. Check `_context/INDEX.md`
+3. Select ONE relevant file
+4. Read only that file
+5. Do not expand unless necessary
+
+If multiple files seem relevant:
+
+* choose the most authoritative (`_context/` over `memory/`)
+* do NOT read both unless strictly required
+
+## Pre-Read Planning Rule
+
+* Do NOT read any file immediately
+* First, determine:
+  * the task type (bug, feature, refactor, ETL)
+  * the target topic
+* Only after this, select the files using the rules
+* Reading without prior selection is forbidden
+
+## Task-Based File Selection
+
+* Bug fixing → check `_context/DATA_FLOWS.md` first
+* New feature → check `_context/FRONTEND_PATTERNS.md` or `_context/DECISIONS.md`
+* Refactor → check `AI_DEVELOPMENT_RULES.md`
+* Data / ETL issues → check `_context/ETL_STALENESS.md`
+
+Rules:
+
+* Select ONE starting file
+* Do not open multiple categories unless necessary
+
+---
+
+## Language standard
+
+**English is the mandatory language for the entire project.** This applies to:
+
+- All source code: identifiers, comments, docstrings, log messages, error strings
+- All documentation: `CLAUDE.md`, `_context/*.md`, companion `.md` files
+- All commit messages and PR descriptions
+- All new content added in any session
+
+**Scope clarification:**
+
+- `_context/` must be English only
+- `memory/` may contain Italian (personal notes allowed)
+
+---
+
+## Companion `.md` standard
+
+Every relevant source file **must** have a `<name>.<ext>.md` in the same directory. This is mandatory and enforced every session.
+
+**Required sections:**
+
+```
+# <file path>
+
+**Description:** <purpose in 1–2 sentences>
+
+## Index
+
+| Lines / Symbol | Description |
+|----------------|-------------|
+| ...            | ...         |
+
+## Decisions
+
+- **<decision title>**: <what was decided and why; rejected alternatives; constraints>
+```
+
+**Rules:**
+
+- Create the companion `.md` when a new source file is created.
+- Update it whenever a significant section is added, renamed, or removed.
+- Move known pitfalls and non-obvious constraints here — not into `CLAUDE.md`.
+- Keep it in English (see Language standard above).
+- The Index must reflect current line numbers after any significant refactor.
+
+**Anti-patterns (forbidden):**
+
+- Companion `.md` that duplicates content already in `_context/*.md` — link instead.
+- Companion `.md` that describes *what* the code does without explaining *why* non-obvious choices were made.
+- Missing companion `.md` for any file in the Module layout table.
+
+---
+
+## Per-session maintenance rules
+
+These rules apply at the start and end of every session:
+
+1. **Context files stay clean** — no new knowledge dumped directly into `CLAUDE.md`. Route it to the correct `_context/*.md` or companion `.md`.
+2. **No duplication** — if information exists in one file, other files link to it. Moving content is correct; copying is not.
+3. **Companion `.md` coverage** — if a source file in the Module layout table is missing its companion, create it before the session ends.
+4. **`_context/*.md` categorization** — use the correct file for each type of knowledge:
+   - New completed feature → `_context/DONE.md`
+   - Architectural decision → `_context/DECISIONS.md`
+   - New risk or file-size violation → `_context/RISKS.md`
+   - New domain term → `_context/GLOSSARY.md`
+5. **Module layout table** — verify it reflects the real file structure; update if a file was added, removed, or renamed.
+6. **Read selectively** — for any task, identify the relevant subject and read only the specific companion `.md` and `_context/*.md` for that subject. Do not load all context files.
 
 ---
 
@@ -160,35 +231,4 @@ Aggiornare il `.md` companion ogni volta che si aggiunge una sezione significati
 
 Vanilla JS — no framework, no build step. All modules are IIFEs under `static/engine/js/`.
 
-**Script load order** in `table.html`: `utils.js` → `api.js` → `columns.js` → `resize.js` → `paste.js` → `grid.js` → `toolbar.js` → `sql_editor.js`
-
-Module dependency map and patterns → see `memory/feedback_frontend_patterns.md`.
-
-### `static/engine/js/grid.js` navigation guide (~660 lines)
-
-| Lines | Section |
-|-------|---------|
-| 1–50 | State variables (`_rows`, `_filteredRows`, `_showDeleted`, `_ctxRowId`) |
-| 51–175 | Rendering (`render`, `_renderRow`, `_renderCell`, `_renderGhostRow`) |
-| 182–260 | Event listeners (`_attachListeners`, `_onCellFocus`, `_onCellBlur`, `_onCellKeydown`) |
-| 261–330 | Keyboard nav + ghost row creation (`_moveFocus`, `_createFromGhost`) |
-| 331–470 | Cell save + soft/hard delete/restore |
-| 403–480 | Toggle deleted + toggle LOG (`.log-hidden` CSS class) + context menu |
-| 480–550 | Filters, search, appendRows, showRowLog |
-| 580–665 | Public API |
-
----
-
-## Known pitfalls (bugs already fixed — don't reintroduce)
-
-1. **FastAPI route ordering**: static path segments BEFORE parametric routes. `PUT /{tool_id}/columns/reorder` must come BEFORE `PATCH /{tool_id}/columns/{column_id}` — otherwise FastAPI matches `reorder` as `{column_id}` and returns 405.
-
-2. **Drag vs resize conflict**: `<th draggable="true">` intercepts mousedown on `.resize-handle`. Fix: `draggable="false"` on `.resize-handle` div AND check `e.target.classList.contains("resize-handle")` in `dragstart`.
-
-3. **LOG column toggle**: use CSS class `.log-hidden` on `#data-grid` — NOT `display:none` per cell, NOT `render()`. Cells need `data-slug="log"`. CSS: `.data-grid.log-hidden [data-slug="log"] { display: none; }`.
-
-4. **`get_project_conn`**: reads `project_id` from path params OR query params. Never use `Query(...)` for it in route signatures that also list it as a path param.
-
-5. **Circular import `etl.py` ↔ `service.py`**: fix is deferred import `from engine.service import mark_dependents_stale` inside `etl_run_saved` body, not at module top.
-
-6. **ETL deps resolved at save time**: `etl_deps` reflects SQL at last `save_etl_version` call. Always save before relying on deps.
+Module patterns, pitfalls, script load order, and dependency map → `_context/FRONTEND_PATTERNS.md`.

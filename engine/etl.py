@@ -186,6 +186,37 @@ def etl_apply(conn: sqlite3.Connection, tool_id: int, sql: str) -> dict:
             errors.append(f"TAG '{tag_val}': {e}")
             continue
 
+    # --------------------------------------------------------
+    # Flag orphan rows (existed before ETL, missing from ETL result)
+    # --------------------------------------------------------
+    elim_flag = conn.execute(
+        "SELECT id FROM _flags WHERE name = 'ETL: Eliminated'"
+    ).fetchone()
+
+    orphaned = 0
+    if elim_flag:
+        flag_id  = elim_flag[0]
+        etl_tags = {str(r.get("tag", "")).strip() for r in etl_rows}
+        etl_tags.discard("")
+        all_tags = {r[0] for r in conn.execute(f'SELECT tag FROM "{slug}"').fetchall() if r[0]}
+        orphan_tags = all_tags - etl_tags
+
+        for tag in orphan_tags:
+            conn.execute(
+                "INSERT OR IGNORE INTO _cell_flags (tool_slug, row_tag, col_slug, flag_id) VALUES (?,?,?,?)",
+                (slug, tag, "", flag_id)
+            )
+            audit(conn, slug, "ETL_ELIMINATED", row_tag=tag)
+            orphaned += 1
+
+        # Un-eliminate rows that reappeared in ETL source
+        if etl_tags:
+            placeholders = ",".join("?" * len(etl_tags))
+            conn.execute(
+                f"DELETE FROM _cell_flags WHERE tool_slug=? AND col_slug='' AND flag_id=? AND row_tag IN ({placeholders})",
+                [slug, flag_id] + list(etl_tags)
+            )
+
     conn.commit()
 
     return {
@@ -193,6 +224,7 @@ def etl_apply(conn: sqlite3.Connection, tool_id: int, sql: str) -> dict:
         "created":         created,
         "updated":         updated,
         "skipped_cells":   skipped,
+        "orphaned":        orphaned,
         "errors":          errors
     }
 
@@ -293,6 +325,25 @@ def save_etl_version(
     conn.commit()
 
     return {"saved": True, "history": history}
+
+
+def etl_save_draft(conn: sqlite3.Connection, tool_id: int, sql: str) -> dict:
+    """Aggiorna etl_sql senza aggiungere voce allo storico."""
+    tool = get_tool(conn, tool_id)
+    config = {}
+    if tool.get("query_config"):
+        try:
+            config = json.loads(tool["query_config"])
+        except Exception:
+            config = {}
+    config["etl_sql"]  = sql
+    config["etl_deps"] = _resolve_etl_deps(conn, sql)
+    conn.execute(
+        "UPDATE _tools SET query_config = ? WHERE id = ?",
+        (json.dumps(config), tool_id)
+    )
+    conn.commit()
+    return {"saved": True}
 
 
 def get_etl_config(conn: sqlite3.Connection, tool_id: int) -> dict:
