@@ -142,6 +142,9 @@ def etl_apply(conn: sqlite3.Connection, tool_id: int, sql: str) -> dict:
 
             if existing:
                 row_id = existing[0]
+                cur_row = dict(conn.execute(
+                    f'SELECT * FROM "{slug}" WHERE __id=?', (row_id,)
+                ).fetchone())
                 for col_slug, val in etl_row.items():
                     if col_slug in SYSTEM_SLUGS or col_slug in INTERNAL_COLS:
                         continue
@@ -155,10 +158,14 @@ def etl_apply(conn: sqlite3.Connection, tool_id: int, sql: str) -> dict:
                         continue
 
                     str_val = str(val).strip() if val is not None else None
-                    conn.execute(
-                        f'UPDATE "{slug}" SET "{col_slug}"=? WHERE __id=?',
-                        (str_val, row_id)
-                    )
+                    old_val = cur_row.get(col_slug)
+                    if str(old_val or '') != str(str_val or ''):
+                        conn.execute(
+                            f'UPDATE "{slug}" SET "{col_slug}"=? WHERE __id=?',
+                            (str_val, row_id)
+                        )
+                        audit(conn, slug, "UPDATE", row_tag=tag_val, col_slug=col_slug,
+                              old_val=old_val, new_val=str_val, change_type="etl_update")
                 updated += 1
 
             else:
@@ -178,7 +185,8 @@ def etl_apply(conn: sqlite3.Connection, tool_id: int, sql: str) -> dict:
                     f'INSERT INTO "{slug}" ({cols_str}) VALUES ({placeholders})',
                     list(insert_data.values())
                 )
-                audit(conn, slug, "ETL_INSERT", row_tag=tag_val, new_val=tag_val)
+                audit(conn, slug, "ETL_INSERT", row_tag=tag_val, new_val=tag_val,
+                      change_type="etl_insert")
                 next_pos += 1
                 created  += 1
 
@@ -206,7 +214,7 @@ def etl_apply(conn: sqlite3.Connection, tool_id: int, sql: str) -> dict:
                 "INSERT OR IGNORE INTO _cell_flags (tool_slug, row_tag, col_slug, flag_id) VALUES (?,?,?,?)",
                 (slug, tag, "", flag_id)
             )
-            audit(conn, slug, "ETL_ELIMINATED", row_tag=tag)
+            audit(conn, slug, "ETL_ELIMINATED", row_tag=tag, change_type="etl_eliminated")
             orphaned += 1
 
         # Un-eliminate rows that reappeared in ETL source

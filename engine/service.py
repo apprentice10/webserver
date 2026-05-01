@@ -357,7 +357,8 @@ def create_row(
     )
 
     row_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    audit(conn, slug, "INSERT", row_tag=tag_value, new_val=tag_value)
+    audit(conn, slug, "INSERT", row_tag=tag_value, new_val=tag_value,
+          change_type="insert", revision=rev)
     mark_tool_stale(conn, slug)
     mark_dependents_stale(conn, slug)
     conn.commit()
@@ -437,8 +438,8 @@ def update_cell(
             (new_value, tool_slug, old_value)
         )
 
-    audit(conn, tool_slug, "UPDATE", row_tag=tag_val, field=slug,
-          old_val=old_value, new_val=new_value)
+    audit(conn, tool_slug, "UPDATE", row_tag=tag_val, col_slug=slug,
+          old_val=old_value, new_val=new_value, change_type="manual_edit", revision=rev)
     mark_tool_stale(conn, tool_slug)
     mark_dependents_stale(conn, tool_slug)
     conn.commit()
@@ -485,6 +486,9 @@ def remove_override(
         "DELETE FROM _overrides WHERE tool_slug = ? AND row_tag = ? AND col_slug = ?",
         (slug, tag_val, col_slug)
     )
+    audit(conn, slug, "RESTORE", row_tag=tag_val, col_slug=col_slug,
+          old_val=row.get(col_slug), new_val=etl_value,
+          change_type="restore", revision=tool["rev"])
     conn.commit()
 
     updated = conn.execute(
@@ -527,7 +531,7 @@ def soft_delete_row(
 
     conn.execute(f'DELETE FROM "{slug}" WHERE __id = ?', (row_id,))
 
-    audit(conn, slug, "DELETE", row_tag=tag_val)
+    audit(conn, slug, "DELETE", row_tag=tag_val, change_type="delete", revision=rev)
     mark_tool_stale(conn, slug)
     mark_dependents_stale(conn, slug)
     conn.commit()
@@ -586,6 +590,7 @@ def restore_row(
     new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
     conn.execute("DELETE FROM _trash WHERE id = ?", (trash_id,))
+    audit(conn, slug, "RESTORE", row_tag=tag_val, change_type="restore", revision=rev)
     mark_tool_stale(conn, slug)
     mark_dependents_stale(conn, slug)
     conn.commit()
@@ -660,7 +665,8 @@ def paste_rows(
         )
         new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-        audit(conn, slug, "INSERT", row_tag=tag_val, new_val=tag_val)
+        audit(conn, slug, "INSERT", row_tag=tag_val, new_val=tag_val,
+              change_type="bulk_paste", revision=rev)
         next_pos += 1
 
         row = conn.execute(
@@ -673,6 +679,64 @@ def paste_rows(
         mark_dependents_stale(conn, slug)
     conn.commit()
     return {"inserted": inserted, "skipped": skipped}
+
+
+def rollback_cell(
+    conn: sqlite3.Connection,
+    tool_id: int,
+    row_id: int,
+    project_id: int,
+    col_slug: str,
+    entry_id: int
+) -> dict:
+    tool = get_tool(conn, tool_id)
+    tool_slug = tool["slug"]
+    rev = tool["rev"]
+
+    if col_slug in ("rev", "log"):
+        raise HTTPException(status_code=400, detail="Cannot rollback system column")
+
+    entry = conn.execute(
+        "SELECT * FROM _audit WHERE id = ? AND tool_slug = ?",
+        (entry_id, tool_slug)
+    ).fetchone()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Audit entry not found")
+
+    row = conn.execute(
+        f'SELECT * FROM "{tool_slug}" WHERE __id = ?', (row_id,)
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Row not found")
+
+    row = dict(row)
+    tag_val = row.get("tag", "")
+    restore_value = dict(entry)["old_val"]
+    current_value = row.get(col_slug)
+
+    conn.execute(
+        f'UPDATE "{tool_slug}" SET "{col_slug}" = ? WHERE __id = ?',
+        (restore_value, row_id)
+    )
+
+    log_entry = _format_log_entry(rev, col_slug, current_value, restore_value)
+    new_log = _append_log(row.get("__log"), f"[ROLLBACK] {log_entry}")
+    conn.execute(
+        f'UPDATE "{tool_slug}" SET __log = ? WHERE __id = ?',
+        (new_log, row_id)
+    )
+
+    audit(conn, tool_slug, "ROLLBACK", row_tag=tag_val, col_slug=col_slug,
+          old_val=current_value, new_val=restore_value, change_type="rollback", revision=rev)
+    mark_tool_stale(conn, tool_slug)
+    mark_dependents_stale(conn, tool_slug)
+    conn.commit()
+
+    updated = conn.execute(
+        f'SELECT * FROM "{tool_slug}" WHERE __id = ?', (row_id,)
+    ).fetchone()
+    overrides = get_row_overrides(conn, tool_slug, tag_val)
+    return serialize_active_row(updated, tool_id, project_id, overrides)
 
 
 # ============================================================

@@ -149,6 +149,64 @@
     margin-top: 24px;
 }
 
+/* change_type badge inside log entry */
+.sidebar-log-type {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--color-text-muted);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    padding: 0 3px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+/* rollback button inside log entry */
+.sidebar-log-rollback {
+    float: right;
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    padding: 0 4px;
+    line-height: 16px;
+}
+
+.sidebar-log-rollback:hover {
+    color: var(--color-accent, #4A90D9);
+    border-color: var(--color-accent, #4A90D9);
+    background: var(--color-surface);
+}
+
+/* actions bar below log list */
+.sidebar-log-actions {
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    justify-content: flex-end;
+}
+
+.btn-log-export {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    cursor: pointer;
+}
+
+.btn-log-export:hover {
+    background: var(--color-surface);
+    border-color: var(--color-accent, #4A90D9);
+}
+
 /* ------------------------------------------------------------
    SIDEBAR FLAGS — flag manager panel
    ------------------------------------------------------------ */

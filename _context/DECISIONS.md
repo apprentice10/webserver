@@ -69,6 +69,15 @@
 
 ---
 
+## D10 — Dual-write audit: `_audit` structured + `__log` text kept in parallel
+
+**Decision:** All mutation operations write to both `_audit` (structured) and `__log` (text on the row). The LOG sidebar/cell views read from `_audit`; the LOG column cell preview reads `__log`.
+**Rationale:** Replacing `__log` completely would require redesigning the LOG cell preview (which uses `row.row_log` from the serialized row without an extra JOIN). Dual-write avoids this risk while delivering full structured audit functionality.
+**Tradeoff:** Data is duplicated per write; `__log` can become stale if `rollback_cell` adds a `[ROLLBACK]` prefix that doesn't parse cleanly as a log entry.
+**Future:** Remove `__log` column and redesign the LOG cell preview to show entry count from a cached field once Group G is fully validated.
+
+---
+
 ## D09 — Plugin discovery via `tools/*/tool.json` manifests
 
 **Decision:** Tool types are discovered at startup by scanning `tools/*/tool.json`. `TOOL_CATALOG` in `engine/catalog.py` is built dynamically, not hardcoded.

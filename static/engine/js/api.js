@@ -280,6 +280,20 @@ const ApiClient = (() => {
         });
     }
 
+    async function getAudit({ rowTag, rowTags, colSlug, colSlugs, limit = 200 } = {}) {
+        const p = new URLSearchParams({ project_id: PROJECT_ID, limit });
+        if (rowTag)   p.set("row_tag", rowTag);
+        if (rowTags)  p.set("row_tags", rowTags);
+        if (colSlug)  p.set("col_slug", colSlug);
+        if (colSlugs) p.set("col_slugs", colSlugs);
+        return request(`/api/tools/${TOOL_ID}/audit?${p}`);
+    }
+
+    async function rollbackCell(rowId, col, entryId) {
+        const p = new URLSearchParams({ project_id: PROJECT_ID, col, entry_id: entryId });
+        return request(`/api/tools/${TOOL_ID}/rows/${rowId}/rollback?${p}`, { method: "POST" });
+    }
+
 
     // --------------------------------------------------------
     // API PUBBLICA
@@ -318,7 +332,9 @@ const ApiClient = (() => {
         etlLoadSchema,
         saveTemplate,
         deleteTemplate,
-        etlSaveDraft
+        etlSaveDraft,
+        getAudit,
+        rollbackCell,
     };
 
 })();

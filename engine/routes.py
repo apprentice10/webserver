@@ -600,6 +600,61 @@ def keep_row(
     return {"kept": True, "row_tag": tag}
 
 
+@router.get("/{tool_id}/audit")
+def get_audit_log(
+    tool_id:   int,
+    project_id: int = Query(...),
+    row_tag:   Optional[str] = Query(None),
+    row_tags:  Optional[str] = Query(None),
+    col_slug:  Optional[str] = Query(None),
+    col_slugs: Optional[str] = Query(None),
+    limit:     int = Query(200),
+    conn:      sqlite3.Connection = Depends(get_project_conn),
+):
+    tool      = service.get_tool(conn, tool_id)
+    tool_slug = tool["slug"]
+    conds:  list = ["tool_slug = ?"]
+    params: list = [tool_slug]
+
+    all_tags = [t.strip() for t in (row_tags or "").split(",") if t.strip()]
+    if row_tag:
+        all_tags.append(row_tag)
+    if all_tags:
+        ph = ",".join("?" * len(all_tags))
+        conds.append(f"row_tag IN ({ph})")
+        params.extend(all_tags)
+
+    all_cols = [c.strip() for c in (col_slugs or "").split(",") if c.strip()]
+    if col_slug:
+        all_cols.append(col_slug)
+    if all_cols:
+        ph = ",".join("?" * len(all_cols))
+        conds.append(f"(col_slug IN ({ph}) OR field IN ({ph}))")
+        params.extend(all_cols * 2)
+
+    where = " AND ".join(conds)
+    params.append(limit)
+    rows = conn.execute(
+        f"SELECT id, ts, action, change_type, row_tag, "
+        f"COALESCE(col_slug, field) AS col_slug, old_val, new_val, revision "
+        f"FROM _audit WHERE {where} ORDER BY id DESC LIMIT ?",
+        params
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.post("/{tool_id}/rows/{row_id}/rollback")
+def rollback_cell(
+    tool_id:    int,
+    row_id:     int,
+    col:        str = Query(...),
+    entry_id:   int = Query(...),
+    project_id: int = Query(...),
+    conn:       sqlite3.Connection = Depends(get_project_conn),
+):
+    return service.rollback_cell(conn, tool_id, row_id, project_id, col, entry_id)
+
+
 @router.post("/{tool_id}/rows/{row_id}/hard-delete")
 def hard_delete_row(
     tool_id: int,

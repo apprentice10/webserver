@@ -71,28 +71,15 @@ When a row imported via ETL from a source table is deleted from the source, the 
 
 The LOG is displayed in the sidebar (see Group D). The structure is a navigable tree.
 
-37. **LOG architectural replacement** — migrate from `log TEXT` column in tool table to a dedicated table `_audit_log` (or extension of `_audit`); proposed schema:
+37. ~~**LOG architectural replacement** — `_audit` table extended with `change_type, col_slug, revision, changed_by`; all mutation paths (manual_edit, etl_update, etl_insert, delete, restore, bulk_paste, rollback) now write structured entries~~ ✓
 
-    * `id`, `tool_slug`, `row_id`, `row_tag`, `column_slug`
-    * `old_value`, `new_value`, `revision`, `changed_at`, `changed_by`
-    * `change_type`: `manual_edit | etl_update | restore | delete | bulk_paste | undo | system`
+38. ~~**Unchanged UI compatibility** — `showRowLog` migrated from modal to sidebar; fetches from `GET /tools/{tid}/audit`~~ ✓
 
-38. **Unchanged UI compatibility** — context menu entry "View row LOG" continues to work by opening the LOG sidebar instead of the current modal
+39. ~~**Tree structure LOG** — `showRowLog` groups by col_slug (column → entries); `showRangeLog` groups by column → row → entries~~ ✓
 
-39. **Tree structure LOG** — the LOG in the sidebar is organized:
+40. ~~**Single cell rollback** — `POST /tools/{tid}/rows/{rid}/rollback?col=X&entry_id=N`; `↩` button in each LOG entry; confirms before restoring~~ ✓
 
-    ```
-    - Column
-        - Row
-            - Log entry 1 (timestamp, old→new)
-            - Log entry 2
-    ```
-
-    Right-click on a log entry → context menu with entry "Restore original value"
-
-40. **Single cell rollback** — from LOG entry, restore that cell value to the `old_value` of the selected entry (API `POST /rows/{row_id}/rollback?col=X&entry_id=N`)
-
-41. **Export LOG** — button under the tree view in the sidebar; generates a downloadable text file with the displayed LOG content
+41. ~~**Export LOG** — "Export LOG" button in sidebar generates downloadable `audit_log.txt` from current sidebar content~~ ✓
 
 42. **Advanced LOG filtering** — future UI: filter by column, filter by change type, before/after diff
 

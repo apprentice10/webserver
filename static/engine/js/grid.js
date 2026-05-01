@@ -35,6 +35,7 @@ const GridManager = (() => {
     let _isDragging    = false;
     let _isAdditive    = false; // true when Ctrl is held (ranges accumulate)
     let _ctxFlagsCache = null;  // [{id,name,color}] — non-system flags; null = reload on next submenu open
+    let _logSidebarCtx = null;  // {rowId, colSlug} — last LOG sidebar context for refresh after rollback
 
 
     // --------------------------------------------------------
@@ -986,85 +987,91 @@ const GridManager = (() => {
 
 
     // --------------------------------------------------------
-    // SHOW ROW LOG
+    // SHOW ROW LOG — async, fetches from _audit API, opens sidebar
     // --------------------------------------------------------
 
-    function showRowLog(rowId) {
+    async function showRowLog(rowId) {
         const row = _rows.find(r => r.id === rowId);
         if (!row) return;
 
-        document.getElementById("modal-log-tag").textContent =
-            row.tag || `Riga #${rowId}`;
+        _logSidebarCtx = { rowId, colSlug: null };
+        const rowLabel = _escHtml(row.tag || `#${rowId}`);
 
-        const content = document.getElementById("modal-log-content");
+        SidebarManager.open('LOG');
+        SidebarManager.setTitle(`LOG — ${rowLabel}`);
+        SidebarManager.setContent('<p class="sidebar-log-empty">Loading…</p>');
 
-        if (!row.row_log) {
-            content.innerHTML = '<div class="log-empty">Nessuna modifica registrata.</div>';
-        } else {
-            const entries = row.row_log.split("\n").filter(Boolean);
-            content.innerHTML = entries.map(e => {
-                const isRemoved  = e.includes("REMOVED");
-                const isRestored = e.includes("RESTORED");
-                const cls = isRemoved  ? "log-entry log-removed"
-                          : isRestored ? "log-entry log-restored"
-                          : "log-entry";
-                return `<div class="${cls}">${_escHtml(e)}</div>`;
-            }).join("");
+        try {
+            const entries = await ApiClient.getAudit({ rowTag: row.tag, limit: 300 });
+            if (!entries || entries.length === 0) {
+                SidebarManager.setContent('<p class="sidebar-log-empty">No changes recorded for this row.</p>');
+                return;
+            }
+
+            // Group by col_slug → tree: col → entries
+            const colMap = new Map();
+            for (const e of entries) {
+                const cs = e.col_slug || '(row)';
+                if (!colMap.has(cs)) colMap.set(cs, []);
+                colMap.get(cs).push(e);
+            }
+
+            let html = `<div class="sidebar-log-meta">
+                <span class="sidebar-log-label">Row:</span>
+                <span class="sidebar-log-value">${rowLabel}</span>
+            </div>`;
+
+            for (const [cs, colEntries] of colMap) {
+                const colId = cs === '(row)' ? null : cs;
+                html += `<div class="sidebar-log-group">
+                    <div class="sidebar-log-group-header">${_escHtml(cs)}</div>
+                    ${_renderAuditEntries(colEntries, rowId, colId)}
+                </div>`;
+            }
+
+            html += `<div class="sidebar-log-actions"><button class="btn-icon btn-log-export" onclick="GridManager.exportLog()">Export LOG</button></div>`;
+            SidebarManager.setContent(html);
+            _bindRollbackButtons();
+        } catch (e) {
+            SidebarManager.setContent('<p class="sidebar-log-empty">Error loading log.</p>');
         }
-
-        openModal("modal-row-log");
     }
 
 
     // --------------------------------------------------------
-    // SHOW CELL LOG (sidebar)
+    // SHOW CELL LOG (sidebar) — async, fetches from _audit API
     // --------------------------------------------------------
 
-    function showCellLog(rowId, colSlug) {
+    async function showCellLog(rowId, colSlug) {
         if (!colSlug) return;
         const row = _rows.find(r => r.id === rowId);
         if (!row) return;
 
-        const colKey = colSlug.toUpperCase();
-        const rowLabel = _escHtml(row.tag || `#${rowId}`);
+        _logSidebarCtx = { rowId, colSlug };
         const colLabel = _escHtml(colSlug);
+        const rowLabel = _escHtml(row.tag || `#${rowId}`);
 
-        let bodyHtml;
-        if (!row.row_log) {
-            bodyHtml = '<p class="sidebar-log-empty">No changes recorded for this cell.</p>';
-        } else {
-            const allEntries = row.row_log.split("\n").filter(Boolean);
-            // Entry format: "[timestamp REV n] COL_KEY: old → new"
-            const cellEntries = allEntries.filter(e => e.includes(`] ${colKey}:`));
+        SidebarManager.open('LOG');
+        SidebarManager.setTitle(`LOG — ${colLabel}`);
+        SidebarManager.setContent('<p class="sidebar-log-empty">Loading…</p>');
 
-            if (cellEntries.length === 0) {
-                bodyHtml = '<p class="sidebar-log-empty">No changes recorded for this cell.</p>';
-            } else {
-                const items = cellEntries.map(e => {
-                    const m = e.match(/^\[(.+?)\]\s+\w+:\s+(.+)$/);
-                    const ts     = m ? _escHtml(m[1]) : '';
-                    const change = m ? _escHtml(m[2]) : _escHtml(e);
-                    return `<li class="sidebar-log-entry">
-                        <div class="sidebar-log-ts">${ts}</div>
-                        <div class="sidebar-log-change">${change}</div>
-                    </li>`;
-                }).join('');
-                bodyHtml = `<ul class="sidebar-log-list">${items}</ul>`;
-            }
-        }
-
-        const html = `
-            <div class="sidebar-log-meta">
+        try {
+            const entries = await ApiClient.getAudit({ rowTag: row.tag, colSlug });
+            const headerHtml = `<div class="sidebar-log-meta">
                 <span class="sidebar-log-label">Column:</span>
                 <span class="sidebar-log-value">${colLabel}</span>
                 <span class="sidebar-log-label">Row:</span>
                 <span class="sidebar-log-value">${rowLabel}</span>
-            </div>
-            ${bodyHtml}`;
-
-        SidebarManager.open('LOG');
-        SidebarManager.setTitle(`LOG — ${colLabel}`);
-        SidebarManager.setContent(html);
+            </div>`;
+            const bodyHtml = _renderAuditEntries(entries, rowId, colSlug);
+            const actionsHtml = (entries && entries.length > 0)
+                ? `<div class="sidebar-log-actions"><button class="btn-icon btn-log-export" onclick="GridManager.exportLog()">Export LOG</button></div>`
+                : '';
+            SidebarManager.setContent(headerHtml + bodyHtml + actionsHtml);
+            _bindRollbackButtons();
+        } catch (e) {
+            SidebarManager.setContent('<p class="sidebar-log-empty">Error loading log.</p>');
+        }
     }
 
 
@@ -1087,13 +1094,15 @@ const GridManager = (() => {
         return seen.size <= 1;
     }
 
-    function showRangeLog() {
+    async function showRangeLog() {
         if (_ranges.length === 0) return;
 
         const columns = ColumnsManager.getColumns();
+        _logSidebarCtx = null;
 
-        // Collect unique cells in range order (col-major grouping)
-        const colCellMap = new Map(); // colSlug → Map(rowTag → entries[])
+        // Collect unique (col_slug → Set of row_tags) from selection
+        const colCellMap = new Map();
+        const rowTagSet  = new Set();
 
         for (const rng of _ranges) {
             const rMin = Math.min(rng.start.r, rng.end.r);
@@ -1102,59 +1111,158 @@ const GridManager = (() => {
             const cMax = Math.max(rng.start.c, rng.end.c);
             for (let ci = cMin; ci <= cMax; ci++) {
                 const col = columns[ci];
-                if (!col) continue;
-                const colSlug = col.slug;
-                const colKey  = colSlug.toUpperCase();
-                if (!colCellMap.has(colSlug)) colCellMap.set(colSlug, new Map());
-                const rowMap = colCellMap.get(colSlug);
-
+                if (!col || col.slug === 'log' || col.slug === 'rev') continue;
+                if (!colCellMap.has(col.slug)) colCellMap.set(col.slug, new Set());
                 for (let ri = rMin; ri <= rMax; ri++) {
                     const row = _filteredRows[ri];
                     if (!row) continue;
-                    const rowTag = row.tag || `#${row.id}`;
-                    if (!rowMap.has(rowTag)) rowMap.set(rowTag, []);
-                    if (row.row_log) {
-                        const entries = row.row_log.split('\n').filter(e => e.includes(`] ${colKey}:`));
-                        rowMap.get(rowTag).push(...entries);
-                    }
+                    rowTagSet.add(row.tag);
+                    colCellMap.get(col.slug).add(row.tag);
                 }
             }
         }
 
-        let hasAny = false;
-        let html   = '';
-
-        for (const [colSlug, rowMap] of colCellMap) {
-            let rowsHtml = '';
-            for (const [rowTag, entries] of rowMap) {
-                if (entries.length === 0) continue;
-                hasAny = true;
-                const items = entries.map(e => {
-                    const m = e.match(/^\[(.+?)\]\s+\w+:\s+(.+)$/);
-                    const ts     = m ? _escHtml(m[1]) : '';
-                    const change = m ? _escHtml(m[2]) : _escHtml(e);
-                    return `<li class="sidebar-log-entry">
-                        <div class="sidebar-log-ts">${ts}</div>
-                        <div class="sidebar-log-change">${change}</div>
-                    </li>`;
-                }).join('');
-                rowsHtml += `
-                    <div class="sidebar-log-row-label">${_escHtml(rowTag)}</div>
-                    <ul class="sidebar-log-list">${items}</ul>`;
-            }
-            if (!rowsHtml) continue;
-            html += `
-                <div class="sidebar-log-group">
-                    <div class="sidebar-log-group-header">${_escHtml(colSlug)}</div>
-                    ${rowsHtml}
-                </div>`;
-        }
-
-        if (!hasAny) html = '<p class="sidebar-log-empty">No changes recorded for the selected range.</p>';
+        if (rowTagSet.size === 0) return;
 
         SidebarManager.open('LOG');
         SidebarManager.setTitle('LOG — selection');
-        SidebarManager.setContent(html);
+        SidebarManager.setContent('<p class="sidebar-log-empty">Loading…</p>');
+
+        try {
+            const entries = await ApiClient.getAudit({
+                rowTags:  [...rowTagSet].join(','),
+                colSlugs: [...colCellMap.keys()].join(','),
+                limit:    500,
+            });
+
+            // Index entries: colSlug → rowTag → []
+            const idx = new Map();
+            for (const e of entries) {
+                const cs = e.col_slug || '';
+                const rt = e.row_tag  || '';
+                if (!idx.has(cs)) idx.set(cs, new Map());
+                const rm = idx.get(cs);
+                if (!rm.has(rt)) rm.set(rt, []);
+                rm.get(rt).push(e);
+            }
+
+            let hasAny = false;
+            let html = '';
+
+            for (const [colSlug, rowTagSet2] of colCellMap) {
+                const colIdx = idx.get(colSlug);
+                if (!colIdx) continue;
+                let colHtml = '';
+                for (const rowTag of rowTagSet2) {
+                    const rowEntries = colIdx.get(rowTag) || [];
+                    if (rowEntries.length === 0) continue;
+                    hasAny = true;
+                    const row2   = _rows.find(r => r.tag === rowTag);
+                    const rowId2 = row2 ? row2.id : null;
+                    colHtml += `<div class="sidebar-log-row-label">${_escHtml(rowTag)}</div>
+                        ${_renderAuditEntries(rowEntries, rowId2, colSlug)}`;
+                }
+                if (!colHtml) continue;
+                html += `<div class="sidebar-log-group">
+                    <div class="sidebar-log-group-header">${_escHtml(colSlug)}</div>
+                    ${colHtml}
+                </div>`;
+            }
+
+            if (!hasAny) html = '<p class="sidebar-log-empty">No changes recorded for the selected range.</p>';
+            else html += `<div class="sidebar-log-actions"><button class="btn-icon btn-log-export" onclick="GridManager.exportLog()">Export LOG</button></div>`;
+
+            SidebarManager.setContent(html);
+            _bindRollbackButtons();
+        } catch (e) {
+            SidebarManager.setContent('<p class="sidebar-log-empty">Error loading log.</p>');
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // AUDIT LOG HELPERS
+    // --------------------------------------------------------
+
+    function _renderAuditEntries(entries, rowId, colSlug) {
+        if (!entries || entries.length === 0)
+            return '<p class="sidebar-log-empty">No changes recorded.</p>';
+        const items = entries.map(e => {
+            const ts   = _escHtml(e.ts || '');
+            const ct   = _escHtml(e.change_type || e.action || '');
+            const rev  = e.revision ? ` REV ${_escHtml(e.revision)}` : '';
+            const oldV = (e.old_val != null) ? `'${_escHtml(String(e.old_val))}'` : '—';
+            const newV = (e.new_val != null) ? `'${_escHtml(String(e.new_val))}'` : '—';
+            const rollbackBtn = (rowId && colSlug)
+                ? `<button class="sidebar-log-rollback" data-row-id="${rowId}" data-col="${_escAttr(colSlug)}" data-entry-id="${e.id}" title="Restore this value">↩</button>`
+                : '';
+            return `<li class="sidebar-log-entry">
+                <div class="sidebar-log-ts">${ts}${rev} <span class="sidebar-log-type">${ct}</span>${rollbackBtn}</div>
+                <div class="sidebar-log-change">${oldV} → ${newV}</div>
+            </li>`;
+        }).join('');
+        return `<ul class="sidebar-log-list">${items}</ul>`;
+    }
+
+    function _bindRollbackButtons() {
+        document.querySelectorAll('.sidebar-log-rollback').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const rId     = parseInt(btn.dataset.rowId, 10);
+                const col     = btn.dataset.col;
+                const entryId = parseInt(btn.dataset.entryId, 10);
+                await _rollbackCell(rId, col, entryId);
+            });
+        });
+    }
+
+    async function _rollbackCell(rowId, colSlug, entryId) {
+        if (!confirm('Restore cell to this audit entry value?')) return;
+        try {
+            const updated = await ApiClient.rollbackCell(rowId, colSlug, entryId);
+            const idx  = _rows.findIndex(r => r.id === rowId);
+            if (idx  !== -1) _rows[idx]  = updated;
+            const fidx = _filteredRows.findIndex(r => r.id === rowId);
+            if (fidx !== -1) _filteredRows[fidx] = updated;
+            _updateLogCell(rowId, updated.row_log);
+
+            const columns = ColumnsManager.getColumns();
+            const rowEl   = document.querySelector(`tr[data-row-id="${rowId}"]`);
+            if (rowEl) {
+                const rowIdx = _filteredRows.findIndex(r => r.id === rowId);
+                rowEl.outerHTML = _renderRow(updated, columns, rowIdx);
+            }
+            showToast('Value restored', 'success');
+            // Refresh sidebar
+            showCellLog(rowId, colSlug);
+        } catch (e) {
+            showToast(e.message || 'Rollback failed', 'error');
+        }
+    }
+
+    function exportLog() {
+        const body = document.querySelector('#sidebar-panel .sidebar-body');
+        if (!body) return;
+        const titleEl = document.querySelector('#sidebar-panel .sidebar-title');
+        const lines = titleEl ? [titleEl.textContent.trim(), ''] : [];
+        body.querySelectorAll(
+            '.sidebar-log-meta, .sidebar-log-group-header, .sidebar-log-row-label, ' +
+            '.sidebar-log-ts, .sidebar-log-change'
+        ).forEach(el => {
+            const clone = el.cloneNode(true);
+            clone.querySelectorAll('button').forEach(b => b.remove());
+            const text = clone.textContent.trim();
+            if (text) lines.push(text);
+        });
+        if (lines.length <= 1) return;
+        const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = 'audit_log.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 
 
@@ -1308,6 +1416,7 @@ const GridManager = (() => {
         showRowLog,
         showCellLog,
         showRangeLog,
+        exportLog,
         openContextMenu,
         removeFlagFromCells,
         getRange:     () => (_ranges.length > 0 ? _ranges[0] : null),

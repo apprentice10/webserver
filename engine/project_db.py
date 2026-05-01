@@ -66,14 +66,18 @@ CREATE TABLE IF NOT EXISTS _overrides (
 );
 
 CREATE TABLE IF NOT EXISTS _audit (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts        TEXT DEFAULT (datetime('now')),
-    tool_slug TEXT,
-    action    TEXT,
-    row_tag   TEXT,
-    field     TEXT,
-    old_val   TEXT,
-    new_val   TEXT
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts          TEXT DEFAULT (datetime('now')),
+    tool_slug   TEXT,
+    action      TEXT,
+    change_type TEXT,
+    row_tag     TEXT,
+    col_slug    TEXT,
+    field       TEXT,
+    old_val     TEXT,
+    new_val     TEXT,
+    revision    TEXT,
+    changed_by  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS _project (
@@ -146,6 +150,16 @@ def _migrate_project_db(conn: sqlite3.Connection) -> None:
     ovr_cols = {row[1] for row in conn.execute("PRAGMA table_info(_overrides)").fetchall()}
     if "etl_value" not in ovr_cols:
         conn.execute("ALTER TABLE _overrides ADD COLUMN etl_value TEXT")
+
+    audit_cols = {row[1] for row in conn.execute("PRAGMA table_info(_audit)").fetchall()}
+    for col_def in [
+        ("change_type", "TEXT"),
+        ("col_slug",    "TEXT"),
+        ("revision",    "TEXT"),
+        ("changed_by",  "TEXT"),
+    ]:
+        if col_def[0] not in audit_cols:
+            conn.execute(f"ALTER TABLE _audit ADD COLUMN {col_def[0]} {col_def[1]}")
 
     existing_tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     if "_project" not in existing_tables:
@@ -257,13 +271,22 @@ def audit(
     row_tag: str = None,
     field: str = None,
     old_val: str = None,
-    new_val: str = None
+    new_val: str = None,
+    change_type: str = None,
+    revision: str = None,
+    changed_by: str = None,
+    col_slug: str = None,
 ) -> None:
+    effective_col = col_slug or field
     conn.execute(
-        "INSERT INTO _audit (tool_slug, action, row_tag, field, old_val, new_val) VALUES (?,?,?,?,?,?)",
-        (tool_slug, action, row_tag, field,
+        """INSERT INTO _audit
+           (tool_slug, action, change_type, row_tag, col_slug, field, old_val, new_val, revision, changed_by)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (tool_slug, action, change_type, row_tag,
+         effective_col, field,
          str(old_val) if old_val is not None else None,
-         str(new_val) if new_val is not None else None)
+         str(new_val) if new_val is not None else None,
+         revision, changed_by)
     )
 
 
