@@ -8,7 +8,7 @@
 | Righe    | Sezione |
 |----------|---------|
 | 1–61     | `etl_preview` — esegue la query ETL in sola lettura, restituisce colonne + righe + warning |
-| 68–197   | `etl_apply` — crea colonne mancanti, merge righe per TAG, rispetta `_overrides` |
+| 68–204   | `etl_apply` — crea colonne mancanti, merge righe per TAG, rispetta `_overrides`; **persiste SQL come draft** in `query_config` prima del commit |
 | 204–255  | `etl_run_saved` — topological run con `_visited` cycle guard; import differito da service.py |
 | 262–314  | `save_etl_version` — salva SQL in `query_config`, fa rotate history (max 20), estrae `etl_deps` |
 | 298–314  | `etl_save_draft` — aggiorna etl_sql + etl_deps senza aggiungere voce allo storico |

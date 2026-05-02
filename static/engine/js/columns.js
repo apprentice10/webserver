@@ -24,6 +24,7 @@ const ColumnsManager = (() => {
 
     async function loadColumns() {
         _columns = await ApiClient.loadColumns();
+        _initColContextMenu();
         return _columns;
     }
 
@@ -38,6 +39,10 @@ const ColumnsManager = (() => {
      */
     // Stato drag-and-drop colonne
     let _dragSrcId = null;
+
+    // Stato context menu colonne
+    let _ctxColId   = null;
+    let _ctxColName = "";
 
     function renderHeader() {
         const headerRow = document.getElementById("grid-header-row");
@@ -148,6 +153,13 @@ const ColumnsManager = (() => {
                     showToast("Errore salvataggio ordine: " + err.message, "error");
                 }
             });
+
+            th.addEventListener("contextmenu", e => {
+                e.preventDefault();
+                _ctxColId   = parseInt(th.dataset.columnId);
+                _ctxColName = th.querySelector(".th-label")?.textContent ?? "";
+                _openColContextMenu(e.clientX, e.clientY);
+            });
         });
     }
 
@@ -207,6 +219,14 @@ const ColumnsManager = (() => {
         const newName = prompt(`Rinomina colonna '${currentName}':`, currentName);
         if (!newName || newName.trim() === currentName) return;
 
+        const col = _columns.find(c => c.id === columnId);
+        if (col && col.lineage_info) {
+            const ok = confirm(
+                `Rinominare '${currentName}' in '${newName.trim()}' aggiornerà l'alias AS nella query ETL salvata.\nContinuare?`
+            );
+            if (!ok) return;
+        }
+
         try {
             const updated = await ApiClient.updateColumn(columnId, {
                 name: newName.trim()
@@ -216,7 +236,11 @@ const ColumnsManager = (() => {
             if (idx !== -1) _columns[idx] = updated;
 
             renderHeader();
-            showToast(`Colonna rinominata in '${newName}'.`, "success");
+            if (updated && updated.etl_sql_updated) {
+                showToast(`Colonna rinominata in '${newName.trim()}'. La query ETL è stata aggiornata.`, "success");
+            } else {
+                showToast(`Colonna rinominata in '${newName.trim()}'.`, "success");
+            }
         } catch (err) {
             showToast(err.message, "error");
         }
@@ -228,19 +252,31 @@ const ColumnsManager = (() => {
     // --------------------------------------------------------
 
     async function deleteColumn(columnId, columnName) {
-        if (!confirm(
-            `Eliminare la colonna '${columnName}'?\n` +
-            `Tutti i valori in questa colonna verranno persi.`
-        )) return;
+        const col = _columns.find(c => c.id === columnId);
+        let confirmMsg = `Eliminare la colonna '${columnName}'?\nTutti i valori in questa colonna verranno persi.`;
+        if (col && col.lineage_info) {
+            const li = typeof col.lineage_info === "string"
+                ? JSON.parse(col.lineage_info) : col.lineage_info;
+            const src = li.from_tool
+                ? `${li.from_tool}.${(li.source_expr || "").replace(/^\w+\./, "")}`
+                : (li.source_expr || "ETL");
+            confirmMsg = `La colonna '${columnName}' è generata da ETL (sorgente: ${src}).\n`
+                + `Eliminandola, la query ETL verrà aggiornata automaticamente.\nContinuare?`;
+        }
+        if (!confirm(confirmMsg)) return;
 
         try {
-            await ApiClient.deleteColumn(columnId);
+            const result = await ApiClient.deleteColumn(columnId);
             _columns = _columns.filter(c => c.id !== columnId);
 
             renderHeader();
             GridManager.render();
 
-            showToast(`Colonna '${columnName}' eliminata.`, "success");
+            if (result && result.etl_sql_updated) {
+                showToast(`Colonna '${columnName}' eliminata. La query ETL è stata aggiornata.`, "success");
+            } else {
+                showToast(`Colonna '${columnName}' eliminata.`, "success");
+            }
         } catch (err) {
             showToast(err.message, "error");
         }
@@ -276,6 +312,50 @@ const ColumnsManager = (() => {
         return String(str)
             .replace(/'/g, "\\'")
             .replace(/"/g, "&quot;");
+    }
+
+
+    // --------------------------------------------------------
+    // COLUMN HEADER CONTEXT MENU
+    // --------------------------------------------------------
+
+    function _openColContextMenu(x, y) {
+        const menu = document.getElementById("col-context-menu");
+        if (!menu) return;
+        menu.style.left = x + "px";
+        menu.style.top  = y + "px";
+        menu.classList.add("visible");
+    }
+
+    function _closeColContextMenu() {
+        const menu = document.getElementById("col-context-menu");
+        if (menu) menu.classList.remove("visible");
+        _ctxColId = null;
+    }
+
+    function _initColContextMenu() {
+        const menu = document.getElementById("col-context-menu");
+        if (!menu) return;
+
+        menu.addEventListener("click", e => {
+            const item = e.target.closest("[data-action]");
+            if (!item || _ctxColId === null) return;
+            const id   = _ctxColId;
+            const name = _ctxColName;
+            _closeColContextMenu();
+
+            if (item.dataset.action === "rename") renameColumn(id, name);
+            if (item.dataset.action === "delete") deleteColumn(id, name);
+        });
+
+        document.addEventListener("click", e => {
+            if (menu.classList.contains("visible") && !menu.contains(e.target))
+                _closeColContextMenu();
+        });
+
+        document.addEventListener("keydown", e => {
+            if (e.key === "Escape") _closeColContextMenu();
+        });
     }
 
 

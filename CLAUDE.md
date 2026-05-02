@@ -33,6 +33,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Frontend grid | `static/engine/js/grid.js.md`, `static/engine/js/columns.js.md` |
 | Frontend ETL editor | `static/engine/js/etl_editor.js.md`, `static/engine/js/api.js.md` |
 | Sidebar shell, LOG sidebar, FLAG sidebar | `static/engine/js/sidebar.js.md`, `static/engine/css/sidebar.css` |
+| Bidirectional ETL (Group H) | `_context/ETL_BIDIRECTIONAL.md` |
 
 ---
 
@@ -73,6 +74,7 @@ uvicorn main:app --reload
 | `engine/project_db.py` | Per-project DB setup, `get_project_conn`, `SYSTEM_COLUMN_DEFS`, `audit()` | `engine/project_db.py.md` |
 | `engine/routes.py` | `/api/tools/` endpoints — thin layer, delegates to service | `engine/routes.py.md` |
 | `engine/service.py` | All business logic | `engine/service.py.md` |
+| `engine/staleness.py` | ETL staleness helpers: `mark_tool_stale`, `mark_dependents_stale` | `engine/staleness.py.md` |
 | `engine/etl.py` | ETL preview/apply/run/save/schema | `engine/etl.py.md` |
 | `engine/utils.py` | `slugify`, `now_str`, `format_log_entry`, `append_log` | `engine/utils.py.md` |
 | `engine/sql_parser.py` | SQL parsing: table refs, col lineage, alias resolution | `engine/sql_parser.py.md` |

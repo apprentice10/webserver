@@ -22,6 +22,7 @@ from engine.project_db import (
     get_row_overrides, get_tool_overrides,
 )
 from engine.utils import now_str as _now_str, slugify as _slugify, format_log_entry as _format_log_entry, append_log as _append_log
+from engine.staleness import mark_tool_stale, mark_dependents_stale
 
 
 def _unique_slug(conn: sqlite3.Connection, base_slug: str) -> str:
@@ -36,24 +37,6 @@ def _unique_slug(conn: sqlite3.Connection, base_slug: str) -> str:
 # ============================================================
 # TOOL — CRUD
 # ============================================================
-
-def mark_tool_stale(conn: sqlite3.Connection, tool_slug: str) -> None:
-    conn.execute("UPDATE _tools SET is_stale = 1 WHERE slug = ?", (tool_slug,))
-
-
-def mark_dependents_stale(conn: sqlite3.Connection, source_slug: str) -> None:
-    """Mark stale all tools whose ETL reads FROM source_slug."""
-    tools = conn.execute(
-        "SELECT id, query_config FROM _tools WHERE query_config IS NOT NULL"
-    ).fetchall()
-    for tool in tools:
-        try:
-            config = json.loads(tool["query_config"])
-        except Exception:
-            continue
-        if source_slug in config.get("etl_deps", []):
-            conn.execute("UPDATE _tools SET is_stale = 1 WHERE id = ?", (tool["id"],))
-
 
 def get_tool(conn: sqlite3.Connection, tool_id: int) -> dict:
     row = conn.execute("SELECT * FROM _tools WHERE id = ?", (tool_id,)).fetchone()
@@ -219,14 +202,68 @@ def update_column(conn: sqlite3.Connection, tool_id: int, column_id: int, data: 
             sets.append(f"{field} = ?")
             vals.append(data[field])
 
+    etl_sql_updated = False
+
+    # Bidirectional ETL: rename alias in SQL when an ETL-generated column is renamed
+    new_name = data.get("name")
+    if new_name and col.get("lineage_info"):
+        from engine.utils import slugify
+        from engine.sql_parser import rename_col_in_sql, resolve_etl_deps
+
+        old_slug = col["slug"]
+        new_slug = slugify(new_name)
+
+        if new_slug != old_slug:
+            # Reject if new slug collides with an existing column
+            clash = conn.execute(
+                "SELECT 1 FROM _columns WHERE tool_id=? AND slug=? AND id!=?",
+                (tool_id, new_slug, column_id)
+            ).fetchone()
+            if clash:
+                raise HTTPException(status_code=400,
+                    detail=f"Una colonna con slug '{new_slug}' esiste già")
+
+            config_row = conn.execute(
+                "SELECT query_config FROM _tools WHERE id=?", (tool_id,)
+            ).fetchone()
+            raw = config_row[0] if config_row else None
+            config = json.loads(raw) if raw else {}
+            saved_sql = config.get("etl_sql", "").strip()
+
+            tool_row = conn.execute("SELECT slug FROM _tools WHERE id=?", (tool_id,)).fetchone()
+            tool_slug = tool_row[0]
+
+            if saved_sql:
+                new_sql = rename_col_in_sql(saved_sql, old_slug, new_slug)
+                config["etl_sql"]  = new_sql
+                config["etl_deps"] = resolve_etl_deps(conn, new_sql)
+                conn.execute(
+                    "UPDATE _tools SET query_config=? WHERE id=?",
+                    (json.dumps(config), tool_id)
+                )
+                etl_sql_updated = True
+
+            # Rename DB column and update all slug references
+            conn.execute(
+                f'ALTER TABLE "{tool_slug}" RENAME COLUMN "{old_slug}" TO "{new_slug}"'
+            )
+            sets.append("slug = ?")
+            vals.append(new_slug)
+            conn.execute(
+                "UPDATE _overrides SET col_slug=? WHERE tool_slug=? AND col_slug=?",
+                (new_slug, tool_slug, old_slug)
+            )
+
     if sets:
         vals.append(column_id)
         conn.execute(f"UPDATE _columns SET {', '.join(sets)} WHERE id = ?", vals)
         conn.commit()
 
-    return dict(conn.execute(
+    result = dict(conn.execute(
         "SELECT * FROM _columns WHERE id = ?", (column_id,)
     ).fetchone())
+    result["etl_sql_updated"] = etl_sql_updated
+    return result
 
 
 def delete_column(conn: sqlite3.Connection, tool_id: int, column_id: int) -> dict:
@@ -240,9 +277,31 @@ def delete_column(conn: sqlite3.Connection, tool_id: int, column_id: int) -> dic
         raise HTTPException(status_code=400,
             detail="Le colonne di sistema non possono essere eliminate")
 
+    sql_was_updated = False
+    if col.get("lineage_info"):
+        # Deferred import — avoids circular import (RISKS.md R06)
+        from engine.sql_parser import remove_col_from_sql, resolve_etl_deps
+
+        config_row = conn.execute(
+            "SELECT query_config FROM _tools WHERE id = ?", (tool_id,)
+        ).fetchone()
+        raw = config_row[0] if config_row else None
+        config = json.loads(raw) if raw else {}
+        saved_sql = config.get("etl_sql", "").strip()
+
+        if saved_sql:
+            new_sql = remove_col_from_sql(saved_sql, col["slug"])
+            config["etl_sql"] = new_sql
+            config["etl_deps"] = resolve_etl_deps(conn, new_sql)
+            conn.execute(
+                "UPDATE _tools SET query_config = ? WHERE id = ?",
+                (json.dumps(config), tool_id)
+            )
+            sql_was_updated = True
+
     conn.execute("DELETE FROM _columns WHERE id = ?", (column_id,))
     conn.commit()
-    return {"ok": True, "deleted_id": column_id}
+    return {"ok": True, "deleted_id": column_id, "etl_sql_updated": sql_was_updated}
 
 
 def reorder_columns(conn: sqlite3.Connection, tool_id: int, col_ids: list[int]) -> dict:

@@ -8,16 +8,17 @@
 
 | Sezione | Righe | Note |
 |---------|-------|------|
-| Stato interno | 16–17 | `_columns[]`, `_dragSrcId` |
-| Getter / loadColumns | 23–28 | `getColumns()`, `loadColumns()` via ApiClient |
-| renderHeader | 42–83 | Genera `<th>` con dataset, draggable, lineage tooltip |
-| _attachDragListeners | 85–152 | Drag & drop colonne (dragstart/over/leave/drop/end) |
-| openAddColumnModal | 158–168 | Apre modale, auto-genera slug da nome |
-| submitAddColumn | 170–199 | Valida e chiama ApiClient.addColumn |
-| renameColumn | 206–223 | prompt() + ApiClient.updateColumn |
-| deleteColumn | 230–247 | confirm() + ApiClient.deleteColumn |
-| updateLocalWidth | 254–257 | Chiamato da ResizeManager dopo drag o dblclick |
-| Utility | 264–279 | `_toSlug`, `_escHtml`, `_escAttr` |
+| Stato interno | 16–20 | `_columns[]`, `_dragSrcId`, `_ctxColId`, `_ctxColName` |
+| Getter / loadColumns | 25–29 | `getColumns()`, `loadColumns()` via ApiClient; calls `_initColContextMenu()` |
+| renderHeader | 44–87 | Genera `<th>` con dataset, draggable, lineage tooltip |
+| _attachDragListeners | 89–164 | Drag & drop + contextmenu listener per th non-system |
+| openAddColumnModal | 170–180 | Apre modale, auto-genera slug da nome |
+| submitAddColumn | 182–211 | Valida e chiama ApiClient.addColumn |
+| renameColumn | 218–246 | prompt() + confirm (ETL columns) + ApiClient.updateColumn + toast ETL update |
+| deleteColumn | 242–271 | confirm() + ApiClient.deleteColumn |
+| updateLocalWidth | 278–281 | Chiamato da ResizeManager dopo drag o dblclick |
+| Utility | 288–303 | `_toSlug`, `_escHtml`, `_escAttr` |
+| Column header context menu | 310–355 | `_openColContextMenu`, `_closeColContextMenu`, `_initColContextMenu` |
 
 ---
 

@@ -225,6 +225,13 @@ def etl_apply(conn: sqlite3.Connection, tool_id: int, sql: str) -> dict:
                 [slug, flag_id] + list(etl_tags)
             )
 
+    # Persist applied SQL so bidirectional column ops (delete/rename) can find it
+    existing = conn.execute("SELECT query_config FROM _tools WHERE id=?", (tool_id,)).fetchone()
+    cfg = json.loads(existing[0]) if existing and existing[0] else {}
+    cfg["etl_sql"]  = sql
+    cfg["etl_deps"] = _resolve_etl_deps(conn, sql)
+    conn.execute("UPDATE _tools SET query_config=? WHERE id=?", (json.dumps(cfg), tool_id))
+
     conn.commit()
 
     return {
@@ -288,7 +295,7 @@ def etl_run_saved(
     conn.execute("UPDATE _tools SET is_stale = 0 WHERE id = ?", (tool_id,))
 
     # Propagate: tools that depend on this one are now potentially stale
-    from engine.service import mark_dependents_stale
+    from engine.staleness import mark_dependents_stale
     mark_dependents_stale(conn, tool_slug)
 
     conn.commit()

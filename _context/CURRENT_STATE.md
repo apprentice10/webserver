@@ -96,8 +96,8 @@ The LOG is displayed in the sidebar (see Group D). The structure is a navigable 
 
 Study and implementation of the bidirectional Table → SQL relationship.
 
-44. **Feasibility analysis** — map which table operations have a unique SQL correspondence
-45. **Column deletion → SQL update** — if an ETL-generated column is deleted, remove the corresponding SQL clause
+✅ 44. **Feasibility analysis** — done (`_context/ETL_BIDIRECTIONAL.md`)
+✅ 45. **Column deletion → SQL update** — done (`service.delete_column` + `sql_parser.remove_col_from_sql`)
 46. **Visual transformations → SQL** — prefix/suffix/replace/formula automatically generate equivalent SQL
 
 ### Group I — Project file management (high effort, architecture ready)
@@ -115,6 +115,20 @@ The refactor (2026-04-26) made each project DB self-contained (`_project` + `_te
 52. **Automatic migrations** — migration runner to bring old DBs to current version
 53. **Safety rollback** — automatic backup pre-migration
 54. **Future PostgreSQL compatibility** — abstract raw sqlite3 queries into a compatible layer
+
+### Group K — View Sidebar & Toolbar Cleanup (medium effort, depends on D and E)
+
+Consolidate column-visibility toggles into a collapsible sidebar panel (mirrors Flags sidebar pattern). Clean up redundant toolbar/topbar buttons.
+
+55. **View sidebar shell** — new sidebar panel with items: "Deleted rows" (replaces `btn-show-deleted` / `GridManager.toggleDeleted()`) and "Rev column" (replaces `btn-toggle-rev` / `GridManager.toggleRev()`); each item has an eye icon to toggle visibility; removes both standalone toolbar buttons; saves state per-project/tool via localStorage (same pattern as Flags hidden-state in `static/engine/js/flags.js`)
+56. **View toolbar button** — add "View" button after Flags in toolbar (`table.html`); opens View sidebar; mutually exclusive toggle with Flags button (only one sidebar active at a time)
+57. **Remove "Cambia Rev" topbar button** — revision letter is already editable in the Settings modal (`ToolbarManager.openSettings()`); remove the redundant `{% block topbar_actions %}` button from `table.html`
+58. **Replace "Info" button** — replace current `btn-toggle-sidebar` ("Info") with a dedicated toggle styled and behaving like the Flags/View buttons (shows active state when sidebar is open)
+59. **Log sidebar — selection-reactive** — Log sidebar content updates automatically when the active cell or range changes (not only on context-menu trigger); if sidebar is open and selection changes, content refreshes; if nothing selected, show placeholder "Select a cell or range."
+
+### Bug Fix — Timestamp display (low effort, independent)
+
+60. **Fix timestamp double-localization** — `formatTimestamp()` in `static/engine/js/utils.js` calls `new Date(isoString).toLocaleString("it-IT")` but the server emits local-time strings without a timezone suffix (e.g. `"2026-04-30 15:00:00"`); JS `Date` constructor treats timezone-naive strings inconsistently across browsers and may apply a UTC offset, causing wrong displayed times; fix: change `now_str()` in `engine/utils.py` to emit UTC ISO strings (`datetime.utcnow().isoformat() + "Z"`) and update all `DEFAULT (datetime('now'))` SQLite columns to `datetime('now')` (already UTC in SQLite), then let `formatTimestamp()` convert to local display as it already does
 
 ---
 
