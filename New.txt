@@ -1,0 +1,19 @@
+We are going to move and replace somethings, always keep the same functionality
+New View sidebar, template like flag manager (list of components each with and eye icon to toggle Visibility) will replace:
+    -"Eliminati" button (rename to "Deleted rows")
+    -"Rev" button (rename to "Rev column")
+
+View sidebar saves current state like the Flags sidebar.
+Add a view button after the Flags button to open this sidebar
+Revision is in the settings panel the Button "Cambia Rev" is not nescesary.
+Log sidebar must change with the current selection (a cell or a range)
+Instead of the "Info" button copy the tools sidebar toggle form and behavior
+
+the butons Flags and View will toggle depending on with side bar is active.
+Dates are wrong, check local time
+
+---
+These have conflict with "Group G.1 — Refactor LOG → Audit System" in the CURRENT_STATE.md file Don't do these yet:
+line 5:         -"Log" button (rename to "Log column")
+line 14:    Add a new "Log" button (not the same as before) tha will open de log sidebar.
+lines 12:   ...butons Log, Flags...
