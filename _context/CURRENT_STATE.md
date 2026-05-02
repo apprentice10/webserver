@@ -1,12 +1,49 @@
 # CURRENT_STATE.md
 
-*Last updated: 2026-04-26 (architectural refactor completed)*
+*Last updated: 2026-05-02 (model-first ETL — backend layer complete)*
 
 Completed feature history → `_context/DONE.md`
 
 ## In Progress
 
-*(none)*
+### Model-First ETL Architecture (plan: `C:\Users\cdomini\.claude\plans\clever-crunching-bumblebee.md`)
+
+Complete rewrite of ETL from SQL-string-based to model-first IR.
+SQL is always compiled from `EtlModel` — never stored as source of truth.
+
+**Progress:**
+
+| Step | File | Status |
+|------|------|--------|
+| 1 | `engine/etl_model.py` — dataclasses + serialization | ✅ Done |
+| 2 | `engine/etl_compiler.py` — `compile_sql`, `validate_model`, `expr_to_sql` | ✅ Done |
+| 3 | `tests/test_etl_model.py` — 9 tests (5 spec + 4 validation), all green | ✅ Done |
+| 4 | `engine/etl.py` — all functions accept `model: dict`, SQL derived from compiler | ✅ Done |
+| 5 | `engine/routes.py` — update request bodies + add `/etl/compile` endpoint | ⬜ Next |
+| 6 | `engine/service.py` — bidirectional ETL (rename/delete via model, not SQL) | ⬜ |
+| 7 | `static/engine/js/api.js` — ETL methods send `{model}` not `{sql}` | ⬜ |
+| 8 | `static/engine/js/etl_editor.js` — full rewrite: model builder UI | ⬜ |
+
+**Key architecture facts (read before continuing):**
+- `EtlModel.final_relation_id` declares the output relation — compiler generates SQL for that relation only
+- Every transformation produces a named relation identified by its `id`; inputs are relation ids
+- Execution order = topological sort of the dependency DAG (list order is ignored)
+- `filter.mode` is explicit (`"where"` / `"having"`) — never inferred
+- `expr_sql` is opaque — never parsed, never validated for scope
+- `query_config` now stores `{etl_model, etl_sql, etl_deps, etl_history}` — `etl_sql` is compiled output for display only
+- `etl_history` entries now store `{model, sql, label, timestamp}`
+- `sql_parser.py` is no longer called at runtime — kept as optional import adapter
+
+**Step 5 details (routes.py):**
+- Replace `class EtlSqlBody(BaseModel): sql: str` with `class EtlModelBody(BaseModel): model: dict`
+- Replace `class EtlSaveBody` similarly
+- All 4 write endpoints (`preview`, `apply`, `save`, `PATCH config`) accept model
+- Add `POST /{tool_id}/etl/compile` — calls `compile_sql(model)` only, no DB, returns `{sql}`
+- GET `config` response already updated in etl.py (returns `etl_model` key)
+
+**Step 6 details (service.py bidirectional ETL):**
+- `delete_column`: currently calls `remove_col_from_sql()` → replace with: load model, remove column by alias from select/aggregate transformations, recompile, persist
+- `update_column` (rename): currently calls `rename_col_in_sql()` → replace with: load model, find column by alias, update alias, recompile, persist
 
 ## Next Priorities (ordered by value/effort)
 
