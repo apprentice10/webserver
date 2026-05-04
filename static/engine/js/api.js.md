@@ -13,7 +13,7 @@
 | Righe | `loadRows`, `createRow`, `updateCell`, `softDeleteRow`, `restoreRow`, `hardDeleteRow`, `removeOverride`, `pasteRows` |
 | SQL Editor | `runSql` |
 | Export | `exportExcel` — usa `window.location.href` (non fetch, download diretto) |
-| ETL | `etlPreview`, `etlApply`, `etlSave`, `etlRunSaved`, `etlLoadConfig`, `etlLoadSchema`, `etlSaveDraft` |
+| ETL | `etlCompile`, `etlPreview`, `etlApply`, `etlSave`, `etlRunSaved`, `etlLoadConfig`, `etlLoadSchema`, `etlSaveDraft`, `etlSqlToModel` |
 | Flags | `listFlags`, `createFlag`, `updateFlag`, `deleteFlag`, `toggleCellFlags` |
 | Template | `saveTemplate`, `deleteTemplate` |
 

@@ -21,46 +21,197 @@ class EtlCompilationError(Exception):
 
 
 # ---------------------------------------------------------------------------
-# Expression → SQL (pure dispatch — no inspection of expr_sql content)
+# Expression grammar constants
+# ---------------------------------------------------------------------------
+
+_ALLOWED_BINARY_OPS = frozenset({"=", "!=", ">", "<", ">=", "<=", "+", "-", "*", "/"})
+
+
+# ---------------------------------------------------------------------------
+# Expression → SQL
+# Rules:
+#   - column_ref  : always double-quoted
+#   - literal     : NULL / TRUE / FALSE / 'escaped' / raw number
+#   - function    : NAME(args...)  — name uppercased, no wrapping
+#   - binary_op   : (left OP right)
+#   - logical     : (arg AND arg AND arg)
+#   - unary_op    : (NOT expr)
+#   - is_null     : (expr IS NULL)
+#   - is_not_null : (expr IS NOT NULL)
+#   - case        : CASE [operand] WHEN … THEN … [ELSE …] END
 # ---------------------------------------------------------------------------
 
 def expr_to_sql(expr: dict) -> str:
     t = expr.get("type", "")
-
-    if t == "column_ref":
-        column_name = expr.get("column_name", "")
-        table_alias = expr.get("table_alias", "")
-        if table_alias:
-            return f"{table_alias}.{column_name}"
-        return column_name
 
     if t == "literal":
         value = expr.get("value")
         if value is None:
             return "NULL"
         if isinstance(value, bool):
-            return "1" if value else "0"
+            return "TRUE" if value else "FALSE"
         if isinstance(value, str):
-            escaped = value.replace("'", "''")
-            return f"'{escaped}'"
+            return "'" + value.replace("'", "''") + "'"
         return str(value)
 
-    if t == "binary_op":
-        left_sql = expr_to_sql(expr["left"])
-        right_sql = expr_to_sql(expr["right"])
-        op = expr["op"]
-        return f"({left_sql} {op} {right_sql})"
+    if t == "column_ref":
+        col = f'"{expr["column_name"]}"'
+        alias = expr.get("table_alias", "")
+        return f'"{alias}".{col}' if alias else col
 
-    if t == "function_call":
-        name = expr["name"]
+    if t == "function":
+        name = expr["name"].upper()
         args_sql = ", ".join(expr_to_sql(a) for a in expr.get("args", []))
         return f"{name}({args_sql})"
 
-    if t == "expr_sql":
-        # Opaque — emitted verbatim, never inspected
-        return expr["sql"]
+    if t == "binary_op":
+        left_sql  = expr_to_sql(expr["left"])
+        right_sql = expr_to_sql(expr["right"])
+        return f"({left_sql} {expr['op']} {right_sql})"
+
+    if t == "logical":
+        op   = expr["op"].upper()
+        args = f" {op} ".join(expr_to_sql(a) for a in expr["args"])
+        return f"({args})"
+
+    if t == "unary_op":
+        return f"(NOT {expr_to_sql(expr['expr'])})"
+
+    if t == "is_null":
+        return f"({expr_to_sql(expr['expr'])} IS NULL)"
+
+    if t == "is_not_null":
+        return f"({expr_to_sql(expr['expr'])} IS NOT NULL)"
+
+    if t == "case":
+        parts = ["CASE"]
+        operand = expr.get("operand")
+        if operand is not None:
+            parts.append(expr_to_sql(operand))
+        for clause in expr.get("when_clauses", []):
+            parts.append(f"WHEN {expr_to_sql(clause['when'])} THEN {expr_to_sql(clause['then'])}")
+        else_expr = expr.get("else")
+        if else_expr is not None:
+            parts.append(f"ELSE {expr_to_sql(else_expr)}")
+        parts.append("END")
+        return " ".join(parts)
 
     raise EtlCompilationError(f"Unknown expression type: {t!r}")
+
+
+# ---------------------------------------------------------------------------
+# Expression validation — recursive
+# ---------------------------------------------------------------------------
+
+def _validate_expr(expr: dict, errors: list[str], context: str = "") -> None:
+    if not isinstance(expr, dict):
+        errors.append(f"{context}: expression must be a dict, got {type(expr).__name__}")
+        return
+
+    t = expr.get("type", "")
+    if not t:
+        errors.append(f"{context}: expression missing 'type' field")
+        return
+
+    if t == "literal":
+        v = expr.get("value")
+        if not isinstance(v, (str, int, float, bool, type(None))):
+            errors.append(f"{context}: literal value must be str, number, bool, or null")
+
+    elif t == "column_ref":
+        if not expr.get("column_name"):
+            errors.append(f"{context}: column_ref.column_name must not be empty")
+
+    elif t == "function":
+        if not expr.get("name"):
+            errors.append(f"{context}: function.name must not be empty")
+        for i, arg in enumerate(expr.get("args", [])):
+            _validate_expr(arg, errors, f"{context}.args[{i}]")
+
+    elif t == "binary_op":
+        op = expr.get("op", "")
+        if op.upper() in {"AND", "OR"}:
+            errors.append(
+                f"{context}: binary_op.op '{op}' is forbidden — use 'logical' for AND/OR"
+            )
+        elif op not in _ALLOWED_BINARY_OPS:
+            errors.append(
+                f"{context}: binary_op.op '{op}' is not allowed; "
+                f"permitted: {sorted(_ALLOWED_BINARY_OPS)}"
+            )
+        # Reject = NULL — silent SQL NULL-comparison trap
+        if op == "=":
+            right = expr.get("right", {})
+            left  = expr.get("left", {})
+            if (right.get("type") == "literal" and right.get("value") is None) or \
+               (left.get("type")  == "literal" and left.get("value")  is None):
+                errors.append(f"{context}: '= NULL' is forbidden — use is_null / is_not_null")
+        _validate_expr(expr.get("left",  {}), errors, f"{context}.left")
+        _validate_expr(expr.get("right", {}), errors, f"{context}.right")
+
+    elif t == "logical":
+        op = expr.get("op", "")
+        if op not in ("and", "or"):
+            errors.append(f"{context}: logical.op must be 'and' or 'or', got '{op}'")
+        args = expr.get("args", [])
+        if len(args) < 2:
+            errors.append(f"{context}: logical.args must have at least 2 elements")
+        for i, arg in enumerate(args):
+            _validate_expr(arg, errors, f"{context}.args[{i}]")
+
+    elif t == "unary_op":
+        if expr.get("op") != "not":
+            errors.append(f"{context}: unary_op.op must be 'not' in v1, got '{expr.get('op')}'")
+        _validate_expr(expr.get("expr", {}), errors, f"{context}.expr")
+
+    elif t in ("is_null", "is_not_null"):
+        _validate_expr(expr.get("expr", {}), errors, f"{context}.expr")
+
+    elif t == "case":
+        when_clauses = expr.get("when_clauses", [])
+        if not when_clauses:
+            errors.append(f"{context}: case.when_clauses must not be empty")
+        operand = expr.get("operand")
+        if operand is not None:
+            _validate_expr(operand, errors, f"{context}.operand")
+        for i, clause in enumerate(when_clauses):
+            _validate_expr(clause.get("when", {}), errors, f"{context}.when_clauses[{i}].when")
+            _validate_expr(clause.get("then", {}), errors, f"{context}.when_clauses[{i}].then")
+        else_expr = expr.get("else")
+        if else_expr is not None:
+            _validate_expr(else_expr, errors, f"{context}.else")
+
+    else:
+        errors.append(f"{context}: unknown expression type '{t}'")
+
+
+def _exprs_in_transformation(tr: dict) -> list[tuple[dict, str]]:
+    """Return all (expr_dict, context_label) pairs inside a transformation."""
+    tr_type = tr.get("type", "")
+    tr_id   = tr.get("id", "?")
+    prefix  = f"{tr_type} '{tr_id}'"
+    result: list[tuple[dict, str]] = []
+
+    if tr_type == "select":
+        for i, col in enumerate(tr.get("columns", [])):
+            result.append((col.get("expr", {}), f"{prefix} col[{i}] expr"))
+
+    elif tr_type == "filter":
+        result.append((tr.get("condition", {}), f"{prefix} condition"))
+
+    elif tr_type == "join":
+        result.append((tr.get("condition", {}), f"{prefix} condition"))
+
+    elif tr_type == "aggregate":
+        for i, g in enumerate(tr.get("group_by", [])):
+            result.append((g, f"{prefix} group_by[{i}]"))
+        for i, col in enumerate(tr.get("aggregations", [])):
+            result.append((col.get("expr", {}), f"{prefix} agg[{i}] expr"))
+
+    elif tr_type == "compute_column":
+        result.append((tr.get("column", {}).get("expr", {}), f"{prefix} column.expr"))
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +226,7 @@ def _kahn_sort(graph: dict) -> list[str]:
 
     for rid, deps in graph.items():
         for dep in deps:
-            if dep in successors:           # only track edges between known nodes
+            if dep in successors:
                 successors[dep].append(rid)
                 in_degree[rid] += 1
 
@@ -91,7 +242,6 @@ def _kahn_sort(graph: dict) -> list[str]:
                 queue.append(succ)
 
     if len(result) != len(all_nodes):
-        # Cycle detected — mandatory hard error, never swallowed or demoted to warning
         raise EtlCompilationError(
             "Cycle detected in transformation dependency graph"
         )
@@ -141,7 +291,7 @@ def _output_aliases_for(relation_id: str, model: EtlModel) -> set[str]:
         if tr_type in ("filter", "join"):
             input_id = tr.get("inputs", [""])[0]
             return _output_aliases_for(input_id, model)
-    return set()   # source — schema not statically known
+    return set()
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +344,7 @@ def validate_model(model: EtlModel) -> list[str]:
         _kahn_sort(graph)
     except EtlCompilationError as exc:
         errors.append(str(exc))
-        return errors   # cannot safely continue without a valid DAG
+        return errors
 
     # Check 5 & 6: column ids unique and non-empty
     col_ids: list[str] = []
@@ -244,9 +394,6 @@ def validate_model(model: EtlModel) -> list[str]:
                 )
 
         # Check 12: aggregate column validity
-        # Bare ColumnRef in aggregations must appear in group_by.
-        # expr_sql expressions are EXEMPT — opaque, not validated for correctness.
-        # Structured expressions MUST be validated.
         if tr_type == "aggregate":
             group_by = tr.get("group_by", [])
             group_by_col_refs = set()
@@ -258,8 +405,7 @@ def validate_model(model: EtlModel) -> list[str]:
 
             for col in tr.get("aggregations", []):
                 expr = col.get("expr", {})
-                expr_type = expr.get("type", "")
-                if expr_type == "column_ref":
+                if expr.get("type") == "column_ref":
                     alias = expr.get("table_alias", "")
                     name = expr.get("column_name", "")
                     col_sql = f"{alias}.{name}" if alias else name
@@ -268,8 +414,6 @@ def validate_model(model: EtlModel) -> list[str]:
                             f"AGGREGATE '{tr_id}': column '{col.get('alias', '')}' uses bare "
                             f"ColumnRef '{col_sql}' that is not in group_by and not inside a function"
                         )
-                # function_call, binary_op, literal: no restriction
-                # expr_sql: intentionally exempt — tradeoff for UI simplicity
 
     # Check 11: at least one SELECT or AGGREGATE on path to final_relation_id
     if model.final_relation_id in all_relation_ids:
@@ -283,11 +427,10 @@ def validate_model(model: EtlModel) -> list[str]:
                 "the dependency path to final_relation_id"
             )
 
-    # Check 13: ORDER BY scope — ColumnRef expressions must exist in final relation output.
-    # expr_sql expressions in order_by are EXEMPT — intentionally not validated.
+    # Check 13: ORDER BY scope
     if model.final_relation_id in all_relation_ids:
         final_aliases = _output_aliases_for(model.final_relation_id, model)
-        if final_aliases:   # empty means unknown schema — skip check
+        if final_aliases:
             for ob in model.order_by:
                 expr = ob.get("expr", {})
                 if expr.get("type") == "column_ref":
@@ -297,6 +440,14 @@ def validate_model(model: EtlModel) -> list[str]:
                             f"ORDER BY references column '{col_name}' "
                             f"not available in final relation scope"
                         )
+
+    # Check 14: expression-level validation (recursive)
+    for tr in model.transformations:
+        for expr, ctx in _exprs_in_transformation(tr):
+            _validate_expr(expr, errors, ctx)
+
+    for i, ob in enumerate(model.order_by):
+        _validate_expr(ob.get("expr", {}), errors, f"order_by[{i}]")
 
     return errors
 
@@ -336,106 +487,80 @@ def compile_sql(model: Any) -> str:
     for rid, node in relations.items():
         graph[rid] = set(node["inputs"])
 
-    # Step 3 — Topological sort (mandatory — failure raises immediately)
+    # Step 3 — Topological sort
     execution_order = _kahn_sort(graph)
 
     # Step 4 — Initialize runtime structures
-    sql_map: dict[str, str] = {}    # relation_id -> SQL string
-    cte_map: dict[str, str] = {}    # cte_name -> sql
-    scope_map: dict[str, set] = {}  # relation_id -> set[(alias, column_name)]
+    sql_map: dict[str, str] = {}
+    cte_map: dict[str, str] = {}
 
     # Step 5 — Process relations in topological order
     for rid in execution_order:
         node = relations[rid]
 
-        # CASE 1 — Source
         if node["type"] == "source":
             source = node["source"]
             src_type = source.get("type", "")
             alias_part = f" {source['alias']}" if source.get("alias") else ""
 
-            if src_type == "table":
-                sql_map[rid] = f"(SELECT * FROM {source['name']}{alias_part})"
-
-            elif src_type == "cte":
-                cte_map[source["name"]] = source["sql"]   # DO NOT PARSE
+            if src_type == "cte":
+                cte_map[source["name"]] = source["sql"]
                 sql_map[rid] = f"(SELECT * FROM {source['name']})"
-
             else:
-                # subquery or unknown — treat like table
                 sql_map[rid] = f"(SELECT * FROM {source['name']}{alias_part})"
 
-        # CASE 2 — SELECT
         elif node["type"] == "select":
             tr = node["transformation"]
-            input_id = tr["inputs"][0]
-            base_sql = sql_map[input_id]
+            base_sql = sql_map[tr["inputs"][0]]
             cols = ", ".join(
                 f"{expr_to_sql(col['expr'])} AS {col['alias']}"
                 for col in tr.get("columns", [])
             )
             sql_map[rid] = f"(SELECT {cols} FROM {base_sql})"
 
-        # CASE 3 — FILTER
         elif node["type"] == "filter":
             tr = node["transformation"]
-            input_id = tr["inputs"][0]
-            base_sql = sql_map[input_id]
+            base_sql = sql_map[tr["inputs"][0]]
             condition = expr_to_sql(tr["condition"])
-
             if tr["mode"] == "where":
                 sql_map[rid] = f"(SELECT * FROM {base_sql} WHERE {condition})"
-            else:   # having
+            else:
                 sql_map[rid] = f"(SELECT * FROM {base_sql} HAVING {condition})"
 
-        # CASE 4 — JOIN
         elif node["type"] == "join":
             tr = node["transformation"]
-            left_id = tr["left_input"]
-            left_sql = sql_map[left_id]
-
+            left_sql = sql_map[tr["left_input"]]
             right_node = relations[tr["right_source"]]
             right_source = right_node["source"]
-
             if right_source.get("type") == "table":
                 right_sql = f"(SELECT * FROM {right_source['name']})"
             else:
                 right_sql = sql_map[tr["right_source"]]
-
             join_type = tr.get("join_type", "inner").upper()
-            alias = tr.get("alias", "")
-            alias_part = f" AS {alias}" if alias else ""
+            alias_part = f" AS {tr['alias']}" if tr.get("alias") else ""
             condition = expr_to_sql(tr["condition"])
-
             sql_map[rid] = (
                 f"(SELECT * FROM {left_sql} "
                 f"{join_type} JOIN {right_sql}{alias_part} ON {condition})"
             )
 
-        # CASE 5 — AGGREGATE
         elif node["type"] == "aggregate":
             tr = node["transformation"]
-            input_id = tr["inputs"][0]
-            base_sql = sql_map[input_id]
-
+            base_sql = sql_map[tr["inputs"][0]]
             group_exprs = [expr_to_sql(g) for g in tr.get("group_by", [])]
             agg_exprs = [
                 f"{expr_to_sql(col['expr'])} AS {col['alias']}"
                 for col in tr.get("aggregations", [])
             ]
-            select_parts = group_exprs + agg_exprs
-            select_sql = ", ".join(select_parts)
+            select_sql  = ", ".join(group_exprs + agg_exprs)
             group_by_sql = ", ".join(group_exprs)
-
             sql_map[rid] = (
                 f"(SELECT {select_sql} FROM {base_sql} GROUP BY {group_by_sql})"
             )
 
-        # CASE 6 — COMPUTE COLUMN
         elif node["type"] == "compute_column":
             tr = node["transformation"]
-            input_id = tr["inputs"][0]
-            base_sql = sql_map[input_id]
+            base_sql = sql_map[tr["inputs"][0]]
             col = tr["column"]
             new_col_sql = f"{expr_to_sql(col['expr'])} AS {col['alias']}"
             sql_map[rid] = f"(SELECT *, {new_col_sql} FROM {base_sql})"
@@ -448,8 +573,6 @@ def compile_sql(model: Any) -> str:
         )
 
     final_sql = sql_map[final_id]
-
-    # Unwrap the outer parens: the final output is a top-level SELECT, not a subquery
     if final_sql.startswith("(") and final_sql.endswith(")"):
         final_sql = final_sql[1:-1]
 
@@ -468,5 +591,4 @@ def compile_sql(model: Any) -> str:
         )
         final_sql = f"WITH {cte_clauses} {final_sql}"
 
-    # Step 9 — Return SQL
     return final_sql

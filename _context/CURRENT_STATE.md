@@ -1,6 +1,6 @@
 # CURRENT_STATE.md
 
-*Last updated: 2026-05-02 (model-first ETL — backend layer complete)*
+*Last updated: 2026-05-02 (model-first ETL — step 8 etl_editor.js rewritten to model builder UI)*
 
 Completed feature history → `_context/DONE.md`
 
@@ -19,10 +19,10 @@ SQL is always compiled from `EtlModel` — never stored as source of truth.
 | 2 | `engine/etl_compiler.py` — `compile_sql`, `validate_model`, `expr_to_sql` | ✅ Done |
 | 3 | `tests/test_etl_model.py` — 9 tests (5 spec + 4 validation), all green | ✅ Done |
 | 4 | `engine/etl.py` — all functions accept `model: dict`, SQL derived from compiler | ✅ Done |
-| 5 | `engine/routes.py` — update request bodies + add `/etl/compile` endpoint | ⬜ Next |
-| 6 | `engine/service.py` — bidirectional ETL (rename/delete via model, not SQL) | ⬜ |
-| 7 | `static/engine/js/api.js` — ETL methods send `{model}` not `{sql}` | ⬜ |
-| 8 | `static/engine/js/etl_editor.js` — full rewrite: model builder UI | ⬜ |
+| 5 | `engine/routes.py` — update request bodies + add `/etl/compile` endpoint | ✅ Done |
+| 6 | `engine/service.py` — bidirectional ETL (rename/delete via model, not SQL) | ✅ Done |
+| 7 | `static/engine/js/api.js` — ETL methods send `{model}` not `{sql}` | ✅ Done |
+| 8 | `static/engine/js/etl_editor.js` — full rewrite: model builder UI | ✅ Done |
 
 **Key architecture facts (read before continuing):**
 - `EtlModel.final_relation_id` declares the output relation — compiler generates SQL for that relation only

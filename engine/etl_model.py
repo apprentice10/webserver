@@ -18,30 +18,56 @@ class ColumnRef:
 @dataclass
 class Literal:
     type: str = "literal"
-    value: Any = None
+    value: Any = None              # str | int | float | bool | None
 
 
 @dataclass
 class BinaryOp:
     type: str = "binary_op"
-    op: str = ""                   # +, -, *, /, =, !=, <, >, <=, >=, AND, OR, …
+    op: str = ""                   # =, !=, >, <, >=, <=, +, -, *, /  (AND/OR forbidden — use Logical)
     left: dict = field(default_factory=dict)
     right: dict = field(default_factory=dict)
 
 
 @dataclass
-class FunctionCall:
-    type: str = "function_call"
-    name: str = ""
+class Function:
+    type: str = "function"
+    name: str = ""                 # uppercased by compiler; e.g. "COALESCE", "CONCAT_WS"
     args: list = field(default_factory=list)
 
 
 @dataclass
-class ExprSql:
-    # OPAQUE — NEVER parsed, NEVER inspected, NEVER used for dep inference.
-    # The system MUST function correctly even if this is treated as a black box.
-    type: str = "expr_sql"
-    sql: str = ""
+class Logical:
+    type: str = "logical"
+    op: str = ""                   # "and" | "or" — lowercase required
+    args: list = field(default_factory=list)  # flat list, minimum 2 elements
+
+
+@dataclass
+class UnaryOp:
+    type: str = "unary_op"
+    op: str = "not"                # v1: only "not" is supported
+    expr: dict = field(default_factory=dict)
+
+
+@dataclass
+class IsNull:
+    type: str = "is_null"
+    expr: dict = field(default_factory=dict)
+
+
+@dataclass
+class IsNotNull:
+    type: str = "is_not_null"
+    expr: dict = field(default_factory=dict)
+
+
+@dataclass
+class Case:
+    type: str = "case"
+    operand: Any = None            # None = searched CASE; dict expr = simple CASE
+    when_clauses: list = field(default_factory=list)  # [{when: expr, then: expr}, ...]
+    else_expr: Any = None          # JSON key: "else"; None = no ELSE branch
 
 
 # ---------------------------------------------------------------------------

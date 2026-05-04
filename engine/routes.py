@@ -135,9 +135,13 @@ class SqlQuery(BaseModel):
     sql: str
 
 
-class EtlQuery(BaseModel):
-    sql:   str
+class EtlModelBody(BaseModel):
+    model: dict
     label: Optional[str] = None
+
+
+class EtlSqlImportBody(BaseModel):
+    sql: str
 
 
 class FlagCreate(BaseModel):
@@ -775,26 +779,42 @@ def export_excel(
 # ETL
 # ============================================================
 
+@router.post("/{tool_id}/etl/compile")
+def etl_compile(
+    tool_id: int,
+    project_id: int = Query(...),
+    data: EtlModelBody = ...,
+    conn: sqlite3.Connection = Depends(get_project_conn)
+):
+    from engine.etl_compiler import compile_sql, EtlValidationError, EtlCompilationError
+    from fastapi import HTTPException
+    try:
+        sql = compile_sql(data.model)
+    except (EtlValidationError, EtlCompilationError) as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"sql": sql}
+
+
 @router.post("/{tool_id}/etl/preview")
 def etl_preview(
     tool_id: int,
     project_id: int = Query(...),
-    data: EtlQuery = ...,
+    data: EtlModelBody = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
     from engine.etl import etl_preview as _preview
-    return _preview(conn, tool_id, data.sql)
+    return _preview(conn, tool_id, data.model)
 
 
 @router.post("/{tool_id}/etl/apply")
 def etl_apply(
     tool_id: int,
     project_id: int = Query(...),
-    data: EtlQuery = ...,
+    data: EtlModelBody = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
     from engine.etl import etl_apply as _apply
-    return _apply(conn, tool_id, data.sql)
+    return _apply(conn, tool_id, data.model)
 
 
 @router.post("/{tool_id}/etl/run")
@@ -811,11 +831,11 @@ def etl_run(
 def etl_save(
     tool_id: int,
     project_id: int = Query(...),
-    data: EtlQuery = ...,
+    data: EtlModelBody = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
     from engine.etl import save_etl_version
-    return save_etl_version(conn, tool_id, data.sql, data.label)
+    return save_etl_version(conn, tool_id, data.model, data.label)
 
 
 @router.get("/{tool_id}/etl/config")
@@ -832,11 +852,26 @@ def etl_config(
 def etl_save_draft(
     tool_id: int,
     project_id: int = Query(...),
-    data: EtlQuery = ...,
+    data: EtlModelBody = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
     from engine.etl import etl_save_draft as _save_draft
-    return _save_draft(conn, tool_id, data.sql)
+    return _save_draft(conn, tool_id, data.model)
+
+
+@router.post("/{tool_id}/etl/sql_to_model")
+def etl_sql_to_model(
+    tool_id: int,
+    project_id: int = Query(...),
+    data: EtlSqlImportBody = ...,
+):
+    from engine.sql_to_model import sql_to_model
+    from fastapi import HTTPException
+    try:
+        model = sql_to_model(data.sql)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"model": model}
 
 
 @router.get("/{tool_id}/etl/schema")

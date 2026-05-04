@@ -183,6 +183,33 @@ def add_column(
     ).fetchone())
 
 
+def _remove_col_from_model(model: dict, alias: str) -> dict:
+    """Remove all output columns matching alias from select/aggregate transformations."""
+    for t in model.get("transformations", []):
+        if t.get("type") == "select":
+            t["columns"] = [c for c in t.get("columns", []) if c.get("alias") != alias]
+        elif t.get("type") == "aggregate":
+            t["aggregations"] = [c for c in t.get("aggregations", []) if c.get("alias") != alias]
+        # compute_column produces a single column — removing it would break the DAG;
+        # leave the transformation in place and let the DB column deletion stand alone.
+    return model
+
+
+def _rename_col_in_model(model: dict, old_alias: str, new_alias: str) -> dict:
+    """Rename all output columns matching old_alias to new_alias."""
+    for t in model.get("transformations", []):
+        if t.get("type") in ("select", "aggregate"):
+            cols = t.get("columns") or t.get("aggregations") or []
+            for c in cols:
+                if c.get("alias") == old_alias:
+                    c["alias"] = new_alias
+        elif t.get("type") == "compute_column":
+            col = t.get("column", {})
+            if col.get("alias") == old_alias:
+                col["alias"] = new_alias
+    return model
+
+
 def update_column(conn: sqlite3.Connection, tool_id: int, column_id: int, data: dict) -> dict:
     col = conn.execute(
         "SELECT * FROM _columns WHERE id = ? AND tool_id = ?", (column_id, tool_id)
@@ -204,11 +231,10 @@ def update_column(conn: sqlite3.Connection, tool_id: int, column_id: int, data: 
 
     etl_sql_updated = False
 
-    # Bidirectional ETL: rename alias in SQL when an ETL-generated column is renamed
+    # Bidirectional ETL: rename alias when an ETL-generated column is renamed
     new_name = data.get("name")
     if new_name and col.get("lineage_info"):
         from engine.utils import slugify
-        from engine.sql_parser import rename_col_in_sql, resolve_etl_deps
 
         old_slug = col["slug"]
         new_slug = slugify(new_name)
@@ -228,19 +254,29 @@ def update_column(conn: sqlite3.Connection, tool_id: int, column_id: int, data: 
             ).fetchone()
             raw = config_row[0] if config_row else None
             config = json.loads(raw) if raw else {}
-            saved_sql = config.get("etl_sql", "").strip()
 
             tool_row = conn.execute("SELECT slug FROM _tools WHERE id=?", (tool_id,)).fetchone()
             tool_slug = tool_row[0]
 
-            if saved_sql:
-                new_sql = rename_col_in_sql(saved_sql, old_slug, new_slug)
+            model = config.get("etl_model")
+            if model:
+                from engine.etl_compiler import compile_sql, EtlValidationError, EtlCompilationError
+                _rename_col_in_model(model, old_slug, new_slug)
+                try:
+                    new_sql = compile_sql(model)
+                except (EtlValidationError, EtlCompilationError):
+                    new_sql = config.get("etl_sql", "")
+                config["etl_model"] = model
+                config["etl_sql"]   = new_sql
+                config["etl_deps"]  = [s["name"] for s in model.get("sources", []) if s.get("type") == "table"]
+                conn.execute("UPDATE _tools SET query_config=? WHERE id=?", (json.dumps(config), tool_id))
+                etl_sql_updated = True
+            elif config.get("etl_sql", "").strip():
+                from engine.sql_parser import rename_col_in_sql, resolve_etl_deps
+                new_sql = rename_col_in_sql(config["etl_sql"], old_slug, new_slug)
                 config["etl_sql"]  = new_sql
                 config["etl_deps"] = resolve_etl_deps(conn, new_sql)
-                conn.execute(
-                    "UPDATE _tools SET query_config=? WHERE id=?",
-                    (json.dumps(config), tool_id)
-                )
+                conn.execute("UPDATE _tools SET query_config=? WHERE id=?", (json.dumps(config), tool_id))
                 etl_sql_updated = True
 
             # Rename DB column and update all slug references
@@ -279,19 +315,32 @@ def delete_column(conn: sqlite3.Connection, tool_id: int, column_id: int) -> dic
 
     sql_was_updated = False
     if col.get("lineage_info"):
-        # Deferred import — avoids circular import (RISKS.md R06)
-        from engine.sql_parser import remove_col_from_sql, resolve_etl_deps
-
         config_row = conn.execute(
             "SELECT query_config FROM _tools WHERE id = ?", (tool_id,)
         ).fetchone()
         raw = config_row[0] if config_row else None
         config = json.loads(raw) if raw else {}
-        saved_sql = config.get("etl_sql", "").strip()
 
-        if saved_sql:
-            new_sql = remove_col_from_sql(saved_sql, col["slug"])
-            config["etl_sql"] = new_sql
+        model = config.get("etl_model")
+        if model:
+            from engine.etl_compiler import compile_sql, EtlValidationError, EtlCompilationError
+            _remove_col_from_model(model, col["slug"])
+            try:
+                new_sql = compile_sql(model)
+            except (EtlValidationError, EtlCompilationError):
+                new_sql = config.get("etl_sql", "")
+            config["etl_model"] = model
+            config["etl_sql"]   = new_sql
+            config["etl_deps"]  = [s["name"] for s in model.get("sources", []) if s.get("type") == "table"]
+            conn.execute(
+                "UPDATE _tools SET query_config = ? WHERE id = ?",
+                (json.dumps(config), tool_id)
+            )
+            sql_was_updated = True
+        elif config.get("etl_sql", "").strip():
+            from engine.sql_parser import remove_col_from_sql, resolve_etl_deps
+            new_sql = remove_col_from_sql(config["etl_sql"], col["slug"])
+            config["etl_sql"]  = new_sql
             config["etl_deps"] = resolve_etl_deps(conn, new_sql)
             conn.execute(
                 "UPDATE _tools SET query_config = ? WHERE id = ?",

@@ -186,24 +186,31 @@ const ApiClient = (() => {
     // ETL
     // --------------------------------------------------------
 
-    async function etlPreview(sql) {
+    async function etlCompile(model) {
+        return request(`/api/tools/${TOOL_ID}/etl/compile?project_id=${PROJECT_ID}`, {
+            method: "POST",
+            body: JSON.stringify({ model })
+        });
+    }
+
+    async function etlPreview(model) {
         return request(`/api/tools/${TOOL_ID}/etl/preview?project_id=${PROJECT_ID}`, {
             method: "POST",
-            body: JSON.stringify({ sql })
+            body: JSON.stringify({ model })
         });
     }
 
-    async function etlApply(sql) {
+    async function etlApply(model) {
         return request(`/api/tools/${TOOL_ID}/etl/apply?project_id=${PROJECT_ID}`, {
             method: "POST",
-            body: JSON.stringify({ sql })
+            body: JSON.stringify({ model })
         });
     }
 
-    async function etlSave(sql, label = null) {
+    async function etlSave(model, label = null) {
         return request(`/api/tools/${TOOL_ID}/etl/save?project_id=${PROJECT_ID}`, {
             method: "POST",
-            body: JSON.stringify({ sql, label })
+            body: JSON.stringify({ model, label })
         });
     }
 
@@ -273,9 +280,16 @@ const ApiClient = (() => {
         return request(`/api/tools/templates/${templateId}?project_id=${PROJECT_ID}`, { method: "DELETE" });
     }
 
-    async function etlSaveDraft(sql) {
+    async function etlSaveDraft(model) {
         return request(`/api/tools/${TOOL_ID}/etl/config?project_id=${PROJECT_ID}`, {
             method: "PATCH",
+            body: JSON.stringify({ model })
+        });
+    }
+
+    async function etlSqlToModel(sql) {
+        return request(`/api/tools/${TOOL_ID}/etl/sql_to_model?project_id=${PROJECT_ID}`, {
+            method: "POST",
             body: JSON.stringify({ sql })
         });
     }
@@ -324,6 +338,7 @@ const ApiClient = (() => {
         pasteRows,
         runSql,
         exportExcel,
+        etlCompile,
         etlPreview,
         etlApply,
         etlRunSaved,
@@ -333,6 +348,7 @@ const ApiClient = (() => {
         saveTemplate,
         deleteTemplate,
         etlSaveDraft,
+        etlSqlToModel,
         getAudit,
         rollbackCell,
     };
