@@ -144,18 +144,88 @@ def _find_clauses(sql: str) -> list[tuple[str, str, str]]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# generate_series CTE detection
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Matches: SELECT <int> UNION ALL SELECT <alias> + 1 FROM <anything> WHERE <alias> < <end>
+_GEN_SERIES_RECURSIVE_RE = re.compile(
+    r"^\s*SELECT\s+(\d+)\s+UNION\s+ALL\s+SELECT\s+(\w+)\s*\+\s*1\s+FROM\s+\w+"
+    r"\s+WHERE\s+\2\s*<\s*(.+?)\s*$",
+    re.IGNORECASE | re.DOTALL,
+)
+# Matches: SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 ...
+_GEN_SERIES_UNION_RE = re.compile(
+    r"^\s*SELECT\s+\d+(?:\s+UNION\s+ALL\s+SELECT\s+\d+)+\s*$",
+    re.IGNORECASE,
+)
+
+
+def _detect_generate_series_cte(
+    cte_name: str, cte_sql: str, str_tbl: dict
+) -> "dict | None":
+    """
+    Detect number-generator CTE patterns and return a generate_series source dict.
+    Returns None if the CTE is not a recognized generator pattern.
+    """
+    sql = cte_sql.strip()
+
+    # Pattern A — recursive generator: SELECT 1 UNION ALL SELECT n+1 FROM cte WHERE n < X
+    m = _GEN_SERIES_RECURSIVE_RE.match(sql)
+    if m:
+        start = int(m.group(1))
+        end_text = m.group(3).strip()
+        try:
+            end_expr = _parse_expr(end_text, str_tbl)
+        except (ValueError, Exception):
+            return None
+        if not end_expr:
+            return None
+        return {
+            "id": _gen_id(),
+            "type": "generate_series",
+            "name": "_generate_series",
+            "alias": cte_name,
+            "sql": "",
+            "start": start,
+            "end_expr": end_expr,
+        }
+
+    # Pattern B — UNION ALL of consecutive integer literals: SELECT 1 UNION ALL SELECT 2 ...
+    m2 = _GEN_SERIES_UNION_RE.match(sql)
+    if m2:
+        nums = list(map(int, re.findall(r"\d+", sql)))
+        if len(nums) >= 2 and all(nums[i] + 1 == nums[i + 1] for i in range(len(nums) - 1)):
+            return {
+                "id": _gen_id(),
+                "type": "generate_series",
+                "name": "_generate_series",
+                "alias": cte_name,
+                "sql": "",
+                "start": nums[0],
+                "end_expr": {"type": "literal", "value": nums[-1]},
+            }
+
+    return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # CTE extraction
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _extract_ctes(sql: str) -> tuple[list[dict], str]:
+def _extract_ctes(sql: str, str_tbl: dict | None = None) -> tuple[list[dict], str]:
+    if str_tbl is None:
+        str_tbl = {}
     sql = sql.strip()
     if not re.match(r"\bWITH\b", sql, re.IGNORECASE):
         return [], sql
-    m = re.match(r"\bWITH\b\s*", sql, re.IGNORECASE)
+    m = re.match(r"\bWITH\b\s*(?:RECURSIVE\s+)?", sql, re.IGNORECASE)
     pos = m.end()
     ctes: list[dict] = []
     while pos < len(sql):
-        nm = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\(", sql[pos:], re.IGNORECASE)
+        nm = re.match(
+            r"([A-Za-z_][A-Za-z0-9_]*)\s*(?:\([^)]*\)\s*)?AS\s*\(",
+            sql[pos:], re.IGNORECASE,
+        )
         if not nm:
             break
         cte_name = nm.group(1)
@@ -169,7 +239,14 @@ def _extract_ctes(sql: str) -> tuple[list[dict], str]:
                 if depth == 0: break
             j += 1
         cte_sql = sql[paren_start + 1:j].strip()
-        ctes.append({"id": _gen_id(), "type": "cte", "name": cte_name, "alias": cte_name, "sql": cte_sql})
+        gs = _detect_generate_series_cte(cte_name, cte_sql, str_tbl)
+        if gs:
+            ctes.append(gs)
+        else:
+            ctes.append({
+                "id": _gen_id(), "type": "cte",
+                "name": cte_name, "alias": cte_name, "sql": cte_sql,
+            })
         pos = j + 1
         sep = re.match(r"\s*,\s*", sql[pos:])
         if sep:
@@ -527,13 +604,89 @@ class _ExprParser:
         return {"type": "case", "operand": operand, "when_clauses": when_clauses, "else": else_expr}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# SPLIT_PART pattern rewriter
+# Rewrites:
+#   SPLIT_PART(s, d, n)               — Postgres native: pass through unchanged
+#   SUBSTR(s, 1, INSTR(s, d) - 1)     — SQLite token-1 idiom → SPLIT_PART(s, d, 1)
+# Applied recursively after parsing.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _try_rewrite_split_part(expr: dict) -> dict:
+    if not isinstance(expr, dict):
+        return expr
+    t = expr.get("type", "")
+
+    if t == "function":
+        name = expr.get("name", "").upper()
+        args = [_try_rewrite_split_part(a) for a in expr.get("args", [])]
+
+        # Already SPLIT_PART — normalise name to uppercase and validate
+        if name == "SPLIT_PART":
+            return {"type": "function", "name": "SPLIT_PART", "args": args}
+
+        # Detect: SUBSTR(s, 1, INSTR(s, d) - 1)  →  SPLIT_PART(s, d, 1)
+        if name == "SUBSTR" and len(args) == 3:
+            s_arg, start_arg, len_arg = args
+            is_start_1 = (
+                start_arg.get("type") == "literal" and start_arg.get("value") == 1
+            )
+            is_instr_minus_1 = (
+                len_arg.get("type") == "binary_op"
+                and len_arg.get("op") == "-"
+                and len_arg.get("right", {}) == {"type": "literal", "value": 1}
+                and len_arg.get("left", {}).get("type") == "function"
+                and len_arg["left"].get("name", "").upper() == "INSTR"
+                and len(len_arg["left"].get("args", [])) == 2
+                and len_arg["left"]["args"][0] == s_arg
+            )
+            if is_start_1 and is_instr_minus_1:
+                d_arg = len_arg["left"]["args"][1]
+                return {
+                    "type": "function", "name": "SPLIT_PART",
+                    "args": [s_arg, d_arg, {"type": "literal", "value": 1}],
+                }
+
+        return {"type": "function", "name": expr["name"], "args": args}
+
+    if t == "binary_op":
+        return {
+            **expr,
+            "left": _try_rewrite_split_part(expr.get("left", {})),
+            "right": _try_rewrite_split_part(expr.get("right", {})),
+        }
+    if t == "logical":
+        return {**expr, "args": [_try_rewrite_split_part(a) for a in expr.get("args", [])]}
+    if t in ("is_null", "is_not_null", "unary_op"):
+        return {**expr, "expr": _try_rewrite_split_part(expr.get("expr", {}))}
+    if t == "case":
+        return {
+            **expr,
+            "operand": (
+                _try_rewrite_split_part(expr["operand"]) if expr.get("operand") else None
+            ),
+            "when_clauses": [
+                {
+                    "when": _try_rewrite_split_part(c["when"]),
+                    "then": _try_rewrite_split_part(c["then"]),
+                }
+                for c in expr.get("when_clauses", [])
+            ],
+            "else": (
+                _try_rewrite_split_part(expr["else"]) if expr.get("else") else None
+            ),
+        }
+    return expr
+
+
 def _parse_expr(text: str, str_tbl: dict) -> dict:
     """Parse a SQL expression string into a valid EtlModel AST node. Raises ValueError on failure."""
     text = text.strip()
     if not text:
         return {}
     tokens = _tokenize_expr(text, str_tbl)
-    return _ExprParser(tokens).parse()
+    result = _ExprParser(tokens).parse()
+    return _try_rewrite_split_part(result)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -599,7 +752,7 @@ def sql_to_model(sql: str) -> dict:
         raise ValueError("Empty SQL")
 
     masked, str_tbl = _mask_strings(sql)
-    cte_sources, main_sql = _extract_ctes(masked)
+    cte_sources, main_sql = _extract_ctes(masked, str_tbl)
     clauses = _find_clauses(main_sql)
 
     tags = [tag for tag, _, _ in clauses]

@@ -26,6 +26,49 @@ class EtlCompilationError(Exception):
 
 _ALLOWED_BINARY_OPS = frozenset({"=", "!=", ">", "<", ">=", "<=", "+", "-", "*", "/"})
 
+# Functions that require special argument-count validation (name → expected count)
+_FIXED_ARITY_FUNCTIONS: dict[str, int] = {
+    "SPLIT_PART": 3,
+}
+
+_SPLIT_PART_MAX_INDEX = 8   # compilation limit for literal-index SPLIT_PART
+
+
+# ---------------------------------------------------------------------------
+# SPLIT_PART → SQLite nested SUBSTR/INSTR compilation
+# ---------------------------------------------------------------------------
+
+def _sqlite_split_part(s: str, d: str, n: int) -> str:
+    """Recursively build nested SQLite SQL to extract the nth delimiter-token from s."""
+    if n == 1:
+        return (
+            f"CASE WHEN INSTR({s}, {d}) > 0 "
+            f"THEN SUBSTR({s}, 1, INSTR({s}, {d}) - 1) "
+            f"ELSE {s} END"
+        )
+    rest = f"SUBSTR({s}, INSTR({s}, {d}) + LENGTH({d}))"
+    return _sqlite_split_part(rest, d, n - 1)
+
+
+def _compile_split_part(args: list) -> str:
+    if len(args) != 3:
+        raise EtlCompilationError("SPLIT_PART requires exactly 3 arguments")
+    n_arg = args[2]
+    if n_arg.get("type") != "literal" or not isinstance(n_arg.get("value"), int):
+        raise EtlCompilationError(
+            "SPLIT_PART index (3rd arg) must be a literal integer in SQLite compilation mode"
+        )
+    n = n_arg["value"]
+    if n < 1:
+        raise EtlCompilationError("SPLIT_PART index must be >= 1")
+    if n > _SPLIT_PART_MAX_INDEX:
+        raise EtlCompilationError(
+            f"SPLIT_PART index {n} exceeds SQLite compilation limit of {_SPLIT_PART_MAX_INDEX}"
+        )
+    s = expr_to_sql(args[0])
+    d = expr_to_sql(args[1])
+    return _sqlite_split_part(s, d, n)
+
 
 # ---------------------------------------------------------------------------
 # Expression → SQL
@@ -61,7 +104,10 @@ def expr_to_sql(expr: dict) -> str:
 
     if t == "function":
         name = expr["name"].upper()
-        args_sql = ", ".join(expr_to_sql(a) for a in expr.get("args", []))
+        args = expr.get("args", [])
+        if name == "SPLIT_PART":
+            return _compile_split_part(args)
+        args_sql = ", ".join(expr_to_sql(a) for a in args)
         return f"{name}({args_sql})"
 
     if t == "binary_op":
@@ -125,7 +171,28 @@ def _validate_expr(expr: dict, errors: list[str], context: str = "") -> None:
     elif t == "function":
         if not expr.get("name"):
             errors.append(f"{context}: function.name must not be empty")
-        for i, arg in enumerate(expr.get("args", [])):
+        fname = expr.get("name", "").upper()
+        args = expr.get("args", [])
+        if fname in _FIXED_ARITY_FUNCTIONS:
+            expected = _FIXED_ARITY_FUNCTIONS[fname]
+            if len(args) != expected:
+                errors.append(
+                    f"{context}: {fname} requires exactly {expected} arguments, got {len(args)}"
+                )
+            if fname == "SPLIT_PART" and len(args) == 3:
+                n_arg = args[2]
+                if n_arg.get("type") != "literal" or not isinstance(n_arg.get("value"), int):
+                    errors.append(
+                        f"{context}: SPLIT_PART index (3rd arg) must be a literal integer"
+                    )
+                elif n_arg["value"] < 1:
+                    errors.append(f"{context}: SPLIT_PART index must be >= 1")
+                elif n_arg["value"] > _SPLIT_PART_MAX_INDEX:
+                    errors.append(
+                        f"{context}: SPLIT_PART index {n_arg['value']} exceeds "
+                        f"limit of {_SPLIT_PART_MAX_INDEX}"
+                    )
+        for i, arg in enumerate(args):
             _validate_expr(arg, errors, f"{context}.args[{i}]")
 
     elif t == "binary_op":
@@ -201,6 +268,8 @@ def _exprs_in_transformation(tr: dict) -> list[tuple[dict, str]]:
 
     elif tr_type == "join":
         result.append((tr.get("condition", {}), f"{prefix} condition"))
+        for i, col in enumerate(tr.get("columns", [])):
+            result.append((col.get("expr", {}), f"{prefix} col[{i}] expr"))
 
     elif tr_type == "aggregate":
         for i, g in enumerate(tr.get("group_by", [])):
@@ -305,6 +374,26 @@ def validate_model(model: EtlModel) -> list[str]:
     transformation_ids = {t["id"] for t in model.transformations}
     all_relation_ids = source_ids | transformation_ids
 
+    # Check 0: generate_series source fields
+    for src in model.sources:
+        if src.get("type") == "generate_series":
+            sid = src.get("id", "?")
+            if not isinstance(src.get("start"), int):
+                errors.append(
+                    f"generate_series source '{sid}': 'start' must be an integer"
+                )
+            if not src.get("alias"):
+                errors.append(
+                    f"generate_series source '{sid}': 'alias' must not be empty"
+                )
+            end_expr = src.get("end_expr", {})
+            if not end_expr:
+                errors.append(
+                    f"generate_series source '{sid}': 'end_expr' must not be empty"
+                )
+            else:
+                _validate_expr(end_expr, errors, f"generate_series '{sid}' end_expr")
+
     # Check 1: final_relation_id
     if not model.final_relation_id:
         errors.append("final_relation_id is required and must not be empty")
@@ -351,6 +440,9 @@ def validate_model(model: EtlModel) -> list[str]:
     for tr in model.transformations:
         tr_type = tr.get("type", "")
         if tr_type == "select":
+            for col in tr.get("columns", []):
+                col_ids.append(col.get("id", ""))
+        elif tr_type == "join":
             for col in tr.get("columns", []):
                 col_ids.append(col.get("id", ""))
         elif tr_type == "aggregate":
@@ -506,6 +598,21 @@ def compile_sql(model: Any) -> str:
             if src_type == "cte":
                 cte_map[source["name"]] = source["sql"]
                 sql_map[rid] = f"(SELECT * FROM {source['name']})"
+
+            elif src_type == "generate_series":
+                col = source.get("alias", "n")
+                start = source.get("start", 1)
+                end_sql = expr_to_sql(source["end_expr"])
+                cte_name = f"_gs_{rid[:8]}"
+                # Inline WITH RECURSIVE — requires SQLite ≥ 3.35
+                sql_map[rid] = (
+                    f"(WITH RECURSIVE {cte_name}({col}) AS ("
+                    f"SELECT {start} "
+                    f"UNION ALL "
+                    f"SELECT {col} + 1 FROM {cte_name} WHERE {col} < {end_sql}"
+                    f") SELECT {col} FROM {cte_name})"
+                )
+
             else:
                 sql_map[rid] = f"(SELECT * FROM {source['name']}{alias_part})"
 
@@ -529,7 +636,17 @@ def compile_sql(model: Any) -> str:
 
         elif node["type"] == "join":
             tr = node["transformation"]
-            left_sql = sql_map[tr["left_input"]]
+            left_rid = tr["left_input"]
+            left_node = relations[left_rid]
+            # Table sources wrap their alias inside the subquery, making it invisible
+            # at the join level.  Use the table name + alias directly so that
+            # column_refs like "il"."col" resolve correctly in the ON condition.
+            if left_node["type"] == "source" and left_node["source"].get("type") == "table":
+                src = left_node["source"]
+                src_alias = src.get("alias", "")
+                left_sql = f"{src['name']} {src_alias}" if src_alias else src["name"]
+            else:
+                left_sql = sql_map[left_rid]
             right_node = relations[tr["right_source"]]
             right_source = right_node["source"]
             if right_source.get("type") == "table":
@@ -539,10 +656,21 @@ def compile_sql(model: Any) -> str:
             join_type = tr.get("join_type", "inner").upper()
             alias_part = f" AS {tr['alias']}" if tr.get("alias") else ""
             condition = expr_to_sql(tr["condition"])
-            sql_map[rid] = (
-                f"(SELECT * FROM {left_sql} "
-                f"{join_type} JOIN {right_sql}{alias_part} ON {condition})"
-            )
+            join_columns = tr.get("columns")
+            if join_columns:
+                cols_sql = ", ".join(
+                    f"{expr_to_sql(col['expr'])} AS {col['alias']}"
+                    for col in join_columns
+                )
+                sql_map[rid] = (
+                    f"(SELECT {cols_sql} FROM {left_sql} "
+                    f"{join_type} JOIN {right_sql}{alias_part} ON {condition})"
+                )
+            else:
+                sql_map[rid] = (
+                    f"(SELECT * FROM {left_sql} "
+                    f"{join_type} JOIN {right_sql}{alias_part} ON {condition})"
+                )
 
         elif node["type"] == "aggregate":
             tr = node["transformation"]

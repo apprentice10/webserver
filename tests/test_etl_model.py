@@ -1,5 +1,6 @@
 from engine.etl_compiler import compile_sql, validate_model, EtlValidationError
 from engine.etl_model import model_from_dict
+from engine.sql_to_model import sql_to_model
 import pytest
 
 
@@ -525,3 +526,338 @@ def test_unknown_expression_type_rejected():
     }
     errors = validate_model(model_from_dict(model))
     assert any("raw_sql" in e or "unknown" in e.lower() for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# generate_series — compilation
+# ---------------------------------------------------------------------------
+
+def _gs_source(rid: str, alias: str, start: int, end_val: int) -> dict:
+    return {
+        "id": rid, "type": "generate_series",
+        "name": "_generate_series", "alias": alias, "sql": "",
+        "start": start, "end_expr": _lit(end_val),
+    }
+
+
+def test_generate_series_basic():
+    """generate_series compiles to a WITH RECURSIVE subquery."""
+    model = {
+        "sources": [_gs_source("gs1", "n", 1, 5)],
+        "transformations": [{
+            "id": "ts", "type": "select", "inputs": ["gs1"],
+            "columns": [{"id": "c1", "alias": "n", "expr": _col_ref("n")}],
+        }],
+        "final_relation_id": "ts",
+        "order_by": [],
+        "meta": {"schema_version": 1},
+    }
+    _valid(model)
+    sql = compile_sql(model)
+    assert "WITH RECURSIVE" in sql
+    assert "UNION ALL" in sql
+    # column alias appears in output
+    assert '"n" AS n' in sql
+
+
+def test_generate_series_validation_errors():
+    """Missing alias and non-integer start are caught by validate_model."""
+    model_bad_start = {
+        "sources": [{
+            "id": "gs1", "type": "generate_series",
+            "name": "_generate_series", "alias": "n", "sql": "",
+            "start": "one",   # ← wrong type
+            "end_expr": _lit(10),
+        }],
+        "transformations": [{
+            "id": "ts", "type": "select", "inputs": ["gs1"],
+            "columns": [{"id": "c1", "alias": "n", "expr": _col_ref("n")}],
+        }],
+        "final_relation_id": "ts", "order_by": [], "meta": {"schema_version": 1},
+    }
+    errors = validate_model(model_from_dict(model_bad_start))
+    assert any("start" in e for e in errors)
+
+    model_no_alias = {
+        "sources": [{
+            "id": "gs1", "type": "generate_series",
+            "name": "_generate_series", "alias": "", "sql": "",  # ← empty alias
+            "start": 1, "end_expr": _lit(10),
+        }],
+        "transformations": [{
+            "id": "ts", "type": "select", "inputs": ["gs1"],
+            "columns": [{"id": "c1", "alias": "n", "expr": _col_ref("n")}],
+        }],
+        "final_relation_id": "ts", "order_by": [], "meta": {"schema_version": 1},
+    }
+    errors2 = validate_model(model_from_dict(model_no_alias))
+    assert any("alias" in e for e in errors2)
+
+
+def test_generate_series_cross_join_filter():
+    """Typical pattern: data CROSS JOIN generate_series, filtered by n <= token_count."""
+    model = {
+        "sources": [
+            {"id": "s1", "type": "table", "name": "instrument_list", "alias": "il", "sql": ""},
+            _gs_source("gs1", "n", 1, 10),
+        ],
+        "transformations": [
+            {
+                "id": "tj", "type": "join", "inputs": ["s1", "gs1"],
+                "join_type": "INNER",
+                "left_input": "s1",
+                "right_source": "gs1",
+                "alias": "n",
+                "condition": {
+                    "type": "binary_op", "op": "<=",
+                    "left": _col_ref("n"),
+                    "right": {
+                        "type": "function", "name": "LENGTH",
+                        "args": [_col_ref("cables", "il")],
+                    },
+                },
+            },
+            {
+                "id": "ts", "type": "select", "inputs": ["tj"],
+                "columns": [
+                    {"id": "c1", "alias": "tag",  "expr": _col_ref("tag",  "il")},
+                    {"id": "c2", "alias": "n",    "expr": _col_ref("n")},
+                ],
+            },
+        ],
+        "final_relation_id": "ts",
+        "order_by": [],
+        "meta": {"schema_version": 1},
+    }
+    _valid(model)
+    sql = compile_sql(model)
+    assert "WITH RECURSIVE" in sql
+    assert "instrument_list" in sql
+
+
+def test_generate_series_end_expr_column_ref():
+    """generate_series with a column_ref end_expr validates and compiles."""
+    model = {
+        "sources": [
+            {"id": "s1", "type": "table", "name": "data", "alias": "d", "sql": ""},
+            {
+                "id": "gs1", "type": "generate_series",
+                "name": "_generate_series", "alias": "idx", "sql": "",
+                "start": 1,
+                "end_expr": _col_ref("max_n", "d"),
+            },
+        ],
+        "transformations": [
+            {
+                "id": "tj", "type": "join", "inputs": ["s1", "gs1"],
+                "join_type": "INNER", "left_input": "s1", "right_source": "gs1",
+                "alias": "idx",
+                "condition": {
+                    "type": "binary_op", "op": "<=",
+                    "left": _col_ref("idx"),
+                    "right": _col_ref("max_n", "d"),
+                },
+            },
+            {
+                "id": "ts", "type": "select", "inputs": ["tj"],
+                "columns": [
+                    {"id": "c1", "alias": "idx", "expr": _col_ref("idx")},
+                ],
+            },
+        ],
+        "final_relation_id": "ts",
+        "order_by": [],
+        "meta": {"schema_version": 1},
+    }
+    _valid(model)
+    sql = compile_sql(model)
+    assert "WITH RECURSIVE" in sql
+    assert '"d"."max_n"' in sql
+
+
+# ---------------------------------------------------------------------------
+# SPLIT_PART — compilation
+# ---------------------------------------------------------------------------
+
+def _split_part(s: dict, delim: str, n: int) -> dict:
+    return _fn("SPLIT_PART", s, _lit(delim), _lit(n))
+
+
+def test_split_part_n1_compiles():
+    """SPLIT_PART(col, '|', 1) compiles to CASE WHEN INSTR(...) > 0 THEN SUBSTR(...) ELSE col END."""
+    model = {
+        "sources": [{"id": "s1", "type": "table", "name": "t", "alias": "t", "sql": ""}],
+        "transformations": [{
+            "id": "ts", "type": "select", "inputs": ["s1"],
+            "columns": [{
+                "id": "c1", "alias": "part1",
+                "expr": _split_part(_col_ref("cables", "t"), "|", 1),
+            }],
+        }],
+        "final_relation_id": "ts",
+        "order_by": [],
+        "meta": {"schema_version": 1},
+    }
+    _valid(model)
+    sql = compile_sql(model)
+    assert "INSTR" in sql
+    assert "SUBSTR" in sql
+    assert "CASE WHEN" in sql
+    assert "part1" in sql
+
+
+def test_split_part_n2_compiles():
+    """SPLIT_PART(col, '|', 2) produces nested SUBSTR/INSTR chain."""
+    model = {
+        "sources": [{"id": "s1", "type": "table", "name": "t", "alias": "t", "sql": ""}],
+        "transformations": [{
+            "id": "ts", "type": "select", "inputs": ["s1"],
+            "columns": [{
+                "id": "c1", "alias": "part2",
+                "expr": _split_part(_col_ref("cables", "t"), "|", 2),
+            }],
+        }],
+        "final_relation_id": "ts",
+        "order_by": [],
+        "meta": {"schema_version": 1},
+    }
+    _valid(model)
+    sql = compile_sql(model)
+    # Nested SUBSTR calls appear twice or more for n=2
+    assert sql.count("SUBSTR") >= 2
+
+
+def test_split_part_validation_wrong_arity():
+    """SPLIT_PART with wrong number of args fails validation."""
+    model = {
+        "sources": [{"id": "s1", "type": "table", "name": "t", "alias": "t", "sql": ""}],
+        "transformations": [{
+            "id": "ts", "type": "select", "inputs": ["s1"],
+            "columns": [{
+                "id": "c1", "alias": "x",
+                "expr": _fn("SPLIT_PART", _col_ref("c"), _lit("|")),  # only 2 args
+            }],
+        }],
+        "final_relation_id": "ts",
+        "order_by": [],
+        "meta": {"schema_version": 1},
+    }
+    errors = validate_model(model_from_dict(model))
+    assert any("SPLIT_PART" in e and "3" in e for e in errors)
+
+
+def test_split_part_validation_non_literal_index():
+    """SPLIT_PART with a column_ref as index fails validation."""
+    model = {
+        "sources": [{"id": "s1", "type": "table", "name": "t", "alias": "t", "sql": ""}],
+        "transformations": [{
+            "id": "ts", "type": "select", "inputs": ["s1"],
+            "columns": [{
+                "id": "c1", "alias": "x",
+                "expr": _fn("SPLIT_PART", _col_ref("c"), _lit("|"), _col_ref("n")),
+            }],
+        }],
+        "final_relation_id": "ts",
+        "order_by": [],
+        "meta": {"schema_version": 1},
+    }
+    errors = validate_model(model_from_dict(model))
+    assert any("literal integer" in e or "SPLIT_PART" in e for e in errors)
+
+
+def test_split_part_index_exceeds_limit():
+    """SPLIT_PART with index > 8 fails validation."""
+    model = {
+        "sources": [{"id": "s1", "type": "table", "name": "t", "alias": "t", "sql": ""}],
+        "transformations": [{
+            "id": "ts", "type": "select", "inputs": ["s1"],
+            "columns": [{
+                "id": "c1", "alias": "x",
+                "expr": _split_part(_col_ref("c", "t"), "|", 9),
+            }],
+        }],
+        "final_relation_id": "ts",
+        "order_by": [],
+        "meta": {"schema_version": 1},
+    }
+    errors = validate_model(model_from_dict(model))
+    assert any("limit" in e.lower() or "9" in e or "8" in e for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# sql_to_model — generate_series detection
+# ---------------------------------------------------------------------------
+
+def test_sql_to_model_generate_series_recursive_cte():
+    """Recursive number-generator CTE is converted to a generate_series source."""
+    sql = """
+    WITH nums(n) AS (
+        SELECT 1 UNION ALL SELECT n + 1 FROM nums WHERE n < 10
+    )
+    SELECT n FROM nums
+    """
+    m = sql_to_model(sql)
+    gs_sources = [s for s in m["sources"] if s.get("type") == "generate_series"]
+    assert len(gs_sources) == 1
+    gs = gs_sources[0]
+    assert gs["start"] == 1
+    assert gs["end_expr"] == {"type": "literal", "value": 10}
+    assert gs["alias"] == "nums"
+
+
+def test_sql_to_model_generate_series_union_all():
+    """UNION ALL of consecutive literals is converted to a generate_series source."""
+    sql = """
+    WITH idx(n) AS (
+        SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5
+    )
+    SELECT n FROM idx
+    """
+    m = sql_to_model(sql)
+    gs_sources = [s for s in m["sources"] if s.get("type") == "generate_series"]
+    assert len(gs_sources) == 1
+    gs = gs_sources[0]
+    assert gs["start"] == 1
+    assert gs["end_expr"] == {"type": "literal", "value": 5}
+
+
+def test_sql_to_model_generate_series_non_generator_cte_kept():
+    """A CTE that doesn't match number-generator patterns stays as a CTE source."""
+    sql = """
+    WITH base AS (SELECT tag, area FROM instrument_list WHERE area IS NOT NULL)
+    SELECT tag FROM base
+    """
+    m = sql_to_model(sql)
+    cte_sources = [s for s in m["sources"] if s.get("type") == "cte"]
+    assert len(cte_sources) == 1
+    assert cte_sources[0]["name"] == "base"
+
+
+# ---------------------------------------------------------------------------
+# sql_to_model — SPLIT_PART rewriting
+# ---------------------------------------------------------------------------
+
+def test_sql_to_model_split_part_postgres_native():
+    """Postgres SPLIT_PART(col, d, n) is parsed as a SPLIT_PART function node."""
+    sql = "SELECT SPLIT_PART(cables, '|', 2) AS token FROM instrument_list"
+    m = sql_to_model(sql)
+    sel = next(t for t in m["transformations"] if t["type"] == "select")
+    expr = sel["columns"][0]["expr"]
+    assert expr["type"] == "function"
+    assert expr["name"] == "SPLIT_PART"
+    assert expr["args"][2] == {"type": "literal", "value": 2}
+
+
+def test_sql_to_model_split_part_substr_instr_rewrite():
+    """SQLite SUBSTR(s, 1, INSTR(s, d) - 1) idiom is rewritten to SPLIT_PART(s, d, 1)."""
+    sql = """
+    SELECT SUBSTR(cables, 1, INSTR(cables, '|') - 1) AS first_cable
+    FROM instrument_list
+    """
+    m = sql_to_model(sql)
+    sel = next(t for t in m["transformations"] if t["type"] == "select")
+    expr = sel["columns"][0]["expr"]
+    assert expr["type"] == "function"
+    assert expr["name"] == "SPLIT_PART"
+    assert expr["args"][1] == {"type": "literal", "value": "|"}
+    assert expr["args"][2] == {"type": "literal", "value": 1}

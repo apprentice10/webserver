@@ -88,10 +88,22 @@ class Column:
 @dataclass
 class Source:
     id: str = ""
-    type: str = ""      # "table" | "cte" | "subquery"
+    type: str = ""      # "table" | "cte" | "subquery" | "generate_series"
     name: str = ""      # tool slug for "table", CTE name for "cte"
     alias: str = ""     # SQL alias used in expressions
     sql: str = ""       # ONLY for type="cte"; never parsed at runtime
+
+
+@dataclass
+class GenerateSeriesSource:
+    """Virtual source that generates sequential integers (source-like, no inputs)."""
+    id: str = ""
+    type: str = "generate_series"
+    name: str = "_generate_series"   # internal sentinel — not a real table
+    alias: str = ""                   # also the output column name (e.g. "n")
+    sql: str = ""                     # unused; present for schema uniformity
+    start: int = 1
+    end_expr: dict = field(default_factory=dict)   # any numeric Expression
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +138,7 @@ class JoinTransformation:
     right_source: str = ""        # source id (future: any relation id)
     alias: str = ""               # SQL alias for the right-side source
     condition: dict = field(default_factory=dict)   # Expression dict
+    columns: list = field(default_factory=list)     # optional — if present, SELECT {cols} instead of SELECT *
 
 
 @dataclass

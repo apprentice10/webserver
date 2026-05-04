@@ -710,6 +710,283 @@ The tool table always contains system columns (`tag`, `rev`, `log`) and internal
 
 ---
 
+## 15. generate\_series Source
+
+Produces a virtual single-column table of consecutive integers. It has no inputs — it is a source, not a transformation.
+
+### Schema
+
+```json
+{
+  "id":       "gs1",
+  "type":     "generate_series",
+  "name":     "_generate_series",
+  "alias":    "n",
+  "sql":      "",
+  "start":    1,
+  "end_expr": <Expression>
+}
+```
+
+| Field | Required | Constraint |
+|-------|----------|------------|
+| `id` | yes | Unique relation id |
+| `type` | yes | Must be `"generate_series"` |
+| `name` | yes | Use `"_generate_series"` (internal sentinel) |
+| `alias` | yes | Output column name — used in column_ref expressions (e.g. `"n"`) |
+| `sql` | yes | Always `""` |
+| `start` | yes | Integer ≥ 1 |
+| `end_expr` | yes | Any valid numeric Expression |
+
+### Compilation
+
+Compiles to an inline `WITH RECURSIVE` subquery (requires SQLite ≥ 3.35):
+
+```sql
+(WITH RECURSIVE _gs_<id>(n) AS (
+  SELECT 1
+  UNION ALL
+  SELECT n + 1 FROM _gs_<id> WHERE n < <end_expr>
+) SELECT n FROM _gs_<id>)
+```
+
+### Example — generate 1..5
+
+```json
+{
+  "id": "gs1", "type": "generate_series",
+  "name": "_generate_series", "alias": "n", "sql": "",
+  "start": 1, "end_expr": { "type": "literal", "value": 5 }
+}
+```
+
+### Recommended join pattern
+
+Use `generate_series` as the right side of a JOIN, then filter `n <= <bound>`:
+
+```json
+{
+  "sources": [
+    { "id": "s1", "type": "table", "name": "instrument_list", "alias": "il", "sql": "" },
+    {
+      "id": "gs1", "type": "generate_series",
+      "name": "_generate_series", "alias": "n", "sql": "",
+      "start": 1, "end_expr": { "type": "literal", "value": 10 }
+    }
+  ],
+  "transformations": [
+    {
+      "id": "tj", "type": "join", "inputs": ["s1", "gs1"],
+      "join_type": "INNER",
+      "left_input": "s1",
+      "right_source": "gs1",
+      "alias": "n",
+      "condition": {
+        "type": "binary_op", "op": "<=",
+        "left": { "type": "column_ref", "column_name": "n", "table_alias": "" },
+        "right": {
+          "type": "function", "name": "LENGTH",
+          "args": [{ "type": "column_ref", "column_name": "cables", "table_alias": "il" }]
+        }
+      }
+    },
+    {
+      "id": "ts", "type": "select", "inputs": ["tj"],
+      "columns": [
+        { "id": "c1", "alias": "tag",  "expr": { "type": "column_ref", "column_name": "tag",  "table_alias": "il" } },
+        { "id": "c2", "alias": "n",    "expr": { "type": "column_ref", "column_name": "n",    "table_alias": "" } }
+      ]
+    }
+  ],
+  "final_relation_id": "ts",
+  "order_by": [],
+  "meta": { "schema_version": 1 }
+}
+```
+
+### Notes
+
+- `end_expr` may be a column_ref — but it is evaluated in the CTE definition scope, not per-row. For per-row bounds, set a safe literal upper limit and filter with `n <= <column_expr>` in the JOIN condition.
+- `generate_series` sources are valid as `right_source` in a JOIN.
+- The CTE name is auto-generated as `_gs_<id prefix>` — no collision risk with user-defined CTE sources.
+
+---
+
+## 16. SPLIT\_PART Expression
+
+Extracts the nth token from a delimiter-separated string. Stored as a `function` node with name `"SPLIT_PART"`.
+
+### Syntax
+
+```json
+{
+  "type": "function",
+  "name": "SPLIT_PART",
+  "args": [
+    <string_expr>,
+    { "type": "literal", "value": "<delimiter>" },
+    { "type": "literal", "value": <n> }
+  ]
+}
+```
+
+| Arg | Position | Constraint |
+|-----|----------|------------|
+| string expression | 1 | Any valid expression producing a string |
+| delimiter | 2 | String literal (any single or multi-character delimiter) |
+| index | 3 | **Literal integer, 1-based, 1–8** |
+
+### Behavior
+
+Extracts the nth delimiter-separated token, 1-indexed. If fewer than n tokens exist, returns the last available token (tail behavior — not an error).
+
+```
+SPLIT_PART("A|B|C", "|", 1) → "A"
+SPLIT_PART("A|B|C", "|", 2) → "B"
+SPLIT_PART("A|B|C", "|", 3) → "C"
+```
+
+### Compilation (SQLite)
+
+Compiles to nested `CASE / INSTR / SUBSTR` expressions. For `n=1`:
+
+```sql
+CASE WHEN INSTR("t"."cables", '|') > 0
+     THEN SUBSTR("t"."cables", 1, INSTR("t"."cables", '|') - 1)
+     ELSE "t"."cables" END
+```
+
+For `n=2`, a second `SUBSTR` is wrapped around the inner expression. SQL grows with each level but remains correct for all n ≤ 8.
+
+### Examples
+
+**First token of a pipe-separated column:**
+
+```json
+{
+  "type": "function", "name": "SPLIT_PART",
+  "args": [
+    { "type": "column_ref", "column_name": "cables", "table_alias": "il" },
+    { "type": "literal", "value": "|" },
+    { "type": "literal", "value": 1 }
+  ]
+}
+```
+
+**Second token:**
+
+```json
+{
+  "type": "function", "name": "SPLIT_PART",
+  "args": [
+    { "type": "column_ref", "column_name": "cables", "table_alias": "il" },
+    { "type": "literal", "value": "|" },
+    { "type": "literal", "value": 2 }
+  ]
+}
+```
+
+### Validation rules
+
+- Must have exactly 3 arguments — validation error otherwise
+- 3rd argument must be a literal integer — non-literal index is a validation error
+- Index must be ≥ 1 and ≤ 8 — exceeded limit is a validation error
+
+### SQL → IR conversion (sql\_to\_model)
+
+The converter rewrites two patterns automatically:
+
+| SQL pattern | Converted to |
+|-------------|--------------|
+| `SPLIT_PART(s, d, n)` (Postgres native) | `function("SPLIT_PART", [s, d, n])` |
+| `SUBSTR(s, 1, INSTR(s, d) - 1)` | `function("SPLIT_PART", [s, d, 1])` |
+
+More complex SUBSTR chains are not auto-detected and must be rewritten manually.
+
+---
+
+## 17. Migration Guide — Deprecated SQL Patterns
+
+### Why SUBSTR-based parsing is deprecated in IR
+
+Nested `SUBSTR/INSTR` chains are:
+- Opaque — intent is hidden inside string manipulation logic
+- Fragile — delimiter escaping is not handled
+- Not portable — differ between SQLite and Postgres
+- Not validatable — the compiler has no way to check correctness
+
+The IR replaces them with `SPLIT_PART`, which is:
+- Declarative — index and delimiter are explicit
+- Validated — arity, type, and range checked before compilation
+- Compiler-translated — the SQLite SQL is generated correctly and consistently
+
+### How to rewrite old models
+
+**Before (deprecated):**
+
+```json
+{
+  "type": "function", "name": "SUBSTR",
+  "args": [
+    { "type": "column_ref", "column_name": "cables", "table_alias": "il" },
+    { "type": "literal", "value": 1 },
+    {
+      "type": "binary_op", "op": "-",
+      "left": {
+        "type": "function", "name": "INSTR",
+        "args": [
+          { "type": "column_ref", "column_name": "cables", "table_alias": "il" },
+          { "type": "literal", "value": "|" }
+        ]
+      },
+      "right": { "type": "literal", "value": 1 }
+    }
+  ]
+}
+```
+
+**After (canonical):**
+
+```json
+{
+  "type": "function", "name": "SPLIT_PART",
+  "args": [
+    { "type": "column_ref", "column_name": "cables", "table_alias": "il" },
+    { "type": "literal", "value": "|" },
+    { "type": "literal", "value": 1 }
+  ]
+}
+```
+
+### Recommended pattern for multi-value column expansion
+
+Use `generate_series` + `SPLIT_PART` together:
+
+```
+s1 (table: instrument_list)
+gs1 (generate_series: 1..10)
+tj (join s1 × gs1, condition: n <= token_count(cables))
+tc (compute_column: SPLIT_PART(cables, "|", n))
+ts (select: tag, n, cable_token)
+```
+
+This replaces old SQL like:
+
+```sql
+WITH nums(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM nums WHERE n < 10)
+SELECT
+  il.tag,
+  nums.n,
+  SUBSTR(il.cables, ..., INSTR(...) - 1) AS cable_token
+FROM instrument_list il
+CROSS JOIN nums
+WHERE nums.n <= LENGTH(il.cables) - LENGTH(REPLACE(il.cables,'|','')) + 1
+```
+
+The `sql_to_model` converter detects the recursive CTE and UNION ALL patterns automatically and produces the equivalent `generate_series` source. The `SUBSTR(s, 1, INSTR(s, d) - 1)` idiom is also auto-detected and rewritten to `SPLIT_PART(s, d, 1)`.
+
+---
+
 ## 14. Checklist Before Saving
 
 - [ ] `meta.schema_version` is `1`

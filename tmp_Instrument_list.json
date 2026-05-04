@@ -1,0 +1,147 @@
+{
+  "sources": [
+    {
+      "id": "src_empty",
+      "type": "cte",
+      "name": "empty_source",
+      "alias": "",
+      "sql": "SELECT 1 WHERE 1 = 0"
+    }
+  ],
+  "transformations": [
+    {
+      "id": "sel_init",
+      "type": "select",
+      "inputs": [
+        "src_empty"
+      ],
+      "columns": [
+        {
+          "id": "col_fase",
+          "alias": "fase",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "id": "col_reparto",
+          "alias": "reparto",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "id": "col_pid",
+          "alias": "pid",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "id": "col_utenza",
+          "alias": "utenza",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "id": "col_posizione",
+          "alias": "posizione",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "id": "col_tag",
+          "alias": "tag",
+          "expr": {
+            "type": "literal",
+            "value": "INIT"
+          }
+        },
+        {
+          "id": "col_servizio",
+          "alias": "servizio",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "id": "col_tipo_strumento",
+          "alias": "tipo_strumento",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "id": "col_intervallo",
+          "alias": "intervallo",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "id": "col_unita",
+          "alias": "unita",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "id": "col_classe_linea",
+          "alias": "classe_linea",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "id": "col_attacco_processo",
+          "alias": "attacco_processo",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "id": "col_classificazione_area",
+          "alias": "classificazione_area",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "id": "col_classificazione_iso_8",
+          "alias": "classificazione_iso_8",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "id": "col_note",
+          "alias": "note",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        }
+      ]
+    }
+  ],
+  "final_relation_id": "sel_init",
+  "order_by": [],
+  "meta": {
+    "schema_version": 1
+  }
+}

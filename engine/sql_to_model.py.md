@@ -10,22 +10,16 @@
 | 66–68 | `_unmask(s, tbl)` — restore placeholders |
 | 70–84 | `_comma_split(text)` — depth-0 comma split |
 | 86–120 | `_find_clauses(sql)` — ordered `[(tag, kw_text, content)]` at paren-depth 0 |
-| 122–145 | `_extract_ctes(sql)` — extract `WITH ... AS (...)` CTEs |
-| 147–168 | `_unquote`, `_table_ref` — identifier helpers |
-| 170–217 | `_tokenize_expr(text, str_tbl)` — SQL expression tokenizer; handles masked strings, `||`, double-quoted identifiers |
-| 220–349 | `_ExprParser` — recursive-descent expression parser |
-| 220 | `parse()` — entry point |
-| 228 | `_logical_or` → `_logical_and` → `_not_expr` → `_comparison` |
-| 258 | `_comparison` — handles `IS NULL`, `IS NOT NULL`, `= NULL` auto-fix |
-| 272 | `_concat` — collects `||` chain → `_concat_to_ast` |
-| 285 | `_concat_to_ast` — detects alternating value/sep pattern → `CONCAT_WS(sep, ...)` |
-| 300 | `_add`, `_mul`, `_unary` — arithmetic |
-| 318 | `_primary` — string/number/null/bool literals, function calls, column refs, `CASE` |
-| 344 | `_case` — full CASE WHEN THEN ELSE END |
-| 351 | `_parse_expr(text, str_tbl)` — public entry: tokenize + parse, raises `ValueError` on failure |
-| 358–380 | `_parse_col_item(item, str_tbl)` — parse one SELECT list item into `{id, alias, expr}` |
-| 382 | `_join_type(kw_text)` — extract uppercase join type from keyword text |
-| 390–462 | `sql_to_model(sql)` — main converter |
+| 122–200 | `_detect_generate_series_cte(name, sql, str_tbl)` — detect recursive/UNION-ALL number-generator CTEs; returns generate_series source dict or None |
+| 202–235 | `_extract_ctes(sql, str_tbl)` — extract CTEs; delegates to `_detect_generate_series_cte` for each |
+| 238–255 | `_unquote`, `_table_ref` — identifier helpers |
+| 258–310 | `_tokenize_expr(text, str_tbl)` — SQL expression tokenizer |
+| 315–460 | `_ExprParser` — recursive-descent expression parser |
+| 465–520 | `_try_rewrite_split_part(expr)` — post-parse AST rewriter: SPLIT_PART pass-through + SUBSTR/INSTR → SPLIT_PART detection |
+| 523 | `_parse_expr(text, str_tbl)` — tokenize + parse + `_try_rewrite_split_part`; raises `ValueError` on failure |
+| 530–555 | `_parse_col_item(item, str_tbl)` — parse one SELECT list item |
+| 558 | `_join_type(kw_text)` — extract uppercase join type |
+| 566–640 | `sql_to_model(sql)` — main converter; passes `str_tbl` to `_extract_ctes` |
 
 ## Decisions
 
@@ -37,3 +31,8 @@
 - **DISTINCT is silently dropped**: EtlModel has no SELECT DISTINCT concept. The user should add a GROUP BY or AGGREGATE transformation if deduplication is required.
 - **JOIN type uppercase**: `_join_type` returns `"LEFT"`, `"RIGHT"`, `"INNER"`, `"FULL"` (uppercase) per EtlModel spec (section 5.3 of ETL_TEMPLATE_GUIDE.md).
 - **JOINs paired with ON by index**: `join_queue[i]` paired with `on_queue[i]`. Missing ON → empty dict `{}` (compile will error, user must fill in).
+- **`_extract_ctes` now takes `str_tbl`**: Required so `_detect_generate_series_cte` can parse the `end_expr` (which may contain masked string literals) correctly. Callers must pass the mask table.
+- **CTE name regex handles column lists**: `nums(n) AS (...)` is now supported via the `(?:\([^)]*\)\s*)?` group in the CTE name pattern. The column list is discarded; the compiler infers the alias from `generate_series.alias`.
+- **`WITH RECURSIVE` prefix handled in `_extract_ctes`**: The keyword is consumed by the updated opening regex so it doesn't interfere with CTE name parsing.
+- **SPLIT_PART rewriting is best-effort**: Only the simplest `SUBSTR(s, 1, INSTR(s, d) - 1)` pattern is auto-detected. Deeper SUBSTR chains require manual rewriting to SPLIT_PART in the model editor.
+- **generate_series detection is heuristic**: Uses two regex patterns (recursive CTE and UNION ALL of consecutive integers). CTEs that don't match are kept as regular CTE sources — no data is lost.

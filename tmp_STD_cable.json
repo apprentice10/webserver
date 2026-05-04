@@ -1,0 +1,231 @@
+{
+  "sources": [
+    {
+      "id": "xb2324743",
+      "type": "table",
+      "name": "instrument_list",
+      "alias": "instrument_list",
+      "sql": ""
+    }
+  ],
+  "transformations": [
+    {
+      "id": "x5ef8ab6e",
+      "type": "filter",
+      "inputs": [
+        "xb2324743"
+      ],
+      "condition": {
+        "type": "logical",
+        "op": "or",
+        "args": [
+          {
+            "type": "is_not_null",
+            "expr": {
+              "type": "column_ref",
+              "table_alias": "",
+              "column_name": "tipo_strumento"
+            }
+          },
+          {
+            "type": "is_not_null",
+            "expr": {
+              "type": "column_ref",
+              "table_alias": "",
+              "column_name": "intervallo"
+            }
+          },
+          {
+            "type": "is_not_null",
+            "expr": {
+              "type": "column_ref",
+              "table_alias": "",
+              "column_name": "classe_linea"
+            }
+          },
+          {
+            "type": "is_not_null",
+            "expr": {
+              "type": "column_ref",
+              "table_alias": "",
+              "column_name": "attacco_processo"
+            }
+          },
+          {
+            "type": "is_not_null",
+            "expr": {
+              "type": "column_ref",
+              "table_alias": "",
+              "column_name": "classificazione_area"
+            }
+          },
+          {
+            "type": "is_not_null",
+            "expr": {
+              "type": "column_ref",
+              "table_alias": "",
+              "column_name": "classificazione_iso_8"
+            }
+          }
+        ]
+      },
+      "mode": "where"
+    },
+    {
+      "id": "xa33a3a0d",
+      "type": "select",
+      "inputs": [
+        "x5ef8ab6e"
+      ],
+      "columns": [
+        {
+          "id": "x4ec771c6",
+          "alias": "tag",
+          "expr": {
+            "type": "function",
+            "name": "TRIM",
+            "args": [
+              {
+                "type": "function",
+                "name": "CONCAT_WS",
+                "args": [
+                  {
+                    "type": "literal",
+                    "value": " "
+                  },
+                  {
+                    "type": "function",
+                    "name": "COALESCE",
+                    "args": [
+                      {
+                        "type": "column_ref",
+                        "table_alias": "",
+                        "column_name": "tipo_strumento"
+                      },
+                      {
+                        "type": "literal",
+                        "value": ""
+                      }
+                    ]
+                  },
+                  {
+                    "type": "function",
+                    "name": "COALESCE",
+                    "args": [
+                      {
+                        "type": "column_ref",
+                        "table_alias": "",
+                        "column_name": "intervallo"
+                      },
+                      {
+                        "type": "literal",
+                        "value": ""
+                      }
+                    ]
+                  },
+                  {
+                    "type": "function",
+                    "name": "COALESCE",
+                    "args": [
+                      {
+                        "type": "column_ref",
+                        "table_alias": "",
+                        "column_name": "classe_linea"
+                      },
+                      {
+                        "type": "literal",
+                        "value": ""
+                      }
+                    ]
+                  },
+                  {
+                    "type": "function",
+                    "name": "COALESCE",
+                    "args": [
+                      {
+                        "type": "column_ref",
+                        "table_alias": "",
+                        "column_name": "attacco_processo"
+                      },
+                      {
+                        "type": "literal",
+                        "value": ""
+                      }
+                    ]
+                  },
+                  {
+                    "type": "function",
+                    "name": "COALESCE",
+                    "args": [
+                      {
+                        "type": "column_ref",
+                        "table_alias": "",
+                        "column_name": "classificazione_area"
+                      },
+                      {
+                        "type": "literal",
+                        "value": ""
+                      }
+                    ]
+                  },
+                  {
+                    "type": "function",
+                    "name": "COALESCE",
+                    "args": [
+                      {
+                        "type": "column_ref",
+                        "table_alias": "",
+                        "column_name": "classificazione_iso_8"
+                      },
+                      {
+                        "type": "literal",
+                        "value": ""
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "x08676e08",
+          "alias": "certificato",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "id": "xac69fcd3",
+          "alias": "alimentazione",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "id": "x86d6beaa",
+          "alias": "cavo",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        },
+        {
+          "id": "xd7c5050b",
+          "alias": "note",
+          "expr": {
+            "type": "literal",
+            "value": null
+          }
+        }
+      ]
+    }
+  ],
+  "final_relation_id": "xa33a3a0d",
+  "order_by": [],
+  "meta": {
+    "schema_version": 1
+  }
+}
