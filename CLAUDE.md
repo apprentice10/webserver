@@ -52,6 +52,7 @@ uvicorn main:app --reload
 
 1. Append a bullet to `_context/DONE.md` describing what was done and why (one per task, not one per commit).
 2. Remove or update the corresponding entry in `_context/CURRENT_STATE.md`.
+3. If a plan has been written add checklist and plan reference in `_context/CURRENT_STATE.md`.
 
 Skipping this step corrupts the project memory and forces manual reconstruction at the start of the next session (as happened on 2026-05-07). There are no exceptions. Even a one-line fix needs an entry if it closed a tracked item.
 

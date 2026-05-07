@@ -1,22 +1,24 @@
 # static/engine/js/sidebar.js
 
-**Description:** IIFE module managing the collapsible right-side sidebar panel. Provides open/close/toggle and content injection API for future sections (LOG, FLAGS).
+**Description:** Thin backward-compatibility adapter. All methods forward to `PanelSystem`. Allows `grid.js` and `flags.js` to keep using `SidebarManager.open(title)` / `SidebarManager.setContent(html)` without changes.
 
 ## Index
 
-| Lines / Symbol | Description |
-|----------------|-------------|
-| 1–5            | Module declaration, `_isOpen` state |
-| 8–10           | `toggle()` — open if closed, close if open |
-| 12–21          | `open(title)` — remove `sidebar-closed` class, set title, mark button active |
-| 23–28          | `close()` — add `sidebar-closed` class, remove active from button |
-| 30–32          | `isOpen()` — returns internal state |
-| 35–46          | `setTitle(html)`, `setContent(html)`, `clearContent()` — content injection API for future sections |
-| 48             | Public API export |
+| Lines | Symbol | Description |
+|-------|--------|-------------|
+| 1–3 | module comment | Explains adapter role and silent-open contract |
+| 4 | `_ID_MAP` | Maps legacy title strings to panel IDs: History/LOG→history, Flags/FLAG MANAGER→flags, Info→info |
+| 13 | `_idFor(title)` | Looks up ID from map; falls back to 'info' |
+| 15 | `toggle()` | → `PanelSystem.togglePanel('info')` |
+| 16 | `open(title)` | → `PanelSystem.showPanel(id, { silent: true })` — skips onActivate so callers fill body themselves |
+| 17 | `close()` | → `PanelSystem.closeAll()` |
+| 19–22 | `isOpen()` | Reads `.sidebar-closed` class from `#sidebar-panel` DOM directly |
+| 24–27 | `setTitle(title)` | Writes directly to `#sidebar-title` (no PanelSystem involvement) |
+| 29–32 | `setContent(html)` | Writes directly to `#sidebar-body` innerHTML |
+| 34–36 | `clearContent()` | Calls `setContent` with empty placeholder |
 
 ## Decisions
 
-- **CSS class toggle only**: open/close uses `sidebar-closed` class on `#sidebar-panel` (no inline style), matching the project's CSS toggle pattern (`toggleLog`, `toggleRev`). Width transition in CSS ensures smooth animation without JS timers.
-- **Content injection API**: `setContent(html)` / `clearContent()` are used by callers. Pattern: `SidebarManager.open('LOG'); SidebarManager.setTitle('LOG — col'); SidebarManager.setContent(html)`. The sidebar does not own the LOG logic — `grid.js::showCellLog` builds and injects the HTML.
-- **Load order**: loaded after `toolbar.js`, before `sql_editor.js`. Has no deps on other modules.
-- **Cell LOG CSS classes** (defined in `sidebar.css`): `.sidebar-log-meta` (column/row header grid), `.sidebar-log-label`, `.sidebar-log-value`, `.sidebar-log-list` (ul), `.sidebar-log-entry` (li), `.sidebar-log-ts`, `.sidebar-log-change`, `.sidebar-log-empty`.
+- **`open()` uses `silent: true`**: `flags.js` calls `SidebarManager.open('Flags')` then immediately overwrites the body with `setContent(html)`. Without silent, `PanelSystem.showPanel` would fire the `onActivate` callback which would overwrite the caller's content. See `panel_system.js.md` for the full contract.
+- **Direct DOM writes for `setTitle`/`setContent`**: These methods don't need PanelSystem involvement — they write directly to the DOM elements that PanelSystem also manages. PanelSystem re-sets `sidebar-title` only when `_applyLayout` runs, so direct writes are safe in between.
+- **Cell LOG CSS classes** (defined in `sidebar.css`): `.sidebar-log-meta`, `.sidebar-log-label`, `.sidebar-log-value`, `.sidebar-log-list`, `.sidebar-log-entry`, `.sidebar-log-ts`, `.sidebar-log-change`, `.sidebar-log-empty`, `.sidebar-log-type`, `.sidebar-log-rollback`, `.sidebar-log-actions`, `.sidebar-log-group`, `.sidebar-log-group-header`, `.sidebar-log-row-label`.

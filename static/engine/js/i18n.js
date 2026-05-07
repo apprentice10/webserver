@@ -1,0 +1,193 @@
+// i18n.js — EN/IT interface strings
+// Loaded first; exposes window.I18n = { t, setLang, getLang }
+const I18n = (() => {
+    const _tables = {
+        it: {
+            'app.name': 'Instrument Manager',
+            'side.tools': 'STRUMENTI',
+            'side.project': 'PROGETTO',
+            'side.settings': 'Impostazioni',
+            'side.new_tool': '+ Nuovo Tool',
+            'toolbar.search': 'Cerca per TAG, servizio, tipo…',
+            'toolbar.density': 'Densità',
+            'toolbar.dense': 'Densa',
+            'toolbar.comfortable': 'Comoda',
+            'toolbar.deleted': 'Eliminati',
+            'toolbar.log': 'LOG',
+            'toolbar.rev': 'REV',
+            'toolbar.sql': 'SQL',
+            'toolbar.flags': 'Flags',
+            'toolbar.info': 'Info',
+            'toolbar.etl': 'ETL Editor',
+            'toolbar.export': 'Export Excel',
+            'toolbar.panels': 'Pannelli',
+            'note.label': 'NOTE GENERALI',
+            'note.placeholder': 'Note generali per questo documento…',
+            'ctx.delete': 'Elimina riga',
+            'ctx.restore': 'Ripristina riga',
+            'ctx.hard_delete': 'Elimina definitivamente',
+            'ctx.keep_row': 'Mantieni riga',
+            'ctx.row_log': 'Vedi cronologia riga',
+            'ctx.cell_log': 'Vedi cronologia cella',
+            'ctx.range_log': 'Vedi cronologia selezione',
+            'ctx.remove_override': 'Rimuovi modifica manuale',
+            'ctx.flags': 'Flags',
+            'ctx.copy': 'Copia',
+            'ctx.paste': 'Incolla',
+            'ctx.actions': 'AZIONI',
+            'ctx.history': 'CRONOLOGIA',
+            'ctx.edit': 'MODIFICA',
+            'etl.title': 'ETL Editor',
+            'info.title': 'Info cella',
+            'info.column': 'Colonna',
+            'info.row': 'Riga',
+            'info.tag': 'TAG',
+            'info.value': 'Valore',
+            'info.lineage': 'Lineage',
+            'info.changes': 'Modifiche',
+            'info.empty': 'Seleziona una cella per vedere i dettagli',
+            'log.title': 'Cronologia',
+            'flags.title': 'Gestione Flags',
+            'flags.system': 'SYS',
+            'settings.title': 'Impostazioni',
+            'settings.tab.appearance': 'Aspetto',
+            'settings.tab.language': 'Lingua',
+            'settings.theme': 'Tema',
+            'settings.accent': 'Colore accent',
+            'settings.density': 'Densità griglia',
+            'settings.lang.title': 'Lingua interfaccia',
+            'settings.lang.sub': 'La lingua può essere cambiata in qualsiasi momento',
+            'settings.hint': 'Per modificare nome, icona o revisione del tool, clicca sui badge nella barra superiore.',
+            'tool.edit.title': 'Modifica tool',
+            'tool.edit.name': 'Nome',
+            'tool.edit.icon': 'Icona',
+            'rev.edit.title': 'Revisione attiva',
+            'rev.edit.sub': 'Revisione corrente del documento.',
+            'settings.cancel': 'Annulla',
+            'settings.save': 'Salva',
+            'panel.notes': 'Note',
+            'panel.reset_layout': 'Ripristina layout',
+            'panel.close': 'Chiudi',
+            'panel.expand': 'Espandi',
+            'panel.collapse': 'Comprimi',
+            'panel.dock': 'Aggancia',
+            'panel.float': 'Stacca',
+            'panel.drop_right': 'Aggancia a destra',
+            'panel.drop_bottom': 'Aggancia in basso',
+            'theme.light': 'Chiaro',
+            'theme.dark': 'Scuro',
+            'accent.cobalt': 'Cobalto',
+            'accent.crimson': 'Cremisi',
+            'accent.pine': 'Pino',
+            'accent.amber': 'Ambra',
+        },
+        en: {
+            'app.name': 'Instrument Manager',
+            'side.tools': 'TOOLS',
+            'side.project': 'PROJECT',
+            'side.settings': 'Settings',
+            'side.new_tool': '+ New Tool',
+            'toolbar.search': 'Search by TAG, service, type…',
+            'toolbar.density': 'Density',
+            'toolbar.dense': 'Dense',
+            'toolbar.comfortable': 'Comfy',
+            'toolbar.deleted': 'Deleted',
+            'toolbar.log': 'LOG',
+            'toolbar.rev': 'REV',
+            'toolbar.sql': 'SQL',
+            'toolbar.flags': 'Flags',
+            'toolbar.info': 'Info',
+            'toolbar.etl': 'ETL Editor',
+            'toolbar.export': 'Export Excel',
+            'toolbar.panels': 'Panels',
+            'note.label': 'GENERAL NOTES',
+            'note.placeholder': 'General notes for this document…',
+            'ctx.delete': 'Delete row',
+            'ctx.restore': 'Restore row',
+            'ctx.hard_delete': 'Delete permanently',
+            'ctx.keep_row': 'Keep row',
+            'ctx.row_log': 'View row history',
+            'ctx.cell_log': 'View cell history',
+            'ctx.range_log': 'View selection history',
+            'ctx.remove_override': 'Remove manual override',
+            'ctx.flags': 'Flags',
+            'ctx.copy': 'Copy',
+            'ctx.paste': 'Paste',
+            'ctx.actions': 'ACTIONS',
+            'ctx.history': 'HISTORY',
+            'ctx.edit': 'EDIT',
+            'etl.title': 'ETL Editor',
+            'info.title': 'Cell info',
+            'info.column': 'Column',
+            'info.row': 'Row',
+            'info.tag': 'TAG',
+            'info.value': 'Value',
+            'info.lineage': 'Lineage',
+            'info.changes': 'Changes',
+            'info.empty': 'Select a cell to see details',
+            'log.title': 'History',
+            'flags.title': 'Flag manager',
+            'flags.system': 'SYS',
+            'settings.title': 'Settings',
+            'settings.tab.appearance': 'Appearance',
+            'settings.tab.language': 'Language',
+            'settings.theme': 'Theme',
+            'settings.accent': 'Accent color',
+            'settings.density': 'Grid density',
+            'settings.lang.title': 'Interface language',
+            'settings.lang.sub': 'Language can be changed at any time',
+            'settings.hint': 'To edit the tool name, icon, or revision, click them in the top bar.',
+            'tool.edit.title': 'Edit tool',
+            'tool.edit.name': 'Name',
+            'tool.edit.icon': 'Icon',
+            'rev.edit.title': 'Active revision',
+            'rev.edit.sub': 'Current document revision.',
+            'settings.cancel': 'Cancel',
+            'settings.save': 'Save',
+            'panel.notes': 'Notes',
+            'panel.reset_layout': 'Reset layout',
+            'panel.close': 'Close',
+            'panel.expand': 'Expand',
+            'panel.collapse': 'Collapse',
+            'panel.dock': 'Dock',
+            'panel.float': 'Float',
+            'panel.drop_right': 'Dock right',
+            'panel.drop_bottom': 'Dock bottom',
+            'theme.light': 'Light',
+            'theme.dark': 'Dark',
+            'accent.cobalt': 'Cobalt',
+            'accent.crimson': 'Crimson',
+            'accent.pine': 'Pine',
+            'accent.amber': 'Amber',
+        },
+    };
+
+    let _lang = localStorage.getItem('im.lang') || 'it';
+
+    function t(key) {
+        return _tables[_lang]?.[key] ?? _tables['en']?.[key] ?? key;
+    }
+
+    function setLang(lang) {
+        if (!_tables[lang]) return;
+        _lang = lang;
+        localStorage.setItem('im.lang', lang);
+        applyLocale();
+    }
+
+    function getLang() { return _lang; }
+
+    function applyLocale() {
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            el.textContent = t(el.dataset.i18n);
+        });
+        document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+            el.placeholder = t(el.dataset.i18nPlaceholder);
+        });
+        document.querySelectorAll('[data-i18n-title]').forEach(el => {
+            el.title = t(el.dataset.i18nTitle);
+        });
+    }
+
+    return { t, setLang, getLang, applyLocale };
+})();

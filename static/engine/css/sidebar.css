@@ -27,13 +27,29 @@
 .sidebar-panel {
     display: flex;
     flex-direction: column;
-    width: 320px;
-    min-width: 320px;
+    width: var(--sidebar-width, 320px);
+    min-width: var(--sidebar-width, 320px);
     border-left: 1px solid var(--color-border);
     background: var(--color-surface);
     overflow: hidden;
+    position: relative;
     transition: width 180ms ease, min-width 180ms ease;
 }
+
+/* K-6: drag left edge to resize right dock */
+.sidebar-resize-handle {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    cursor: col-resize;
+    z-index: 20;
+    background: transparent;
+    transition: background 120ms;
+}
+.sidebar-resize-handle:hover { background: var(--color-border); }
+.sidebar-resize-handle.is-resizing { background: var(--color-accent, #4A90D9); opacity: 0.5; }
 
 .sidebar-panel.sidebar-closed {
     width: 0;

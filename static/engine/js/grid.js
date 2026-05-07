@@ -54,8 +54,10 @@ const GridManager = (() => {
             PasteManager.init();
             _initContextMenu();
             _initRangeSelection();
+            _initRangeReadout();
             _initColumnHeaderSelection();
             _initCopyToClipboard();
+            _initSearchShortcut();
         } catch (err) {
             _showError(err.message);
         }
@@ -116,13 +118,22 @@ const GridManager = (() => {
         const isEliminated = !isDeleted && rowFlags && rowFlags.some(f => f.name === "ETL: Eliminated");
         const rowClass     = isDeleted ? "row-deleted" : (isEliminated ? "row-eliminated" : "");
         const cells        = columns.map((col, colIdx) => _renderCell(row, col, isDeleted, rowIndex, colIdx)).join("");
-        const rowBadges    = _flagBadgesHtml(rowFlags);
+
+        const rev = row['rev'] || '';
+        const revHtml = rev ? `<span class="gutter-rev">${_escHtml(rev)}</span>` : '';
+        const gutterFlagDots = (rowFlags || [])
+            .filter(f => !f.hidden)
+            .map(f => `<span class="gutter-flag-dot" style="background:${_escAttr(f.color)}" title="${_escHtml(f.name)}"></span>`)
+            .join('');
+        const gutterFlagsHtml = gutterFlagDots
+            ? `<div class="gutter-flags">${gutterFlagDots}</div>`
+            : '';
 
         return `
             <tr data-row-id="${row.id}"
                 class="${rowClass}"
                 oncontextmenu="GridManager.openContextMenu(event, ${row.id}, ${isDeleted})">
-                <td class="row-num${rowBadges ? ' row-num-flags' : ''}" data-row-idx="${rowIndex}">${rowIndex + 1}${rowBadges}</td>
+                <td class="gutter" data-row-idx="${rowIndex}"><div class="gutter-inner"><span class="gutter-num">${rowIndex + 1}</span>${revHtml}${gutterFlagsHtml}</div></td>
                 ${cells}
             </tr>`;
     }
@@ -197,7 +208,7 @@ const GridManager = (() => {
 
         return `
             <tr class="row-ghost" id="ghost-row">
-                <td class="row-num"></td>
+                <td class="gutter"><div class="gutter-inner"></div></td>
                 ${cells}
             </tr>`;
     }
@@ -242,7 +253,7 @@ const GridManager = (() => {
         });
 
         // Row number click — select entire row
-        document.querySelectorAll("td.row-num[data-row-idx]").forEach(td => {
+        document.querySelectorAll("td.gutter[data-row-idx]").forEach(td => {
             td.addEventListener("click", function(e) {
                 const rowIdx = +this.dataset.rowIdx;
                 if (isNaN(rowIdx)) return;
@@ -403,6 +414,52 @@ const GridManager = (() => {
         });
     }
 
+    // --------------------------------------------------------
+    // RANGE READOUT CHIP
+    // --------------------------------------------------------
+
+    function _initRangeReadout() {
+        const chip = document.createElement('div');
+        chip.className = 'range-readout';
+        chip.id = 'range-readout';
+        document.body.appendChild(chip);
+
+        document.addEventListener('mousemove', e => {
+            if (!_isDragging || _ranges.length === 0) {
+                chip.style.display = 'none';
+                return;
+            }
+            const range = _ranges[_activeDragIdx];
+            if (!range) { chip.style.display = 'none'; return; }
+            const rows = Math.abs(range.end.r - range.start.r) + 1;
+            const cols = Math.abs(range.end.c - range.start.c) + 1;
+            if (rows === 1 && cols === 1) { chip.style.display = 'none'; return; }
+            chip.textContent = `${rows}R × ${cols}C`;
+            chip.style.display = 'block';
+            chip.style.top  = (e.clientY + 14) + 'px';
+            chip.style.left = (e.clientX + 14) + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            chip.style.display = 'none';
+        });
+    }
+
+    // --------------------------------------------------------
+    // SEARCH SHORTCUT ( / key focuses search )
+    // --------------------------------------------------------
+
+    function _initSearchShortcut() {
+        document.addEventListener('keydown', e => {
+            if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+            const active = document.activeElement;
+            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+            e.preventDefault();
+            const search = document.getElementById('search-input');
+            if (search) { search.focus(); search.select(); }
+        });
+    }
+
     function _onTdMousedown(e) {
         if (e.button !== 0) return;
         const input = this.querySelector(".cell-input");
@@ -489,7 +546,7 @@ const GridManager = (() => {
             const th = e.target.closest("th");
             if (!th) return;
             const ths = Array.from(thead.querySelectorAll("th"));
-            const colIdx = ths.indexOf(th) - 1; // -1 for row-num <th>
+            const colIdx = ths.indexOf(th) - 1; // -1 for gutter <th>
             if (colIdx < 0) return;
             _selectColumn(colIdx, e.ctrlKey || e.metaKey);
         });
@@ -875,13 +932,13 @@ const GridManager = (() => {
                     _populateFlagsSubmenu(_ctxFlagsCache, _getSelectedCells());
                     return;
                 }
-                if (listEl) listEl.innerHTML = '<div class="ctx-item" style="color:var(--color-text-muted);cursor:default;pointer-events:none">Loading…</div>';
+                if (listEl) listEl.innerHTML = '<div class="ctx-item" style="color:var(--color-text-muted);cursor:default;pointer-events:none"><span></span><span>Loading…</span><span></span></div>';
                 try {
                     const all      = await ApiClient.listFlags();
                     _ctxFlagsCache = all.filter(f => !f.is_system);
                     _populateFlagsSubmenu(_ctxFlagsCache, _getSelectedCells());
                 } catch {
-                    if (listEl) listEl.innerHTML = '<div class="ctx-item" style="color:var(--color-danger);cursor:default;pointer-events:none">Error loading flags</div>';
+                    if (listEl) listEl.innerHTML = '<div class="ctx-item" style="color:var(--color-danger);cursor:default;pointer-events:none"><span></span><span>Error loading flags</span><span></span></div>';
                 }
             });
         }
@@ -936,7 +993,7 @@ const GridManager = (() => {
         menu.querySelector('[data-action="remove-override"]').style.display = showOverride ? "" : "none";
         menu.querySelector('.ctx-sep-override').style.display               = showOverride ? "" : "none";
 
-        // Voce cell-log / range-log: visibile su qualsiasi cella dati (non log, non rev, non row-num)
+        // Voce cell-log / range-log: visibile su qualsiasi cella dati (non log, non rev, non gutter)
         const tdAny = e.target.closest("td[data-col-idx]");
         _ctxColSlugLog = tdAny ? (tdAny.querySelector("[data-field]")?.dataset.field ?? null) : null;
         const showLogEntry = !isDeleted && _ctxColSlugLog !== null;
@@ -1032,8 +1089,8 @@ const GridManager = (() => {
         _logSidebarCtx = { rowId, colSlug: null };
         const rowLabel = _escHtml(row.tag || `#${rowId}`);
 
-        SidebarManager.open('LOG');
-        SidebarManager.setTitle(`LOG — ${rowLabel}`);
+        SidebarManager.open('History');
+        SidebarManager.setTitle(`History — ${rowLabel}`);
         SidebarManager.setContent('<p class="sidebar-log-empty">Loading…</p>');
 
         try {
@@ -1064,7 +1121,7 @@ const GridManager = (() => {
                 </div>`;
             }
 
-            html += `<div class="sidebar-log-actions"><button class="btn-icon btn-log-export" onclick="GridManager.exportLog()">Export LOG</button></div>`;
+            html += `<div class="sidebar-log-actions"><button class="btn-icon btn-log-export" onclick="GridManager.exportLog()">Export history</button></div>`;
             SidebarManager.setContent(html);
             _bindRollbackButtons();
         } catch (e) {
@@ -1086,8 +1143,8 @@ const GridManager = (() => {
         const colLabel = _escHtml(colSlug);
         const rowLabel = _escHtml(row.tag || `#${rowId}`);
 
-        SidebarManager.open('LOG');
-        SidebarManager.setTitle(`LOG — ${colLabel}`);
+        SidebarManager.open('History');
+        SidebarManager.setTitle(`History — ${colLabel}`);
         SidebarManager.setContent('<p class="sidebar-log-empty">Loading…</p>');
 
         try {
@@ -1100,7 +1157,7 @@ const GridManager = (() => {
             </div>`;
             const bodyHtml = _renderAuditEntries(entries, rowId, colSlug);
             const actionsHtml = (entries && entries.length > 0)
-                ? `<div class="sidebar-log-actions"><button class="btn-icon btn-log-export" onclick="GridManager.exportLog()">Export LOG</button></div>`
+                ? `<div class="sidebar-log-actions"><button class="btn-icon btn-log-export" onclick="GridManager.exportLog()">Export history</button></div>`
                 : '';
             SidebarManager.setContent(headerHtml + bodyHtml + actionsHtml);
             _bindRollbackButtons();
@@ -1159,8 +1216,8 @@ const GridManager = (() => {
 
         if (rowTagSet.size === 0) return;
 
-        SidebarManager.open('LOG');
-        SidebarManager.setTitle('LOG — selection');
+        SidebarManager.open('History');
+        SidebarManager.setTitle('History — selection');
         SidebarManager.setContent('<p class="sidebar-log-empty">Loading…</p>');
 
         try {
@@ -1205,7 +1262,7 @@ const GridManager = (() => {
             }
 
             if (!hasAny) html = '<p class="sidebar-log-empty">No changes recorded for the selected range.</p>';
-            else html += `<div class="sidebar-log-actions"><button class="btn-icon btn-log-export" onclick="GridManager.exportLog()">Export LOG</button></div>`;
+            else html += `<div class="sidebar-log-actions"><button class="btn-icon btn-log-export" onclick="GridManager.exportLog()">Export history</button></div>`;
 
             SidebarManager.setContent(html);
             _bindRollbackButtons();
@@ -1446,7 +1503,7 @@ const GridManager = (() => {
         const list = document.getElementById("ctx-flags-list");
         if (!list) return;
         if (!flags.length) {
-            list.innerHTML = '<div class="ctx-item" style="color:var(--color-text-muted);cursor:default;pointer-events:none">No flags defined</div>';
+            list.innerHTML = '<div class="ctx-item" style="color:var(--color-text-muted);cursor:default;pointer-events:none"><span></span><span>No flags defined</span><span></span></div>';
             return;
         }
         list.innerHTML = flags.map(flag => {

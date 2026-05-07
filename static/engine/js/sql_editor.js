@@ -1,153 +1,113 @@
-/**
- * sql_editor.js — Engine
- * -----------------------
- * Power SQL Editor universale del Table Engine.
- *
- * Responsabilità:
- * - Toggle pannello SQL
- * - Invio query al backend
- * - Rendering risultati in tabella
- * - Gestione errori SQL
- * - Shortcut Ctrl+Enter per eseguire
- */
-
 const SqlEditor = (() => {
 
-    // --------------------------------------------------------
-    // STATO INTERNO
-    // --------------------------------------------------------
-
-    let _visible = false;
-
+    let _sqlDraft    = '';
+    let _resultsHtml = '';
 
     // --------------------------------------------------------
-    // INIT — attacca shortcut Ctrl+Enter
+    // INIT — attach Ctrl+Enter shortcut
     // --------------------------------------------------------
 
     function _init() {
-        document.addEventListener("keydown", function (e) {
-            if (e.ctrlKey && e.key === "Enter") {
-                const panel = document.getElementById("sql-editor-panel");
-                if (panel && panel.style.display !== "none") {
-                    run();
-                }
+        document.addEventListener('keydown', e => {
+            if (e.ctrlKey && e.key === 'Enter' && PanelSystem.isPanelOpen('sql')) {
+                run();
             }
         });
     }
 
+    // --------------------------------------------------------
+    // RENDER INTO panel body (called by PanelSystem.onActivate)
+    // --------------------------------------------------------
+
+    function renderInto(body) {
+        body.innerHTML =
+            `<div class="sql-editor-body">` +
+                `<textarea id="sql-input" class="sql-input" spellcheck="false"` +
+                ` placeholder="SELECT * FROM tool_rows WHERE tool_id = …"></textarea>` +
+                `<div class="sql-editor-actions">` +
+                    `<button class="btn btn-primary btn-sm" onclick="SqlEditor.run()">▶ Run</button>` +
+                    `<button class="btn btn-ghost btn-sm" onclick="SqlEditor.clear()">Clear</button>` +
+                `</div>` +
+            `</div>` +
+            `<div class="sql-results" id="sql-results"></div>`;
+        const ta = document.getElementById('sql-input');
+        if (ta) {
+            ta.value = _sqlDraft;
+            ta.addEventListener('input', () => { _sqlDraft = ta.value; });
+            ta.focus();
+        }
+        const res = document.getElementById('sql-results');
+        if (res && _resultsHtml) res.innerHTML = _resultsHtml;
+    }
 
     // --------------------------------------------------------
     // TOGGLE
     // --------------------------------------------------------
 
-    function toggle() {
-        _visible = !_visible;
-        const panel = document.getElementById("sql-editor-panel");
-        panel.style.display = _visible ? "flex" : "none";
-
-        if (_visible) {
-            document.getElementById("sql-input").focus();
-        }
-    }
-
+    function toggle() { PanelSystem.togglePanel('sql'); }
 
     // --------------------------------------------------------
-    // ESECUZIONE QUERY
+    // RUN QUERY
     // --------------------------------------------------------
 
     async function run() {
-        const sql       = document.getElementById("sql-input").value.trim();
-        const resultsEl = document.getElementById("sql-results");
-
+        const input   = document.getElementById('sql-input');
+        const results = document.getElementById('sql-results');
+        if (!input || !results) return;
+        const sql = input.value.trim();
         if (!sql) {
-            resultsEl.innerHTML = '<div class="sql-error">Inserisci una query SQL.</div>';
+            results.innerHTML = '<div class="sql-error">Enter a SQL query.</div>';
+            _resultsHtml = results.innerHTML;
             return;
         }
-
-        resultsEl.innerHTML =
-            '<div style="color:var(--color-text-muted);padding:6px 0">Esecuzione...</div>';
-
+        results.innerHTML = '<div style="color:var(--color-text-muted);padding:6px 0">Running…</div>';
         try {
             const data = await ApiClient.runSql(sql);
             _renderResults(data);
         } catch (err) {
-            resultsEl.innerHTML =
-                `<div class="sql-error">⚠ ${_escHtml(err.message)}</div>`;
+            results.innerHTML = `<div class="sql-error">⚠ ${Utils.escHtml(err.message)}</div>`;
         }
+        _resultsHtml = results.innerHTML;
     }
 
-
     // --------------------------------------------------------
-    // RENDERING RISULTATI
+    // RENDER RESULTS
     // --------------------------------------------------------
 
     function _renderResults(data) {
-        const resultsEl = document.getElementById("sql-results");
-
-        // Query non-SELECT
+        const results = document.getElementById('sql-results');
+        if (!results) return;
         if (data.rowcount !== undefined && !data.columns) {
-            resultsEl.innerHTML = `
-                <div class="sql-success">
-                    ✓ Query eseguita. Righe interessate: ${data.rowcount}
-                </div>`;
+            results.innerHTML = `<div class="sql-success">✓ Query executed. Rows affected: ${data.rowcount}</div>`;
             return;
         }
-
-        // Nessun risultato
-        if (!data.rows || data.rows.length === 0) {
-            resultsEl.innerHTML =
-                '<div class="sql-success">✓ Nessun risultato.</div>';
+        if (!data.rows || !data.rows.length) {
+            results.innerHTML = '<div class="sql-success">✓ No results.</div>';
             return;
         }
-
-        const headers = data.columns
-            .map(col => `<th>${_escHtml(col)}</th>`)
-            .join("");
-
-        const rows = data.rows
-            .map(row => {
-                const cells = data.columns
-                    .map(col => `<td>${_escHtml(String(row[col] ?? ""))}</td>`)
-                    .join("");
-                return `<tr>${cells}</tr>`;
-            }).join("");
-
-        resultsEl.innerHTML = `
-            <div style="color:var(--color-text-muted);font-size:11px;padding:4px 0 6px">
-                ${data.rows.length} righe restituite
-            </div>
-            <table>
-                <thead><tr>${headers}</tr></thead>
-                <tbody>${rows}</tbody>
-            </table>`;
+        const headers = data.columns.map(c => `<th>${Utils.escHtml(c)}</th>`).join('');
+        const rows = data.rows.map(row => {
+            const cells = data.columns.map(c => `<td>${Utils.escHtml(String(row[c] ?? ''))}</td>`).join('');
+            return `<tr>${cells}</tr>`;
+        }).join('');
+        results.innerHTML =
+            `<div style="color:var(--color-text-muted);font-size:11px;padding:4px 0 6px">${data.rows.length} rows returned</div>` +
+            `<table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
     }
 
-
     // --------------------------------------------------------
-    // PULIZIA
+    // CLEAR
     // --------------------------------------------------------
 
     function clear() {
-        document.getElementById("sql-input").value    = "";
-        document.getElementById("sql-results").innerHTML = "";
+        const input   = document.getElementById('sql-input');
+        const results = document.getElementById('sql-results');
+        if (input)   { input.value = '';       _sqlDraft    = ''; }
+        if (results) { results.innerHTML = ''; _resultsHtml = ''; }
     }
-
-
-    // --------------------------------------------------------
-    const _escHtml = Utils.escHtml;
-
-
-    // --------------------------------------------------------
-    // AVVIO
-    // --------------------------------------------------------
 
     _init();
 
-
-    // --------------------------------------------------------
-    // API PUBBLICA
-    // --------------------------------------------------------
-
-    return { toggle, run, clear };
+    return { toggle, run, clear, renderInto };
 
 })();

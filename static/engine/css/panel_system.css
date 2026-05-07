@@ -1,0 +1,244 @@
+/* ============================================================
+   PANEL SYSTEM — right-dock tab bar
+   ============================================================ */
+
+.panel-tab-bar {
+    display: flex;
+    flex-direction: row;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface-2, var(--color-surface));
+    flex-shrink: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+.panel-tab-bar::-webkit-scrollbar { display: none; }
+
+.panel-tab {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 9px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: color 120ms, border-color 120ms, background 120ms;
+    flex-shrink: 0;
+}
+
+.panel-tab:hover {
+    color: var(--color-text);
+    background: var(--color-surface);
+}
+
+.panel-tab.active {
+    color: var(--color-accent, #4A90D9);
+    border-bottom-color: var(--color-accent, #4A90D9);
+    font-weight: 600;
+    background: transparent;
+}
+
+.panel-tab-icon {
+    font-size: 12px;
+    line-height: 1;
+}
+
+.panel-tab-label {
+    font-size: 11px;
+}
+
+.panel-tab-close {
+    font-size: 9px;
+    color: var(--color-text-muted);
+    margin-left: 3px;
+    padding: 1px 3px;
+    border-radius: 2px;
+    line-height: 1;
+    opacity: 0;
+    transition: opacity 120ms, color 80ms, background 80ms;
+    pointer-events: all;
+}
+
+.panel-tab:hover .panel-tab-close,
+.panel-tab.active .panel-tab-close {
+    opacity: 0.6;
+}
+
+.panel-tab-close:hover {
+    opacity: 1 !important;
+    color: var(--color-danger, #dc3545);
+    background: rgba(220, 53, 69, 0.12);
+}
+
+/* DnD drag-over indicator */
+.panel-tab[data-drag-over] { border-right: 2px solid var(--accent, var(--color-accent, #4A90D9)); }
+.panel-tab.dragging { opacity: 0.4; }
+
+/* ============================================================
+   FLOATING WINDOWS
+   ============================================================ */
+
+#panel-float-layer {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 200;
+}
+
+.panel-float {
+    position: absolute;
+    pointer-events: all;
+    background: var(--surface-2, var(--color-surface));
+    border: 1px solid var(--border-strong, var(--color-border));
+    border-radius: var(--radius-lg, 8px);
+    box-shadow: var(--shadow-lg, 0 8px 32px rgba(0,0,0,.45));
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    min-height: 120px;
+    overflow: hidden;
+}
+
+.panel-float-titlebar {
+    height: 32px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    cursor: grab;
+    user-select: none;
+    background: var(--surface-3, var(--color-surface-2, var(--color-surface)));
+    border-bottom: 1px solid var(--border, var(--color-border));
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink, var(--color-text));
+    flex-shrink: 0;
+}
+
+.panel-float-titlebar:active { cursor: grabbing; }
+
+.panel-float-icon { font-size: 13px; line-height: 1; }
+
+.panel-float-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.panel-float-dock-bottom,
+.panel-float-dock,
+.panel-float-close {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 11px;
+    color: var(--ink-muted, var(--color-text-muted));
+    opacity: 0.6;
+    transition: opacity 100ms, background 100ms;
+}
+
+.panel-float-dock-bottom:hover,
+.panel-float-dock:hover,
+.panel-float-close:hover { opacity: 1; background: var(--surface, var(--color-surface)); }
+
+.panel-float-body {
+    flex: 1;
+    overflow: auto;
+    padding: 8px;
+    color: var(--ink, var(--color-text));
+    font-size: 12px;
+}
+
+.panel-float-resize {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 14px;
+    height: 14px;
+    cursor: se-resize;
+    opacity: 0.35;
+    background: linear-gradient(135deg, transparent 40%, var(--border-strong, var(--color-border)) 40%,
+        var(--border-strong, var(--color-border)) 60%, transparent 60%,
+        transparent 70%, var(--border-strong, var(--color-border)) 70%);
+}
+
+/* ============================================================
+   BOTTOM DOCK ZONE (K-5)
+   ============================================================ */
+
+.bottom-dock {
+    display: flex;
+    flex-direction: column;
+    height: var(--bottom-dock-height, 200px);
+    min-height: var(--bottom-dock-height, 200px);
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
+    flex-shrink: 0;
+    overflow: hidden;
+    transition: height 180ms ease, min-height 180ms ease;
+}
+
+.bottom-dock.bottom-dock-closed {
+    height: 5px;
+    min-height: 5px;
+    border-top: none;
+}
+
+/* drag top edge to resize */
+.bottom-dock-resize-handle {
+    height: 5px;
+    width: 100%;
+    cursor: row-resize;
+    flex-shrink: 0;
+    background: transparent;
+    transition: background 120ms;
+}
+.bottom-dock-resize-handle:hover { background: var(--color-border); }
+.bottom-dock-resize-handle.is-resizing { background: var(--color-accent, #4A90D9); opacity: 0.5; }
+
+.bottom-dock-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px 4px 12px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface-2);
+    flex-shrink: 0;
+}
+
+.bottom-dock-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-text);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.bottom-dock-body {
+    flex: 1;
+    overflow: auto;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--color-text);
+    min-height: 0;
+}
+
+/* ============================================================
+   DROP ZONE HIGHLIGHT (K-7)
+   ============================================================ */
+
+.dock-drop-highlight {
+    pointer-events: none;
+    position: fixed;
+    z-index: 190;
+    border: 2px dashed var(--color-accent, #4A90D9);
+    background: rgba(74, 144, 217, 0.07);
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 100ms;
+}
+.dock-drop-highlight.visible { opacity: 1; }

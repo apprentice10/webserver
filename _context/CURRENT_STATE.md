@@ -6,11 +6,8 @@ Completed feature history → `_context/DONE.md`
 
 ---
 
+
 ## Next Priorities (ordered by value/effort)
-
-### Group F — ETL Editor (low effort, independent)
-
-32. **Code folding** — optional; syntax validation (inline compile-error banner) already done
 
 ### Group G — LOG system (medium effort, depends on D and C)
 
@@ -37,17 +34,20 @@ The refactor (2026-04-26) made each project DB self-contained (`_project` + `_te
 53. **Safety rollback** — automatic backup pre-migration
 54. **Future PostgreSQL compatibility** — abstract raw sqlite3 queries into a compatible layer
 
-### Group K — View Sidebar & Toolbar Cleanup (medium effort, depends on D and E)
+### Group K — Panel System (in progress)
 
-Consolidate column-visibility toggles into a collapsible sidebar panel (mirrors Flags sidebar pattern). Clean up redundant toolbar/topbar buttons.
+Core done: `PanelSystem` with registry, tab bar, floats, DnD. `sidebar.js` thin adapter. Info + Log panels are selection-reactive. `panels.css` created.
 
-55. **View sidebar shell** — new sidebar panel with items: "Deleted rows" (replaces `btn-show-deleted` / `GridManager.toggleDeleted()`) and "Rev column" (replaces `btn-toggle-rev` / `GridManager.toggleRev()`); each item has an eye icon to toggle visibility; removes both standalone toolbar buttons; saves state per-project/tool via localStorage (same pattern as Flags hidden-state in `static/engine/js/flags.js`)
-56. **View toolbar button** — add "View" button after Flags in toolbar (`table.html`); opens View sidebar; mutually exclusive toggle with Flags button (only one sidebar active at a time)
-57. **Remove "Cambia Rev" topbar button** — revision letter is already editable in the Settings modal (`ToolbarManager.openSettings()`); remove the redundant `{% block topbar_actions %}` button from `table.html`
-58. **Replace "Info" button** — replace current `btn-toggle-sidebar` ("Info") with a dedicated toggle styled and behaving like the Flags/View buttons (shows active state when sidebar is open)
-59. **Log sidebar — selection-reactive** — Log sidebar content updates automatically when the active cell or range changes (not only on context-menu trigger); if sidebar is open and selection changes, content refreshes; if nothing selected, show placeholder "Select a cell or range."
+~~K-4. **Standardise General Notes + SQL Editor as panels**~~ — Done (2026-05-07).
+~~K-5. **Bottom dock zone**~~ — Done (2026-05-07).
+~~K-6. **Right sidebar resizable**~~ — Done (2026-05-07).
+~~K-7. **Drag-to-dock proximity detection**~~ — Done (2026-05-07).
 
 ---
+
+### Group L — Grid UX fixes (done)
+
+~~L-1. Disable native text selection in grid~~ — already implemented via `.data-grid.selecting { user-select: none }` pattern.
 
 ### Tools backlog (low priority)
 

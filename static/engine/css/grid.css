@@ -26,27 +26,69 @@
     min-width: 100%;
 }
 
-/* Colonna numero riga */
-.col-row-num,
-.row-num {
-    width: 40px;
-    min-width: 40px;
-    max-width: 40px;
-    text-align: right;
-    padding: 0 6px 0 0;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--color-text-muted);
-    background: var(--color-surface);
-    border-right: 2px solid var(--color-border);
+/* Gutter — sticky left column: row number + REV badge + flag dots */
+.col-gutter,
+.gutter {
+    width: 56px;
+    min-width: 56px;
+    max-width: 56px;
+    background: var(--surface, var(--color-surface));
+    border-right: 1px solid var(--border-strong, var(--color-border));
+    position: sticky;
+    left: 0;
+    z-index: 5;
     user-select: none;
     white-space: nowrap;
     overflow: hidden;
 }
 
-.row-num {
-    vertical-align: middle;
+.col-gutter { z-index: 11; }
+
+.gutter-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 5px 0 7px;
+    height: 100%;
+    position: relative;
 }
+
+.gutter-num {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-subtle, var(--color-text-muted));
+}
+
+.gutter-rev {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--ink-muted, var(--color-text-muted));
+    background: var(--surface-2, var(--color-surface));
+    border: 1px solid var(--border, var(--color-border));
+    border-radius: 3px;
+    padding: 0 3px;
+    letter-spacing: 0.5px;
+}
+
+.gutter-flags {
+    display: flex;
+    gap: 2px;
+    position: absolute;
+    top: 3px;
+    right: 3px;
+}
+
+.gutter-flag-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,0,0,0.15);
+}
+
+tr:hover .gutter { background: var(--surface-2, var(--color-surface)); }
+tr.row-selected .gutter { background: var(--accent-faint, rgba(233,69,96,0.06)); }
 
 /* Intestazioni */
 .data-grid thead tr {
@@ -185,15 +227,6 @@
     box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
 }
 
-/* Row-level flags next to row number */
-.row-num-flags {
-    position: relative;
-}
-
-.row-num-flags .cell-flag-badges {
-    top: 2px;
-    right: 2px;
-}
 
 /* ------------------------------------------------------------
    CELLA INPUT
@@ -201,13 +234,13 @@
 .cell-input {
     width: 100%;
     height: 100%;
-    min-height: 30px;
+    min-height: var(--row-h, 30px);
     background: transparent;
     border: none;
     color: var(--color-text);
     font-family: var(--font-main);
     font-size: 13px;
-    padding: 5px 8px;
+    padding: var(--cell-pad-y, 5px) var(--cell-pad-x, 8px);
     box-sizing: border-box;
     resize: none;
     outline: none;
@@ -217,9 +250,9 @@
 }
 
 .cell-input:focus {
-    background: rgba(233, 69, 96, 0.06);
-    outline: 2px solid var(--color-accent);
-    outline-offset: -2px;
+    background: var(--accent-faint, rgba(233, 69, 96, 0.06));
+    outline: 1.5px solid var(--color-accent);
+    outline-offset: -1.5px;
     white-space: normal;
     cursor: text;
 }
@@ -284,7 +317,7 @@
     align-items: center;
     justify-content: center;
     gap: 2px;
-    height: 30px;
+    height: var(--row-h, 30px);
     padding: 0 4px;
 }
 
@@ -366,7 +399,11 @@ tr:hover .btn-row-action {
     display: block;
 }
 .ctx-item {
-    padding: 7px 16px;
+    display: grid;
+    grid-template-columns: 18px 1fr auto;
+    gap: 6px;
+    align-items: center;
+    padding: 7px 12px;
     font-size: 13px;
     cursor: pointer;
     color: var(--color-text);
@@ -382,6 +419,24 @@ tr:hover .btn-row-action {
 .ctx-separator {
     border-top: 1px solid var(--color-border);
     margin: 4px 0;
+}
+.ctx-section {
+    padding: 6px 16px 2px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--color-text-muted);
+    pointer-events: none;
+}
+.ctx-icon {
+    font-size: 13px;
+    text-align: center;
+}
+.ctx-shortcut {
+    font-size: 11px;
+    opacity: .5;
+    font-family: var(--font-mono, Consolas, monospace);
 }
 
 /* Submenu trigger */
@@ -485,4 +540,25 @@ th.col-dragging {
 th.col-dragover {
     border-left: 2px solid var(--color-accent);
     background: rgba(233, 69, 96, 0.08);
+}
+
+/* ------------------------------------------------------------
+   RANGE READOUT CHIP
+   Floating "3R × 2C" badge that follows the drag selection.
+   ------------------------------------------------------------ */
+.range-readout {
+    position: fixed;
+    background: var(--ink, #eee);
+    color: var(--bg, #111);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 7px;
+    border-radius: 3px;
+    pointer-events: none;
+    z-index: 200;
+    letter-spacing: 0.5px;
+    box-shadow: var(--shadow-md, 0 4px 16px rgba(0,0,0,.35));
+    white-space: nowrap;
+    display: none;
 }

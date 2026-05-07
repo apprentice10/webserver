@@ -9,13 +9,14 @@ Cuore del Table Engine: griglia dati, intestazioni, resize handle, righe, celle 
 | Wrapper e scroll | `.grid-wrapper`, `.grid-scroll-container` |
 | Tabella | `.data-grid`, `thead`, `.data-grid th`, `.th-content`, `.th-label` |
 | Resize handle | `.resize-handle` |
+| Gutter (num + REV + flags) | `.col-gutter`, `.gutter`, `.gutter-inner`, `.gutter-num`, `.gutter-rev`, `.gutter-flags`, `.gutter-flag-dot` |
 | Righe | `tbody tr`, `.row-deleted`, `.row-ghost` |
 | Cella input | `.cell-input`, `.cell-input:focus`, `.cell-input[readonly]` |
 | Select mode | `.cell-input[data-editable][readonly]` |
 | Celle speciali | `.cell-tag`, `.cell-log-preview` |
 | Azioni per riga | `.col-actions`, `.cell-actions`, `.btn-row-action` |
 | Toggle colonne | `.data-grid.log-hidden`, `.data-grid.rev-hidden` |
-| Context menu | `.context-menu`, `.ctx-item`, `.ctx-separator`, `.ctx-item-has-sub`, `.ctx-submenu`, `.ctx-submenu-arrow`, `.submenu-left` |
+| Context menu | `.context-menu`, `.ctx-item`, `.ctx-icon`, `.ctx-shortcut`, `.ctx-separator`, `.ctx-item-has-sub`, `.ctx-submenu`, `.ctx-submenu-arrow`, `.submenu-left` |
 | Flag submenu items | `.ctx-flag-item`, `.ctx-flag-dot`, `.ctx-flag-check`, `.ctx-flag-mixed` |
 | Drag colonne | `.th-draggable`, `.col-dragging`, `.col-dragover` |
 

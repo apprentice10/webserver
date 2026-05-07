@@ -34,10 +34,10 @@ const ToolbarManager = (() => {
     // --------------------------------------------------------
 
     async function init() {
+        _initPanelsDropdown();
         try {
             _tool = await ApiClient.loadTool();
             _updateToolUI();
-            _updateEtlButton();
 
             const noteEl = document.getElementById("tool-note");
             if (noteEl) noteEl.value = _tool.note || "";
@@ -52,21 +52,28 @@ const ToolbarManager = (() => {
     // --------------------------------------------------------
 
     function _updateToolUI() {
-        // Aggiorna badge REV nella topbar
-        const revBadge = document.getElementById("rev-badge");
-        if (revBadge) revBadge.textContent = `REV ${_tool.current_rev}`;
-
-        // Aggiorna titolo pagina
         document.title = `${_tool.name} — Instrument Manager`;
 
-        // Aggiorna nome e icona nell'item attivo della sidebar dinamica
-        const activeItem = document.querySelector(`.sidebar-item[data-tool-id="${TOOL_ID}"]`);
+        // Topbar breadcrumb — tool pill
+        const pillName = document.querySelector('#topbar-tool-pill .pill-name');
+        const pillIcon = document.querySelector('#topbar-tool-pill .tool-icon');
+        if (pillName) pillName.textContent = _tool.name;
+        if (pillIcon) pillIcon.textContent  = _tool.icon || '📄';
+
+        // REV chip
+        const revChip = document.getElementById('chip-rev-btn');
+        if (revChip) revChip.textContent = `REV ${_tool.current_rev}`;
+
+        // Sidebar active item (new class names)
+        const activeItem = document.querySelector(`.side-item[data-tool-id="${TOOL_ID}"]`);
         if (activeItem) {
-            const iconEl = activeItem.querySelector(".sidebar-icon");
-            const nameEl = activeItem.querySelector("span:not(.sidebar-icon)");
-            if (iconEl) iconEl.textContent = _tool.icon || "📄";
-            if (nameEl) nameEl.textContent = _tool.name;
+            const iconEl = activeItem.querySelector('.si-icon');
+            const nameEl = activeItem.querySelector('.si-label');
+            if (iconEl) iconEl.textContent = _tool.icon || '📄';
+            if (nameEl) nameEl.textContent  = _tool.name;
         }
+
+        _updateEtlButton();
     }
 
     // --------------------------------------------------------
@@ -210,6 +217,35 @@ const ToolbarManager = (() => {
         } finally {
             if (btn) { btn.disabled = false; btn.textContent = label || "↺ Ricarica"; }
         }
+    }
+
+
+    // --------------------------------------------------------
+    // PANELS DROPDOWN
+    // --------------------------------------------------------
+
+    function _initPanelsDropdown() {
+        const btn  = document.getElementById('btn-panels-toggle');
+        const menu = document.getElementById('panels-menu');
+        if (!btn || !menu) return;
+
+        btn.addEventListener('click', () => {
+            const open = menu.style.display !== 'none';
+            menu.style.display = open ? 'none' : '';
+            if (!open) {
+                setTimeout(() => {
+                    const dismiss = e => {
+                        if (!document.getElementById('panels-dropdown')?.contains(e.target)) {
+                            menu.style.display = 'none';
+                            document.removeEventListener('mousedown', dismiss);
+                        }
+                    };
+                    document.addEventListener('mousedown', dismiss);
+                }, 0);
+            }
+        });
+
+        window.closePanelsDropdown = () => { menu.style.display = 'none'; };
     }
 
 

@@ -1,148 +1,148 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en" data-theme="dark" data-accent="crimson" data-density="dense">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Instrument Manager{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Instrument+Serif&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/main.css">
     {% block extra_css %}{% endblock %}
 </head>
 <body>
 
-    <!-- TOP BAR -->
-    <header class="topbar">
-        <div class="topbar-left">
-            <span class="app-logo">⚙</span>
-            <span class="app-name">Instrument Manager</span>
+<div class="app" id="app">
+
+    <!-- TOPBAR -->
+    <header class="topbar" id="topbar">
+        <div class="brand">
+            <button class="btn-sidebar-toggle" id="btn-sidebar-toggle" title="Toggle sidebar">‹</button>
+            <div class="brand-mark">IM</div>
+            <span class="brand-name">Instrument Manager</span>
         </div>
-        <div class="topbar-center">
-            <span class="project-name" id="project-name">Nessun progetto aperto</span>
+        <div class="crumbs" id="topbar-crumbs">
+            {% block topbar_crumbs %}
+            <span class="crumb-project" id="project-name">No project open</span>
+            {% endblock %}
         </div>
-        <div class="topbar-right">
+        <div class="topbar-right" id="topbar-right">
             {% block topbar_actions %}{% endblock %}
+            <button class="btn btn-ghost btn-sm" id="btn-settings" title="Settings">⚙</button>
         </div>
     </header>
 
-    <!-- LAYOUT PRINCIPALE -->
-    <div class="main-layout">
-
-        <!-- SIDEBAR SINISTRA -->
-        <aside class="sidebar" id="main-sidebar">
-            <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="Comprimi sidebar">‹</button>
-            <div class="sidebar-section">
-                <div class="sidebar-section-title">TOOLS</div>
-                <nav class="sidebar-nav" id="tools-nav">
-                    <!-- Popolato dinamicamente da main.js -->
-                </nav>
-                <div class="sidebar-actions">
-                    <button class="sidebar-new-btn disabled" id="btn-new-tool" onclick="newTool()">
-                        + Nuovo Tool
-                    </button>
-                </div>
+    <!-- LEFT SIDEBAR -->
+    <aside class="side" id="main-sidebar">
+        <div class="side-section">
+            <div class="side-label" id="side-tools-label" data-i18n="side.tools">TOOLS</div>
+            <nav class="side-nav" id="tools-nav">
+                <!-- Populated by main.js -->
+            </nav>
+            <div class="side-actions">
+                <button class="side-new disabled" id="btn-new-tool" onclick="newTool()" data-i18n="side.new_tool">+ New Tool</button>
             </div>
+        </div>
+        <div class="side-bottom">
+            <div class="side-label" id="side-project-label" data-i18n="side.project">PROJECT</div>
+            <a class="side-item" id="btn-side-settings" onclick="document.getElementById('btn-settings').click()">
+                <span class="si-icon">⚙</span>
+                <span class="si-label" data-i18n="side.settings">Settings</span>
+            </a>
+        </div>
+    </aside>
 
-            <div class="sidebar-section sidebar-bottom">
-                <div class="sidebar-section-title">PROGETTO</div>
-                <nav class="sidebar-nav">
-                    <a href="#" class="sidebar-item">
-                        <span class="sidebar-icon">⚙</span>
-                        <span>Impostazioni</span>
-                    </a>
-                </nav>
-            </div>
-        </aside>
+    <!-- MAIN CONTENT -->
+    <main class="main" id="main-content">
+        {% block content %}{% endblock %}
+    </main>
 
-        <!-- AREA CENTRALE -->
-        <main class="content-area">
-            {% block content %}{% endblock %}
-        </main>
+</div><!-- /.app -->
 
-    </div>
-<!-- MODAL NUOVO PROGETTO -->
+<!-- MODAL: NEW PROJECT -->
 <div class="modal-overlay" id="modal-new-project">
     <div class="modal">
         <div class="modal-header">
-            <h2>Nuovo Progetto</h2>
+            <h2>New Project</h2>
             <button class="modal-close" onclick="closeModal('modal-new-project')">✕</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
-                <label for="input-project-name">Nome progetto *</label>
-                <input type="text" id="input-project-name" placeholder="Es. Impianto Produzione Linea A">
+                <label for="input-project-name">Project name *</label>
+                <input type="text" id="input-project-name" placeholder="e.g. Production Line A">
             </div>
             <div class="form-group">
-                <label for="input-project-client">Cliente</label>
-                <input type="text" id="input-project-client" placeholder="Es. Pharma S.p.A.">
+                <label for="input-project-client">Client</label>
+                <input type="text" id="input-project-client" placeholder="e.g. Pharma S.p.A.">
             </div>
             <div class="form-group">
-                <label for="input-project-description">Descrizione</label>
-                <textarea id="input-project-description" rows="3" placeholder="Descrizione opzionale del progetto"></textarea>
+                <label for="input-project-description">Description</label>
+                <textarea id="input-project-description" rows="3" placeholder="Optional project description"></textarea>
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeModal('modal-new-project')">Annulla</button>
-            <button class="btn btn-primary" onclick="submitNewProject()">Crea Progetto</button>
+            <button class="btn btn-outline" onclick="closeModal('modal-new-project')">Cancel</button>
+            <button class="btn btn-primary" onclick="submitNewProject()">Create Project</button>
         </div>
     </div>
 </div>
 
-<!-- MODAL APRI PROGETTO -->
+<!-- MODAL: OPEN PROJECT -->
 <div class="modal-overlay" id="modal-open-project">
     <div class="modal">
         <div class="modal-header">
-            <h2>Apri Progetto</h2>
+            <h2>Open Project</h2>
             <button class="modal-close" onclick="closeModal('modal-open-project')">✕</button>
         </div>
         <div class="modal-body">
             <div id="projects-list">
-                <p class="text-muted">Caricamento...</p>
+                <p class="text-muted">Loading…</p>
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeModal('modal-open-project')">Chiudi</button>
+            <button class="btn btn-outline" onclick="closeModal('modal-open-project')">Close</button>
         </div>
     </div>
 </div>
 
-<!-- MODAL NUOVO TOOL -->
+<!-- MODAL: NEW TOOL -->
 <div class="modal-overlay" id="modal-new-tool">
     <div class="modal modal-lg">
         <div class="modal-header">
-            <h2>Nuovo Tool</h2>
+            <h2>New Tool</h2>
             <button class="modal-close" onclick="closeModal('modal-new-tool')">✕</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
-                <label>Tipo di tool</label>
+                <label>Tool type</label>
                 <div class="catalog-grid" id="catalog-grid">
-                    <p class="text-muted">Caricamento...</p>
+                    <p class="text-muted">Loading…</p>
                 </div>
             </div>
             <div class="form-group" id="tool-name-group" style="display:none">
-                <label for="input-tool-name">Nome</label>
-                <input type="text" id="input-tool-name" placeholder="Es. Strumenti Fase 1"
+                <label for="input-tool-name">Name</label>
+                <input type="text" id="input-tool-name" placeholder="e.g. Instruments Phase 1"
                        onkeydown="if(event.key==='Enter') submitNewTool()">
             </div>
             <div class="form-group" id="tool-templates-group" style="display:none">
-                <label>Template ETL (opzionale)</label>
+                <label>ETL template (optional)</label>
                 <div class="templates-list" id="templates-list"></div>
                 <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
-                    <button class="btn btn-ghost btn-sm" onclick="importEtlFromFile()"
-                            title="Importa ETL da file .sql">
-                        📂 Carica da File
-                    </button>
-                    <span id="file-etl-name" style="display:none;font-size:12px;color:var(--color-success)"></span>
+                    <button class="btn btn-ghost btn-sm" onclick="importEtlFromFile()">📂 Load from file</button>
+                    <span id="file-etl-name" style="display:none;font-size:12px;color:var(--success)"></span>
                 </div>
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeModal('modal-new-tool')">Annulla</button>
-            <button class="btn btn-primary" id="btn-create-tool" onclick="submitNewTool()" disabled>Crea</button>
+            <button class="btn btn-outline" onclick="closeModal('modal-new-tool')">Cancel</button>
+            <button class="btn btn-primary" id="btn-create-tool" onclick="submitNewTool()" disabled>Create</button>
         </div>
     </div>
 </div>
 
-    <script src="/static/js/main.js"></script>
-    {% block extra_js %}{% endblock %}
+<script src="/static/js/main.js"></script>
+<script src="/static/engine/js/i18n.js"></script>
+<script src="/static/engine/js/app_shell.js"></script>
+{% block extra_js %}{% endblock %}
 </body>
 </html>

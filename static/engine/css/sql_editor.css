@@ -1,27 +1,6 @@
 /* ============================================================
-   TABLE ENGINE — Power SQL Editor (pannello inline)
+   TABLE ENGINE — Power SQL Editor (panel system)
    ============================================================ */
-
-.sql-editor-panel {
-    flex-shrink: 0;
-    border-top: 2px solid var(--color-accent);
-    background: var(--color-surface);
-    max-height: 300px;
-    display: flex;
-    flex-direction: column;
-}
-
-.sql-editor-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 7px 12px;
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--color-accent);
-    border-bottom: 1px solid var(--color-border);
-    flex-shrink: 0;
-}
 
 .sql-editor-body {
     display: flex;

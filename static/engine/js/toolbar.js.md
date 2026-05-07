@@ -14,6 +14,7 @@
 | Settings | `openSettings()`, `saveSettings()` |
 | Nota | `saveNote(content)` |
 | Aggiungi colonna | `addColumn()` — delega a `ColumnsManager.openAddColumnModal()` |
+| Panels dropdown | `_initPanelsDropdown()` — wires `#btn-panels-toggle`; exposes `window.closePanelsDropdown` |
 | ETL | `_updateEtlButton()`, `runEtl()` — mostra badge stale, esegue ETL, ricarica grid |
 | Export | `exportExcel()` — usa `window.location.href` |
 | Getter | `getToolType()` — restituisce `_tool.tool_type` |

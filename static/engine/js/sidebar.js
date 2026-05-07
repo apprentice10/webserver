@@ -1,53 +1,38 @@
+// Adapter: maps legacy SidebarManager calls to PanelSystem.
+// grid.js and flags.js call open(title) then setContent(html) — open() activates
+// the panel silently (no onActivate) so callers fill content themselves.
 const SidebarManager = (() => {
+    const _ID_MAP = {
+        'History': 'history', 'LOG': 'history', 'LOG ': 'history',
+        'Flags': 'flags', 'FLAG MANAGER': 'flags', 'Flag Manager': 'flags',
+        'Info': 'info',
+    };
 
-    let _isOpen = false;
-
-    // --------------------------------------------------------
-    // PUBLIC API
-    // --------------------------------------------------------
-
-    function toggle() {
-        _isOpen ? close() : open();
+    function _idFor(title) {
+        return _ID_MAP[title] || 'info';
     }
 
-    function open(title = 'Sidebar') {
-        _isOpen = true;
-        const panel = document.getElementById('sidebar-panel');
-        if (panel) panel.classList.remove('sidebar-closed');
-        const titleEl = document.getElementById('sidebar-title');
-        if (titleEl) titleEl.textContent = title;
-        const btn = document.getElementById('btn-toggle-sidebar');
-        if (btn) btn.classList.add('active');
-    }
-
-    function close() {
-        _isOpen = false;
-        const panel = document.getElementById('sidebar-panel');
-        if (panel) panel.classList.add('sidebar-closed');
-        const btn = document.getElementById('btn-toggle-sidebar');
-        if (btn) btn.classList.remove('active');
-    }
+    function toggle()         { PanelSystem.togglePanel('info'); }
+    function open(title = '') { PanelSystem.showPanel(_idFor(title), { silent: true }); }
+    function close()          { PanelSystem.closeAll(); }
 
     function isOpen() {
-        return _isOpen;
+        const p = document.getElementById('sidebar-panel');
+        return p ? !p.classList.contains('sidebar-closed') : false;
     }
 
-    // --------------------------------------------------------
-    // SECTION MANAGEMENT (for future LOG, FLAGS, etc.)
-    // --------------------------------------------------------
-
     function setTitle(title) {
-        const titleEl = document.getElementById('sidebar-title');
-        if (titleEl) titleEl.textContent = title;
+        const el = document.getElementById('sidebar-title');
+        if (el) el.textContent = title;
     }
 
     function setContent(html) {
-        const body = document.getElementById('sidebar-body');
-        if (body) body.innerHTML = html;
+        const el = document.getElementById('sidebar-body');
+        if (el) el.innerHTML = html;
     }
 
     function clearContent() {
-        setContent('<p class="sidebar-empty">Nessun contenuto.</p>');
+        setContent('<p class="sidebar-empty">No content.</p>');
     }
 
     return { toggle, open, close, isOpen, setTitle, setContent, clearContent };

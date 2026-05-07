@@ -27,7 +27,7 @@ const App = {
 
 
 // ============================================================
-// INIT — ripristina stato al caricamento pagina
+// INIT — restore state on page load
 // ============================================================
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -36,12 +36,19 @@ document.addEventListener("DOMContentLoaded", () => {
         _applyProjectToUI(project);
     }
 
-    // Ripristina stato sidebar
-    if (localStorage.getItem("sidebarCollapsed") === "1") {
-        const sidebar = document.getElementById("main-sidebar");
-        const btn     = document.getElementById("sidebar-toggle");
-        if (sidebar) sidebar.classList.add("collapsed");
-        if (btn)     btn.textContent = "›";
+    // Restore sidebar state
+    const appEl = document.getElementById("app");
+    const toggleBtn = document.getElementById("btn-sidebar-toggle");
+    if (appEl && localStorage.getItem("sidebarCollapsed") === "1") {
+        appEl.dataset.sidebar = "collapsed";
+        if (toggleBtn) toggleBtn.textContent = "›";
+    } else if (appEl) {
+        appEl.dataset.sidebar = "expanded";
+        if (toggleBtn) toggleBtn.textContent = "‹";
+    }
+
+    if (toggleBtn) {
+        toggleBtn.addEventListener("click", toggleSidebar);
     }
 });
 
@@ -51,10 +58,12 @@ document.addEventListener("DOMContentLoaded", () => {
 // ============================================================
 
 function toggleSidebar() {
-    const sidebar   = document.getElementById("main-sidebar");
-    const btn       = document.getElementById("sidebar-toggle");
-    const collapsed = sidebar.classList.toggle("collapsed");
-    btn.textContent = collapsed ? "›" : "‹";
+    const appEl    = document.getElementById("app");
+    const toggleBtn = document.getElementById("btn-sidebar-toggle");
+    if (!appEl) return;
+    const collapsed = appEl.dataset.sidebar !== "collapsed";
+    appEl.dataset.sidebar = collapsed ? "collapsed" : "expanded";
+    if (toggleBtn) toggleBtn.textContent = collapsed ? "›" : "‹";
     localStorage.setItem("sidebarCollapsed", collapsed ? "1" : "0");
 }
 
@@ -218,7 +227,8 @@ function setActiveProject(project) {
 
 function clearActiveProject() {
     App.currentProject = null;
-    document.getElementById("project-name").textContent = "Nessun progetto aperto";
+    const nameEl = document.getElementById("project-name");
+    if (nameEl) nameEl.textContent = "No project open";
     const nav = document.getElementById("tools-nav");
     if (nav) nav.innerHTML = "";
     const btn = document.getElementById("btn-new-tool");
@@ -245,27 +255,27 @@ async function _applyProjectToUI(project) {
 }
 
 /**
- * Genera dinamicamente i link nella sidebar per ogni tool del progetto.
- * Se TOOL_ID è definito (pagina tool view) marca il tool corrente come attivo.
+ * Builds tool links in the left sidebar for each tool in the project.
+ * Marks the current tool as active if TOOL_ID is defined.
  */
 function _renderSidebarTools(tools, projectId) {
     const nav = document.getElementById("tools-nav");
     if (!nav) return;
 
     if (tools.length === 0) {
-        nav.innerHTML = '<div class="sidebar-empty">Nessun tool — creane uno!</div>';
+        nav.innerHTML = '<div class="side-empty">No tools — create one!</div>';
         return;
     }
 
     const currentToolId = (typeof TOOL_ID !== "undefined") ? TOOL_ID : null;
 
     nav.innerHTML = tools.map(tool => `
-        <a href="#" class="sidebar-item${tool.id === currentToolId ? " active" : ""}"
+        <a href="#" class="side-item${tool.id === currentToolId ? " active" : ""}"
            data-tool-id="${tool.id}"
            onclick="openToolById(${tool.id}, ${projectId}); return false;">
-            <span class="sidebar-icon">${escapeHtml(tool.icon || "📄")}</span>
-            <span>${escapeHtml(tool.name)}</span>
-            ${tool.is_stale ? '<span class="stale-badge" title="Dati non aggiornati">●</span>' : ''}
+            <span class="si-icon">${escapeHtml(tool.icon || "📄")}</span>
+            <span class="si-label">${escapeHtml(tool.name)}</span>
+            ${tool.is_stale ? '<span class="si-stale" title="ETL stale"></span>' : ''}
         </a>
     `).join("");
 }

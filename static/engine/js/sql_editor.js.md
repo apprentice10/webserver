@@ -1,20 +1,23 @@
----
 # static/engine/js/sql_editor.js
 
-**Descrizione:** Power SQL Editor inline del Table Engine — toggle pannello, esecuzione query arbitrarie (SELECT/DML), rendering risultati.
+**Description:** Power SQL Editor for the Table Engine — delegates show/hide to PanelSystem, executes arbitrary SQL (SELECT/DML), renders results, preserves draft state across panel reopen.
 
-## Indice
+## Index
 
-| Sezione | Funzioni pubbliche |
-|---------|--------------------|
-| Init | `_init()` — attacca shortcut `Ctrl+Enter` (esegue solo se pannello visibile) |
-| Toggle | `toggle()` — mostra/nasconde `#sql-editor-panel`, focus su `#sql-input` |
-| Esecuzione | `run()` — `ApiClient.runSql`, rendering risultati o errore |
-| Rendering | `_renderResults(data)` — tabella HTML per SELECT; messaggio per DML (`rowcount`) |
-| Pulizia | `clear()` — svuota input e risultati |
+| Symbol | Description |
+|--------|-------------|
+| `_sqlDraft` | Persists textarea content across panel close/open |
+| `_resultsHtml` | Persists rendered results across panel close/open |
+| `_init()` | Attaches `Ctrl+Enter` shortcut (fires only when `PanelSystem.isPanelOpen('sql')`) |
+| `renderInto(body)` | Injects SQL editor HTML into a panel body; restores draft and results; focus on textarea |
+| `toggle()` | Delegates to `PanelSystem.togglePanel('sql')` |
+| `run()` | Reads `#sql-input`, calls `ApiClient.runSql`, renders results; saves to `_resultsHtml` |
+| `_renderResults(data)` | Renders SELECT table or DML rowcount message into `#sql-results` |
+| `clear()` | Clears textarea and results; resets `_sqlDraft` and `_resultsHtml` |
 
-## Decisioni
+## Decisions
 
-- **DDL bloccato lato server** (`_check_sql_safety` in `etl.py`): il frontend non filtra — l'error handling viene dal backend.
-- **`_escHtml` da `Utils.escHtml`**: assegnato localmente (`const _escHtml = Utils.escHtml`) per brevità interna.
-- **`_init()` chiamato all'avvio** (dentro l'IIFE, prima del `return`): nessun `init()` pubblico necessario.
+- **State preserved across reopen**: `_sqlDraft` and `_resultsHtml` are module-level; `renderInto` restores them so the user doesn't lose their query when switching panels.
+- **No `#sql-editor-panel` in DOM**: the panel body is created on demand by `renderInto` via `PanelSystem.onActivate`. The old inline `#sql-editor-panel` div was removed from `table.html`.
+- **`#tool-note` hidden textarea**: Notes panel keeps a hidden `<textarea id="tool-note">` in the DOM as shared state for `ToolbarManager.init()` (which sets note value on load) and the Notes panel `onActivate` (which reads it). The visible note area was removed from `.tool-main`.
+- **DDL blocked server-side** (`_check_sql_safety` in `etl.py`): the frontend does not filter — errors come from the backend.

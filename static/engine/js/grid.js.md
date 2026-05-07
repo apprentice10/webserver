@@ -8,8 +8,8 @@
 | Lines    | Section |
 |----------|---------|
 | 1–55     | State variables + `init()` |
-| 56–200   | Rendering (`render`, `_flagBadgesHtml`, `_renderRow`, `_renderCell`, `_renderGhostRow`) |
-| 216–300  | Event listeners (`_attachListeners`, `_onCellFocus`, `_onCellBlur`, `_onCellKeydown`, `_onCellDblClick`, `_onCellPaste`) |
+| 56–215   | Rendering (`render`, `_flagBadgesHtml`, `_renderRow`, `_renderCell`, `_renderGhostRow`) |
+| 218–305  | Event listeners (`_attachListeners`, `_onCellFocus`, `_onCellBlur`, `_onCellKeydown`, `_onCellDblClick`, `_onCellPaste`) |
 | 301–395  | Keyboard nav (`_moveFocus`) + edit mode (`_enterEditMode`) |
 | 397–574  | Range selection (`_initRangeSelection`, `_onTdMousedown`, `_onTdMouseenter`, `_updateRangeHighlight`, `_clearRange`, `_initColumnHeaderSelection`, `_selectColumn`, `_selectRow`, `_initCopyToClipboard`) |
 | 581–614  | Ghost row (`_onGhostKeydown`, `_onGhostBlur`, `_createFromGhost`) |
