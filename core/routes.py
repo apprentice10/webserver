@@ -1,10 +1,16 @@
+import json
 import re
+import shutil
+import sqlite3
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
 
+from engine import etl as _etl
 from engine.project_db import create_project_db, open_project_db, DATA_DIR
 from engine.project_index import (
     init_index, add_project, remove_project,
@@ -91,6 +97,75 @@ def create_project(data: ProjectCreate):
     }
 
 
+@router.get("/{project_id}/export")
+def export_project(project_id: int):
+    project = _get_project(project_id)
+    db_path = DATA_DIR / project["db_path"]
+    if not db_path.exists():
+        raise HTTPException(status_code=404, detail="Project file not found")
+    return FileResponse(
+        path=str(db_path),
+        media_type="application/octet-stream",
+        filename=db_path.name,
+    )
+
+
+@router.post("/import", response_model=ProjectResponse)
+async def import_project(file: UploadFile = File(...)):
+    SQLITE_MAGIC = b"SQLite format 3\x00"
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
+        tmp_path = Path(tmp.name)
+        content = await file.read()
+        tmp.write(content)
+
+    try:
+        if len(content) < 16 or content[:16] != SQLITE_MAGIC:
+            raise HTTPException(status_code=400, detail="Not a valid SQLite file")
+
+        conn = sqlite3.connect(str(tmp_path))
+        conn.row_factory = sqlite3.Row
+        try:
+            row = conn.execute(
+                "SELECT name, client FROM _project LIMIT 1"
+            ).fetchone()
+        except sqlite3.OperationalError:
+            raise HTTPException(status_code=400, detail="File is not a valid project DB (missing _project table)")
+        finally:
+            conn.close()
+
+        if not row:
+            raise HTTPException(status_code=400, detail="Project DB has no project record")
+
+        name   = row["name"]   or "Imported Project"
+        client = row["client"] or ""
+
+        base = _make_db_filename(client, name)
+        db_filename = base
+        db_path = DATA_DIR / db_filename
+        counter = 2
+        while db_path.exists():
+            stem = base[:-3]
+            db_filename = f"{stem}_{counter}.db"
+            db_path = DATA_DIR / db_filename
+            counter += 1
+
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(tmp_path, db_path)
+
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    project_id = add_project(name, client, db_filename)
+    return {
+        "id":          project_id,
+        "name":        name,
+        "client":      client,
+        "description": None,
+        "db_path":     db_filename,
+    }
+
+
 @router.get("/{project_id}", response_model=ProjectResponse)
 def get_project(project_id: int):
     return _get_project(project_id)
@@ -103,3 +178,170 @@ def delete_project(project_id: int):
     if db_path.exists():
         db_path.unlink()
     return {"ok": True, "deleted_id": project_id}
+
+
+# ============================================================
+# ETL DESIGN — graph + bulk run
+# ============================================================
+
+def _topo_sort(tools: list[dict]) -> list[dict]:
+    """Return tools in topological order (deps before dependents)."""
+    slug_to_tool = {t["slug"]: t for t in tools}
+    visited: set[str] = set()
+    order: list[dict] = []
+
+    def visit(slug: str) -> None:
+        if slug in visited:
+            return
+        visited.add(slug)
+        tool = slug_to_tool.get(slug)
+        if not tool:
+            return
+        for dep in tool.get("etl_deps", []):
+            if dep in slug_to_tool:
+                visit(dep)
+        order.append(tool)
+
+    for t in tools:
+        visit(t["slug"])
+    return order
+
+
+@router.get("/{project_id}/etl-graph")
+def get_etl_graph(project_id: int):
+    project = _get_project(project_id)
+    conn = open_project_db(DATA_DIR / project["db_path"])
+    try:
+        rows = conn.execute(
+            "SELECT id, slug, name, icon, tool_type, is_stale, query_config FROM _tools ORDER BY id"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    nodes = []
+    slug_set: set[str] = set()
+    for row in rows:
+        cfg = json.loads(row["query_config"] or "{}")
+        has_etl = bool(cfg.get("etl_model"))
+        nodes.append({
+            "id":        row["id"],
+            "slug":      row["slug"],
+            "name":      row["name"],
+            "icon":      row["icon"] or "📄",
+            "tool_type": row["tool_type"] or "",
+            "has_etl":   has_etl,
+            "is_stale":  bool(row["is_stale"]),
+        })
+        slug_set.add(row["slug"])
+
+    edges = []
+    for row in rows:
+        cfg = json.loads(row["query_config"] or "{}")
+        for dep in cfg.get("etl_deps", []):
+            if dep in slug_set:
+                edges.append({"from_slug": dep, "to_slug": row["slug"]})
+
+    return {"nodes": nodes, "edges": edges}
+
+
+@router.post("/{project_id}/etl-run-stale")
+def etl_run_stale(project_id: int):
+    project = _get_project(project_id)
+    conn = open_project_db(DATA_DIR / project["db_path"])
+    try:
+        rows = conn.execute(
+            "SELECT id, slug, name, query_config FROM _tools WHERE is_stale = 1 ORDER BY id"
+        ).fetchall()
+
+        candidates = []
+        for row in rows:
+            cfg = json.loads(row["query_config"] or "{}")
+            if cfg.get("etl_model"):
+                candidates.append({
+                    "id":        row["id"],
+                    "slug":      row["slug"],
+                    "name":      row["name"],
+                    "etl_deps":  cfg.get("etl_deps", []),
+                })
+
+        ordered = _topo_sort(candidates)
+        results = []
+        ran = 0
+        for tool in ordered:
+            try:
+                r = _etl.etl_run_saved(conn, tool["id"])
+                results.append({
+                    "id":      tool["id"],
+                    "slug":    tool["slug"],
+                    "name":    tool["name"],
+                    "created": r.get("created", 0),
+                    "updated": r.get("updated", 0),
+                    "error":   None,
+                })
+                ran += 1
+            except Exception as exc:
+                results.append({
+                    "id":      tool["id"],
+                    "slug":    tool["slug"],
+                    "name":    tool["name"],
+                    "created": 0,
+                    "updated": 0,
+                    "error":   str(exc),
+                })
+    finally:
+        conn.close()
+
+    return {"results": results, "total_ran": ran, "total_skipped": len(candidates) - ran}
+
+
+@router.post("/{project_id}/etl-run-all")
+def etl_run_all(project_id: int):
+    project = _get_project(project_id)
+    conn = open_project_db(DATA_DIR / project["db_path"])
+    try:
+        rows = conn.execute(
+            "SELECT id, slug, name, query_config FROM _tools ORDER BY id"
+        ).fetchall()
+
+        candidates = []
+        for row in rows:
+            cfg = json.loads(row["query_config"] or "{}")
+            if cfg.get("etl_model"):
+                candidates.append({
+                    "id":       row["id"],
+                    "slug":     row["slug"],
+                    "name":     row["name"],
+                    "etl_deps": cfg.get("etl_deps", []),
+                    "model":    cfg["etl_model"],
+                })
+
+        ordered = _topo_sort(candidates)
+        results = []
+        ran = 0
+        for tool in ordered:
+            try:
+                r = _etl.etl_apply(conn, tool["id"], tool["model"])
+                conn.execute("UPDATE _tools SET is_stale = 0 WHERE id = ?", (tool["id"],))
+                conn.commit()
+                results.append({
+                    "id":      tool["id"],
+                    "slug":    tool["slug"],
+                    "name":    tool["name"],
+                    "created": r.get("created", 0),
+                    "updated": r.get("updated", 0),
+                    "error":   None,
+                })
+                ran += 1
+            except Exception as exc:
+                results.append({
+                    "id":      tool["id"],
+                    "slug":    tool["slug"],
+                    "name":    tool["name"],
+                    "created": 0,
+                    "updated": 0,
+                    "error":   str(exc),
+                })
+    finally:
+        conn.close()
+
+    return {"results": results, "total_ran": ran, "total_skipped": len(candidates) - ran}

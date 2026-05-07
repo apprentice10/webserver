@@ -1,0 +1,150 @@
+/* etl_design.css — ETL Design canvas page */
+
+/* ── Canvas container ──────────────────────────────────────── */
+
+#etl-canvas-wrap {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    height: calc(100vh - var(--topbar-h, 48px));
+    background: var(--clr-bg-alt, #1a1a1a);
+    cursor: grab;
+    user-select: none;
+}
+
+#etl-canvas-wrap.panning  { cursor: grabbing; }
+#etl-canvas-wrap.dragging { cursor: grabbing; }
+
+/* ── Inner transform layer (pan + zoom applied here) ────────── */
+
+#etl-canvas-inner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+}
+
+/* ── SVG edges overlay ─────────────────────────────────────── */
+
+#etl-edges-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4000px;
+    height: 4000px;
+    pointer-events: none;
+    overflow: visible;
+}
+
+.etl-edge {
+    fill: none;
+    stroke: var(--clr-border, #3a3a3a);
+    stroke-width: 1.5;
+    marker-end: url(#arrow);
+}
+
+.etl-edge--stale {
+    stroke: var(--clr-warn, #f59e0b);
+    marker-end: url(#arrow-stale);
+}
+
+.etl-arrow-head {
+    fill: var(--clr-border, #3a3a3a);
+}
+
+.etl-arrow-head--stale {
+    fill: var(--clr-warn, #f59e0b);
+}
+
+/* ── Nodes layer ───────────────────────────────────────────── */
+
+#etl-nodes-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4000px;
+    height: 4000px;
+}
+
+/* ── Node card ─────────────────────────────────────────────── */
+
+.etl-node {
+    position: absolute;
+    width: 190px;
+    border: 2px solid var(--clr-border, #3a3a3a);
+    border-left-width: 4px;
+    border-radius: 8px;
+    background: var(--clr-surface, #242424);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: box-shadow 0.15s, border-color 0.15s;
+    box-sizing: border-box;
+}
+
+.etl-node:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.etl-node--ok {
+    border-left-color: var(--clr-ok, #22c55e);
+}
+
+.etl-node--stale {
+    border-left-color: var(--clr-warn, #f59e0b);
+}
+
+.etl-node--none {
+    border-left-color: var(--clr-border, #3a3a3a);
+    opacity: 0.6;
+}
+
+.etl-node-icon {
+    font-size: 22px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.etl-node-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.etl-node-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--clr-text, #e0e0e0);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.etl-node-type {
+    font-size: 10px;
+    color: var(--clr-text-muted, #888);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.etl-node-badge {
+    margin-left: auto;
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+/* ── Empty state ───────────────────────────────────────────── */
+
+#etl-empty-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--clr-text-muted, #888);
+    font-size: 14px;
+    pointer-events: none;
+}

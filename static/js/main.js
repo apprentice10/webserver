@@ -169,6 +169,11 @@ async function loadProjectsList() {
                 <div class="project-list-actions">
                     <button
                         class="btn-icon"
+                        title="Export"
+                        onclick="exportProject(event, ${p.id}, '${escapeHtml(p.name)}')"
+                    >⬇</button>
+                    <button
+                        class="btn-icon"
                         title="Elimina"
                         onclick="deleteProject(event, ${p.id})"
                     >🗑</button>
@@ -217,6 +222,50 @@ async function deleteProject(event, id) {
 
 
 // ============================================================
+// EXPORT / IMPORT PROJECT
+// ============================================================
+
+function exportProject(event, id, name) {
+    event.stopPropagation();
+    const a = document.createElement("a");
+    a.href = `/api/projects/${id}/export`;
+    a.download = name + ".db";
+    a.click();
+}
+
+function importProjectFromFile() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".db";
+    input.onchange = async () => {
+        const file = input.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+            const response = await fetch("/api/projects/import", {
+                method: "POST",
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.detail || "Import failed");
+            }
+
+            await loadProjectsList();
+
+        } catch (err) {
+            alert("Import error: " + err.message);
+        }
+    };
+    input.click();
+}
+
+
+// ============================================================
 // GESTIONE PROGETTO ATTIVO
 // ============================================================
 
@@ -245,6 +294,12 @@ async function _applyProjectToUI(project) {
 
     const btn = document.getElementById("btn-new-tool");
     if (btn) btn.classList.remove("disabled");
+
+    const etlDesignBtn = document.getElementById("btn-side-etl-design");
+    if (etlDesignBtn) {
+        etlDesignBtn.href = `/project/${project.id}/etl-design`;
+        etlDesignBtn.style.display = "";
+    }
 
     try {
         const tools = await fetch(`/api/tools/project/${project.id}`).then(r => r.json());

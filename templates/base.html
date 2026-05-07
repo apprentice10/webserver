@@ -45,6 +45,10 @@
         </div>
         <div class="side-bottom">
             <div class="side-label" id="side-project-label" data-i18n="side.project">PROJECT</div>
+            <a class="side-item" id="btn-side-etl-design" href="#" style="display:none">
+                <span class="si-icon">🔀</span>
+                <span class="si-label">ETL Design</span>
+            </a>
             <a class="side-item" id="btn-side-settings" onclick="document.getElementById('btn-settings').click()">
                 <span class="si-icon">⚙</span>
                 <span class="si-label" data-i18n="side.settings">Settings</span>
@@ -101,6 +105,7 @@
         </div>
         <div class="modal-footer">
             <button class="btn btn-outline" onclick="closeModal('modal-open-project')">Close</button>
+            <button class="btn btn-ghost btn-sm" onclick="importProjectFromFile()">📂 Import from file</button>
         </div>
     </div>
 </div>

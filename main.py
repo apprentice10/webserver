@@ -49,3 +49,12 @@ async def etl_page(request: Request, project_id: int, tool_id: int):
         "engine/etl.html",
         {"project_id": project_id, "tool_id": tool_id}
     )
+
+
+@app.get("/project/{project_id}/etl-design", response_class=HTMLResponse)
+async def etl_design_page(request: Request, project_id: int):
+    return templates.TemplateResponse(
+        request,
+        "etl_design.html",
+        {"project_id": project_id}
+    )

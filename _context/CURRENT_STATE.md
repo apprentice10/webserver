@@ -22,8 +22,8 @@ Completed feature history → `_context/DONE.md`
 
 The refactor (2026-04-26) made each project DB self-contained (`_project` + `_templates` inside the file). The infrastructure for portable files is now in place.
 
-47. **Save project as file** — copy of project `.db` to user-selected location (API `GET /projects/{id}/export`)
-48. **Open project from file** — upload/path of an existing `.db`, register in `projects.db` via `add_project()` (API `POST /projects/import`)
+~~47. **Save project as file**~~ — Done (2026-05-07).
+~~48. **Open project from file**~~ — Done (2026-05-07).
 49. **Automatic backup** — periodic or pre-destructive-operation backup
 
 ### Group J — DB ↔ Webserver compatibility (high effort, depends on I)
@@ -48,6 +48,7 @@ Core done: `PanelSystem` with registry, tab bar, floats, DnD. `sidebar.js` thin 
 ### Group L — Grid UX fixes (done)
 
 ~~L-1. Disable native text selection in grid~~ — already implemented via `.data-grid.selecting { user-select: none }` pattern.
+
 
 ### Tools backlog (low priority)
 
