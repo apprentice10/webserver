@@ -5,12 +5,12 @@ Shared utility functions used across engine modules.
 """
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
 def now_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def slugify(text: str) -> str:
@@ -22,7 +22,7 @@ def slugify(text: str) -> str:
 
 
 def format_log_entry(rev: str, field: str, old_val, new_val) -> str:
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
     old = f"'{old_val}'" if old_val else "—"
     new = f"'{new_val}'" if new_val else "—"
     return f"[{ts} REV {rev}] {field.upper()}: {old} → {new}"

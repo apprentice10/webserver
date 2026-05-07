@@ -11,7 +11,7 @@ Gli override ETL vivono in _overrides.
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import HTTPException
 
@@ -624,7 +624,7 @@ def soft_delete_row(
     row = dict(row)
 
     tag_val = row.get("tag", "")
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
     log_entry = _append_log(row.get("__log"), f"[{ts} REV {rev}] REMOVED")
 
     # Serializza riga (solo campi utente + tag + rev)
@@ -680,7 +680,7 @@ def restore_row(
     ).fetchone()[0]
     next_pos = (max_pos or -1) + 1
 
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
     new_log = _append_log(trash.get("row_log"), f"[{ts} REV {rev}] RESTORED")
 
     # Ri-inserisce (senza le colonne interne)
