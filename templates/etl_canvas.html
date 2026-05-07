@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}ETL Canvas{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/engine/css/etl_canvas.css">
+{% endblock %}
+
+{% block topbar_crumbs %}
+<span class="crumb-project" id="project-name">Loading…</span>
+<span class="crumb-sep">›</span>
+<span class="crumb" id="tool-name">…</span>
+<span class="crumb-sep">›</span>
+<span class="crumb">Canvas</span>
+{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-ghost btn-sm" id="btn-canvas-run" onclick="EtlCanvas.run()">▶ Run ETL</button>
+<a  class="btn btn-ghost btn-sm" id="btn-open-etl"  href="/tool/{{ project_id }}/{{ tool_id }}/etl">✏ Edit ETL</a>
+<a  class="btn btn-ghost btn-sm" id="btn-open-grid" href="/tool/{{ project_id }}/{{ tool_id }}">⊞ Grid</a>
+{% endblock %}
+
+{% block content %}
+<div id="ecn-canvas-wrap">
+    <div id="ecn-canvas-inner">
+        <svg id="ecn-edges-svg" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <marker id="ecn-arrow" markerWidth="9" markerHeight="6"
+                        refX="9" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L9,3 z" class="ecn-arrow-head"/>
+                </marker>
+            </defs>
+        </svg>
+        <div id="ecn-nodes-layer"></div>
+    </div>
+    <div id="ecn-empty-hint" style="display:none">
+        <span>No ETL model defined for this tool yet. <a href="/tool/{{ project_id }}/{{ tool_id }}/etl">Open ETL Editor →</a></span>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const PROJECT_ID = {{ project_id }};
+    const TOOL_ID    = {{ tool_id }};
+</script>
+<script src="/static/engine/js/utils.js"></script>
+<script src="/static/engine/js/etl_canvas.js"></script>
+<script>EtlCanvas.init(PROJECT_ID, TOOL_ID);</script>
+{% endblock %}

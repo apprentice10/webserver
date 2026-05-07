@@ -258,8 +258,10 @@ const EtlDesign = (() => {
             const id = el.dataset.id;
             if (e.ctrlKey || e.metaKey) {
                 window.location.href = `/tool/${_projectId}/${id}/etl`;
-            } else {
+            } else if (e.shiftKey) {
                 window.location.href = `/tool/${_projectId}/${id}`;
+            } else {
+                window.location.href = `/project/${_projectId}/canvas/${id}`;
             }
         });
     }

@@ -1,0 +1,166 @@
+/* etl_canvas.css — per-tool ETL model canvas */
+
+/* ── Canvas container ──────────────────────────────────────── */
+
+#ecn-canvas-wrap {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    height: calc(100vh - var(--topbar-h, 48px));
+    background: var(--clr-bg-alt, #1a1a1a);
+    cursor: grab;
+    user-select: none;
+}
+
+#ecn-canvas-wrap.panning  { cursor: grabbing; }
+#ecn-canvas-wrap.dragging { cursor: grabbing; }
+
+/* ── Inner transform layer ─────────────────────────────────── */
+
+#ecn-canvas-inner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+}
+
+/* ── SVG edges overlay ─────────────────────────────────────── */
+
+#ecn-edges-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4000px;
+    height: 4000px;
+    pointer-events: none;
+    overflow: visible;
+}
+
+.ecn-edge {
+    fill: none;
+    stroke: var(--clr-border, #3a3a3a);
+    stroke-width: 1.5;
+    marker-end: url(#ecn-arrow);
+}
+
+.ecn-arrow-head {
+    fill: var(--clr-border, #3a3a3a);
+}
+
+/* ── Nodes layer ───────────────────────────────────────────── */
+
+#ecn-nodes-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4000px;
+    height: 4000px;
+}
+
+/* ── Node card base ────────────────────────────────────────── */
+
+.ecn {
+    position: absolute;
+    border: 2px solid var(--clr-border, #3a3a3a);
+    border-left-width: 4px;
+    border-radius: 8px;
+    background: var(--clr-surface, #242424);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: box-shadow 0.15s;
+    min-height: 56px;
+}
+
+.ecn:hover {
+    box-shadow: 0 4px 18px rgba(0,0,0,0.5);
+}
+
+.ecn-icon {
+    font-size: 20px;
+    line-height: 1;
+    flex-shrink: 0;
+    width: 24px;
+    text-align: center;
+}
+
+.ecn-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.ecn-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--clr-text, #e0e0e0);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ecn-detail {
+    font-size: 10px;
+    color: var(--clr-text-muted, #888);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ecn-final-badge {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--clr-ok, #22c55e);
+    background: color-mix(in srgb, var(--clr-ok, #22c55e) 15%, transparent);
+    padding: 2px 6px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--clr-ok, #22c55e) 40%, transparent);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ── Node type: source ─────────────────────────────────────── */
+
+.ecn--table         { border-left-color: #3b82f6; }
+.ecn--cte           { border-left-color: #8b5cf6; }
+.ecn--generate_series { border-left-color: #14b8a6; }
+
+/* ── Node type: transformation ─────────────────────────────── */
+
+.ecn--select    { border-left-color: #22c55e; }
+.ecn--filter    { border-left-color: #f97316; }
+.ecn--join      { border-left-color: #eab308; }
+.ecn--aggregate { border-left-color: #a855f7; }
+.ecn--compute   { border-left-color: #06b6d4; }
+
+/* Final output node gets a subtle glow */
+.ecn--final {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--clr-ok, #22c55e) 40%, transparent);
+}
+
+/* ── Empty state ───────────────────────────────────────────── */
+
+#ecn-empty-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--clr-text-muted, #888);
+    font-size: 14px;
+    pointer-events: none;
+    flex-direction: column;
+    gap: 8px;
+}
+
+#ecn-empty-hint a {
+    pointer-events: auto;
+    color: var(--clr-accent, #3b82f6);
+    text-decoration: none;
+}
+
+#ecn-empty-hint a:hover { text-decoration: underline; }

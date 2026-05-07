@@ -58,3 +58,12 @@ async def etl_design_page(request: Request, project_id: int):
         "etl_design.html",
         {"project_id": project_id}
     )
+
+
+@app.get("/project/{project_id}/canvas/{tool_id}", response_class=HTMLResponse)
+async def etl_canvas_page(request: Request, project_id: int, tool_id: int):
+    return templates.TemplateResponse(
+        request,
+        "etl_canvas.html",
+        {"project_id": project_id, "tool_id": tool_id}
+    )
