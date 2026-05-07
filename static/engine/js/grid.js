@@ -9,7 +9,7 @@
  *   ~L52  : rendering  (render, _renderRow, _renderCell, _renderGhostRow)
  *   ~L182 : event listeners  (_attachListeners, onCellFocus/Blur/Keydown)
  *   ~L261 : keyboard nav + ghost row  (_moveFocus, _createFromGhost)
- *   ~L331 : cell save  (_saveCell, _updateLogCell)
+ *   ~L331 : cell save  (_doSaveCell, _updateLogCell)
  *   ~L373 : soft-delete / restore / hard-delete
  *   ~L403 : toggleDeleted / toggleLog (CSS .log-hidden, no re-render) / context menu
  *   ~L480 : search / filters / appendRows / showRowLog
@@ -268,9 +268,9 @@ const GridManager = (() => {
         }
 
         if (newVal === origVal) return;
-        const rowId = parseInt(this.dataset.rowId);
-        const field = this.dataset.field;
-        await _saveCell(this, rowId, field, newVal);
+        const cells = _normalizeCellsFromInput(this);
+        if (cells.length === 0) return;
+        await _doSaveCell(this, cells[0], newVal);
     }
 
     function _onCellDblClick() {
@@ -617,7 +617,12 @@ const GridManager = (() => {
     // SALVATAGGIO CELLA
     // --------------------------------------------------------
 
-    async function _saveCell(inputEl, rowId, field, newValue) {
+    async function _doSaveCell(inputEl, cell, newValue) {
+        const row = _rows.find(r => r.tag === cell.row_tag);
+        if (!row) return;
+        const rowId = row.id;
+        const field = cell.col_slug;
+
         inputEl.style.opacity = "0.5";
 
         try {
@@ -677,12 +682,23 @@ const GridManager = (() => {
     // --------------------------------------------------------
 
     async function softDeleteRow(rowId) {
-        if (!confirm("Eliminare questa riga? Potrà essere ripristinata.")) return;
+        const selected = _getSelectedRowIds().filter(id => {
+            const r = _rows.find(x => x.id === id);
+            return r && !r.is_deleted;
+        });
+        const rowIds = selected.length > 0 ? selected : [rowId];
+
+        const msg = rowIds.length === 1
+            ? "Delete this row? It can be restored."
+            : `Delete ${rowIds.length} rows? They can be restored.`;
+        if (!confirm(msg)) return;
 
         try {
-            const updated = await ApiClient.softDeleteRow(rowId);
-            const idx = _rows.findIndex(r => r.id === rowId);
-            if (idx !== -1) _rows[idx] = updated;
+            for (const id of rowIds) {
+                const updated = await ApiClient.softDeleteRow(id);
+                const idx = _rows.findIndex(r => r.id === id);
+                if (idx !== -1) _rows[idx] = updated;
+            }
             _applyFilters();
             render();
         } catch (err) {
@@ -703,18 +719,29 @@ const GridManager = (() => {
         }
     }
 
-    async function removeOverride(rowId, colSlug) {
-        if (!colSlug) return;
+    async function _doRemoveOverride(cells) {
+        if (!cells.length) return;
         try {
-            const updated = await ApiClient.removeOverride(rowId, colSlug);
-            const idx = _rows.findIndex(r => r.id === rowId);
-            if (idx !== -1) _rows[idx] = updated;
+            for (const { row_tag, col_slug } of cells) {
+                const row = _rows.find(r => r.tag === row_tag);
+                if (!row || !col_slug) continue;
+                const updated = await ApiClient.removeOverride(row.id, col_slug);
+                const idx = _rows.findIndex(r => r.id === row.id);
+                if (idx !== -1) _rows[idx] = updated;
+            }
             _applyFilters();
             render();
-            showToast("Modifica manuale rimossa.", "success");
+            showToast(cells.length === 1 ? "Modifica manuale rimossa." : `${cells.length} overrides removed.`, "success");
         } catch (err) {
             showToast(err.message, "error");
         }
+    }
+
+    // Compatibility wrapper — context menu single-cell path
+    async function removeOverride(rowId, colSlug) {
+        const row = _rows.find(r => r.id === rowId);
+        if (!row || !colSlug) return;
+        await _doRemoveOverride([{ row_tag: row.tag, col_slug: colSlug }]);
     }
 
 
@@ -790,7 +817,15 @@ const GridManager = (() => {
             if (action === "keep-row")        await keepRow(rowId);
             if (action === "remove-override") await removeOverride(rowId, colSlug);
             if (action === "log")             showRowLog(rowId);
-            if (action === "cell-log")        showCellLog(rowId, colSlugLog);
+            if (action === "cell-log") {
+                const cells = _getSelectedCells();
+                if (cells.length > 0) {
+                    const r = _rows.find(x => x.tag === cells[0].row_tag);
+                    if (r) showCellLog(r.id, cells[0].col_slug);
+                } else {
+                    showCellLog(rowId, colSlugLog);
+                }
+            }
             if (action === "range-log")       showRangeLog();
             if (action === "flags-trigger")   return;
             if (action === "open-flag-manager") { FlagsManager.show(); return; }
@@ -1285,6 +1320,16 @@ const GridManager = (() => {
     const _escHtml = Utils.escHtml;
     const _escAttr = Utils.escAttr;
 
+    // Converts a focused cell input into the standard [{row_tag, col_slug}] shape.
+    // Returns [] if the input cannot be resolved to a known row.
+    function _normalizeCellsFromInput(inputEl) {
+        const rowId = parseInt(inputEl.dataset.rowId);
+        const field = inputEl.dataset.field;
+        const row = _rows.find(r => r.id === rowId);
+        if (!row || !field) return [];
+        return [{ row_tag: row.tag, col_slug: field }];
+    }
+
     /**
      * Aggiorna i dati di una riga nel array locale
      * senza re-renderizzare tutta la griglia.
@@ -1307,17 +1352,31 @@ const GridManager = (() => {
     }
 
     async function hardDeleteRow(rowId) {
-        if (!confirm(
-            "Eliminare DEFINITIVAMENTE questa riga?\n" +
-            "Questa operazione è irreversibile e non può essere annullata."
-        )) return;
+        const selected = _getSelectedRowIds().filter(id => {
+            const r = _rows.find(x => x.id === id);
+            return r && r.is_deleted;
+        });
+        const rowIds = selected.length > 0 ? selected : [rowId];
+
+        const msg = rowIds.length === 1
+            ? "Permanently delete this row? This cannot be undone."
+            : `Permanently delete ${rowIds.length} rows? This cannot be undone.`;
+        if (!confirm(msg)) return;
 
         try {
-            await ApiClient.hardDeleteRow(rowId);
-            _rows = _rows.filter(r => r.id !== rowId);
-            _filteredRows = _filteredRows.filter(r => r.id !== rowId);
+            for (const id of rowIds) {
+                await ApiClient.hardDeleteRow(id);
+            }
+            const idSet = new Set(rowIds);
+            _rows         = _rows.filter(r => !idSet.has(r.id));
+            _filteredRows = _filteredRows.filter(r => !idSet.has(r.id));
             render();
-            showToast("Riga eliminata definitivamente.", "success");
+            showToast(
+                rowIds.length === 1
+                    ? "Row permanently deleted."
+                    : `${rowIds.length} rows permanently deleted.`,
+                "success"
+            );
         } catch (err) {
             showToast(err.message, "error");
         }
@@ -1326,6 +1385,23 @@ const GridManager = (() => {
     // --------------------------------------------------------
     // FLAG SUBMENU HELPERS
     // --------------------------------------------------------
+
+    function _getSelectedRowIds() {
+        const seen = new Set();
+        const ids  = [];
+        for (const rng of _ranges) {
+            const rMin = Math.min(rng.start.r, rng.end.r);
+            const rMax = Math.max(rng.start.r, rng.end.r);
+            for (let r = rMin; r <= rMax; r++) {
+                const row = _filteredRows[r];
+                if (row && !seen.has(row.id)) {
+                    seen.add(row.id);
+                    ids.push(row.id);
+                }
+            }
+        }
+        return ids;
+    }
 
     function _getSelectedCells() {
         const columns = ColumnsManager.getColumns();
@@ -1419,11 +1495,12 @@ const GridManager = (() => {
         exportLog,
         openContextMenu,
         removeFlagFromCells,
-        getRange:     () => (_ranges.length > 0 ? _ranges[0] : null),
-        getRanges:    () => [..._ranges],
-        clearRange:   _clearRange,
-        selectColumn: _selectColumn,
-        selectRow:    _selectRow
+        getRange:            () => (_ranges.length > 0 ? _ranges[0] : null),
+        getRanges:           () => [..._ranges],
+        clearRange:          _clearRange,
+        selectColumn:        _selectColumn,
+        selectRow:           _selectRow,
+        getSelectionForPaste: () => ({ ranges: _ranges, filteredRows: _filteredRows })
     };
 
 })();

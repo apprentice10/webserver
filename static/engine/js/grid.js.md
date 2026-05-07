@@ -3,22 +3,24 @@
 
 **Description:** Main grid rendering and interaction: row/cell render, keyboard nav, cell save, soft/hard delete/restore, toggle LOG/REV, context menu, filters, ghost row, range selection, clipboard copy.
 
-## Index (~1010 lines)
+## Index (~1490 lines)
 
 | Lines    | Section |
 |----------|---------|
 | 1–55     | State variables + `init()` |
 | 56–200   | Rendering (`render`, `_flagBadgesHtml`, `_renderRow`, `_renderCell`, `_renderGhostRow`) |
-| 186–270  | Event listeners (`_attachListeners`, `_onCellFocus`, `_onCellBlur`, `_onCellKeydown`, `_onCellDblClick`, `_onCellPaste`) |
-| 271–365  | Keyboard nav (`_moveFocus`) + edit mode (`_enterEditMode`) |
-| 366–560  | Range selection (`_initRangeSelection`, `_onTdMousedown`, `_onTdMouseenter`, `_updateRangeHighlight`, `_clearRange`, `_initColumnHeaderSelection`, `_selectColumn`, `_selectRow`, `_initCopyToClipboard`) |
-| 561–650  | Ghost row (`_onGhostKeydown`, `_onGhostBlur`, `_createFromGhost`) |
-| 651–750  | Cell save (`_saveCell`, `_updateLogCell`) |
-| 751–820  | Soft-delete / restore / hard-delete |
-| 821–880  | Toggle deleted/LOG/REV + context menu |
-| 880–960  | Filters, search, appendRows, `showRowLog`, `showCellLog` |
-| 960–1075 | Range LOG (`_isSingleCellSelection`, `showRangeLog`), Utility |
-| 1075–1200 | Flag submenu helpers (`_getSelectedCells`, `_flagCheckState`, `_populateFlagsSubmenu`), public API |
+| 216–300  | Event listeners (`_attachListeners`, `_onCellFocus`, `_onCellBlur`, `_onCellKeydown`, `_onCellDblClick`, `_onCellPaste`) |
+| 301–395  | Keyboard nav (`_moveFocus`) + edit mode (`_enterEditMode`) |
+| 397–574  | Range selection (`_initRangeSelection`, `_onTdMousedown`, `_onTdMouseenter`, `_updateRangeHighlight`, `_clearRange`, `_initColumnHeaderSelection`, `_selectColumn`, `_selectRow`, `_initCopyToClipboard`) |
+| 581–614  | Ghost row (`_onGhostKeydown`, `_onGhostBlur`, `_createFromGhost`) |
+| 620–690  | Cell save (`_doSaveCell`, `_updateLogCell`) |
+| 695–760  | Soft-delete / restore / hard-delete |
+| 722–745  | Override removal (`_doRemoveOverride`, `removeOverride` compat wrapper) |
+| 775–820  | Toggle deleted/LOG/REV + context menu |
+| 820–960  | Filters, search, appendRows, `showRowLog`, `showCellLog` |
+| 960–1100 | Range LOG (`_isSingleCellSelection`, `showRangeLog`), Utility |
+| 1304–1340 | Utility helpers (`_normalizeCellsFromInput`, `updateRowData`, `getRowById`) |
+| 1355–1490 | Flag submenu helpers (`_getSelectedCells`, `_flagCheckState`, `_populateFlagsSubmenu`), public API |
 
 ## State variables
 
@@ -84,6 +86,32 @@ GridManager.clearRange()
 GridManager.selectColumn(colIdx, additive)
 GridManager.selectRow(rowIdx, additive)
 ```
+
+## Selection → Operation pipeline
+
+All data-mutating operations follow this pipeline:
+
+```
+_ranges → _normalizeCellsFromInput | _getSelectedCells() → cells[] → operation(cells, options?)
+```
+
+| Helper | Purpose |
+|--------|---------|
+| `_normalizeCellsFromInput(inputEl)` | Converts a focused `<input>` element to `[{row_tag, col_slug}]`. Used by `_onCellBlur` when `_ranges` is empty (cleared on entering edit mode). |
+| `_getSelectedCells()` | Iterates `_ranges`, maps grid coordinates to `[{row_tag, col_slug}]`, deduplicates, skips `log`/`rev` columns. Single source of truth for all range-aware operations. |
+
+Operation layer (private, accept `cells[]`):
+
+| Function | Description |
+|----------|-------------|
+| `_doSaveCell(inputEl, cell, newValue)` | Save one cell's value via API; `cell = {row_tag, col_slug}`. |
+| `_doRemoveOverride(cells)` | Remove ETL override from all supplied cells in a loop. |
+
+Legacy compat wrappers (keep old `(rowId, colSlug)` signature for internal context menu calls):
+
+| Wrapper | Delegates to |
+|---------|-------------|
+| `removeOverride(rowId, colSlug)` | `_doRemoveOverride([{row_tag, col_slug}])` |
 
 ## Decisions
 

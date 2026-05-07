@@ -47,7 +47,12 @@ def _sqlite_split_part(s: str, d: str, n: int) -> str:
             f"ELSE {s} END"
         )
     rest = f"SUBSTR({s}, INSTR({s}, {d}) + LENGTH({d}))"
-    return _sqlite_split_part(rest, d, n - 1)
+    inner = _sqlite_split_part(rest, d, n - 1)
+    return (
+        f"CASE WHEN INSTR({s}, {d}) > 0 "
+        f"THEN {inner} "
+        f"ELSE NULL END"
+    )
 
 
 def _compile_split_part(args: list) -> str:

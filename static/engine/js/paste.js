@@ -83,7 +83,13 @@ const PasteManager = (() => {
         const isMultiCell = text.includes("\n") || text.includes("\t");
 
         if (!isMultiCell) {
-            // Paste singolo valore — lascia gestire al browser normalmente
+            // Single value — if a multi-cell range is selected, fill all cells in it
+            const { ranges, filteredRows } = GridManager.getSelectionForPaste();
+            if (_hasMultiCellSelection(ranges, filteredRows)) {
+                e.preventDefault();
+                await _pasteIntoSelection([[text]], ranges, filteredRows);
+            }
+            // otherwise let browser handle normally
             return;
         }
 
@@ -181,62 +187,89 @@ const PasteManager = (() => {
         const editableCols = _getEditableColumns();
         const visibleRows  = _getVisibleRows();
 
-        const startRowIdx = _anchorCell.rowIndex;
-        const startColIdx = _anchorCell.colIndex;
+        const { ranges, filteredRows } = GridManager.getSelectionForPaste();
+        const useSelection = _hasMultiCellSelection(ranges, filteredRows);
 
-        const updates = []; // { rowId, slug, value }
+        let startRowIdx, startColIdx, rowCount, colCount;
+
+        if (useSelection) {
+            const bounds = _getSelectionBounds(ranges, editableCols);
+            startRowIdx = bounds.startRowIdx;
+            startColIdx = bounds.startColIdx;
+            rowCount    = bounds.rowCount;
+            colCount    = bounds.colCount;
+        } else {
+            startRowIdx = _anchorCell.rowIndex;
+            startColIdx = _anchorCell.colIndex;
+            rowCount    = matrix.length;
+            colCount    = Math.max(...matrix.map(r => r.length));
+        }
+
+        await _pasteIntoSelection(matrix, ranges, filteredRows, startRowIdx, startColIdx, rowCount, colCount, editableCols, visibleRows);
+    }
+
+    async function _pasteIntoSelection(matrix, ranges, filteredRows, startRowIdx, startColIdx, rowCount, colCount, editableCols, visibleRows) {
+        // Allow calling without all args (single-value range fill path)
+        if (!editableCols) editableCols = _getEditableColumns();
+        if (!visibleRows)  visibleRows  = _getVisibleRows();
+
+        if (startRowIdx === undefined) {
+            const bounds = _getSelectionBounds(ranges, editableCols);
+            startRowIdx = bounds.startRowIdx;
+            startColIdx = bounds.startColIdx;
+            rowCount    = bounds.rowCount;
+            colCount    = bounds.colCount;
+        }
+
+        const clipRows = matrix.length;
+
+        const updates = [];
         const errors  = [];
 
-        for (let r = 0; r < matrix.length; r++) {
+        for (let r = 0; r < rowCount; r++) {
             const rowIdx = startRowIdx + r;
-            if (rowIdx >= visibleRows.length) break; // Fuori dalla griglia
+            if (rowIdx >= visibleRows.length) break;
 
             const row = visibleRows[rowIdx];
-            if (row.is_deleted) continue; // Salta righe eliminate
+            if (row.is_deleted) continue;
 
-            for (let c = 0; c < matrix[r].length; c++) {
+            for (let c = 0; c < colCount; c++) {
                 const colIdx = startColIdx + c;
-                if (colIdx >= editableCols.length) break; // Fuori dalle colonne
+                if (colIdx >= editableCols.length) break;
 
                 const col   = editableCols[colIdx];
-                const value = matrix[r][c];
+                const clipRow = matrix[r % clipRows];
+                const value   = clipRow[c % clipRow.length];
 
                 updates.push({ rowId: row.id, slug: col.slug, value });
             }
         }
 
         if (updates.length === 0) {
-            showToast("Nessuna cella aggiornata.", "info");
+            showToast("No cells updated.", "info");
             return;
         }
 
-        // Esegui aggiornamenti sequenzialmente
-        showToast(`Aggiornamento ${updates.length} celle...`, "info");
+        showToast(`Updating ${updates.length} cells...`, "info");
 
         let successCount = 0;
         for (const upd of updates) {
             try {
-                const updatedRow = await ApiClient.updateCell(
-                    upd.rowId, upd.slug, upd.value
-                );
+                const updatedRow = await ApiClient.updateCell(upd.rowId, upd.slug, upd.value);
                 GridManager.updateRowData(upd.rowId, updatedRow);
                 successCount++;
             } catch (err) {
-                errors.push(`Riga ${upd.rowId} / ${upd.slug}: ${err.message}`);
+                errors.push(`Row ${upd.rowId} / ${upd.slug}: ${err.message}`);
             }
         }
 
-        // Aggiorna visivamente la griglia
         GridManager.render();
 
         if (errors.length > 0) {
-            console.warn("Errori paste:", errors);
-            showToast(
-                `${successCount} celle aggiornate, ${errors.length} errori.`,
-                "error"
-            );
+            console.warn("Paste errors:", errors);
+            showToast(`${successCount} cells updated, ${errors.length} errors.`, "error");
         } else {
-            showToast(`${successCount} celle aggiornate.`, "success");
+            showToast(`${successCount} cells updated.`, "success");
         }
     }
 
@@ -301,6 +334,48 @@ const PasteManager = (() => {
     // --------------------------------------------------------
     // UTILITY
     // --------------------------------------------------------
+
+    function _hasMultiCellSelection(ranges, filteredRows) {
+        if (!ranges || ranges.length === 0) return false;
+        let count = 0;
+        for (const rng of ranges) {
+            const rMin = Math.min(rng.start.r, rng.end.r);
+            const rMax = Math.max(rng.start.r, rng.end.r);
+            const cMin = Math.min(rng.start.c, rng.end.c);
+            const cMax = Math.max(rng.start.c, rng.end.c);
+            count += (rMax - rMin + 1) * (cMax - cMin + 1);
+            if (count > 1) return true;
+        }
+        return false;
+    }
+
+    function _getSelectionBounds(ranges, editableCols) {
+        let rMin = Infinity, rMax = -Infinity, cMin = Infinity, cMax = -Infinity;
+        for (const rng of ranges) {
+            rMin = Math.min(rMin, rng.start.r, rng.end.r);
+            rMax = Math.max(rMax, rng.start.r, rng.end.r);
+            cMin = Math.min(cMin, rng.start.c, rng.end.c);
+            cMax = Math.max(cMax, rng.start.c, rng.end.c);
+        }
+        // Clamp column bounds to editable columns only (selection indices are raw column indices)
+        const cols  = ColumnsManager.getColumns();
+        const editableSlugs = new Set(editableCols.map(c => c.slug));
+        // Convert raw col indices to editable col indices
+        let eMin = 0, eMax = 0, editableIdx = 0;
+        let foundMin = false;
+        for (let i = 0; i < cols.length; i++) {
+            if (!editableSlugs.has(cols[i].slug)) continue;
+            if (i >= cMin && !foundMin) { eMin = editableIdx; foundMin = true; }
+            if (i <= cMax) eMax = editableIdx;
+            editableIdx++;
+        }
+        return {
+            startRowIdx: rMin,
+            startColIdx: eMin,
+            rowCount:    rMax - rMin + 1,
+            colCount:    eMax - eMin + 1
+        };
+    }
 
     /**
      * Restituisce le colonne editabili nell'ordine visibile.

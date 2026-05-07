@@ -60,3 +60,13 @@ toolbar.js   ← ApiClient, GridManager
 sql_editor.js ← ApiClient
 etl_editor.js ← ApiClient (+ opzionale ToolbarManager fallback)
 ```
+## Module layout
+
+| `static/engine/css/layout.css` | Container, topbar, global buttons | `static/engine/css/layout.css.md` |
+| `static/engine/css/toolbar.css` | Secondary toolbar, search input | `static/engine/css/toolbar.css.md` |
+| `static/engine/css/grid.css` | Grid, cells, select/edit mode, context menu, drag | `static/engine/css/grid.css.md` |
+| `static/engine/css/note.css` | Tool note area | `static/engine/css/note.css.md` |
+| `static/engine/css/sql_editor.css` | Power SQL Editor inline panel | `static/engine/css/sql_editor.css.md` |
+| `static/engine/css/modal.css` | Modal log, toast, icon picker, settings tabs | `static/engine/css/modal.css.md` |
+| `static/engine/css/etl.css` | ETL Editor layout | `static/engine/css/etl.css.md` |
+| `static/engine/css/sidebar.css` | Sidebar panel layout, open/close transition | — |
