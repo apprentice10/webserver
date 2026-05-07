@@ -10,7 +10,7 @@ Completed feature history → `_context/DONE.md`
 
 ### Group F — ETL Editor (low effort, independent)
 
-32. **Code folding + syntax validation** — optional follow-up after syntax highlighting (already done)
+32. **Code folding** — optional; syntax validation (inline compile-error banner) already done
 
 ### Group G — LOG system (medium effort, depends on D and C)
 
@@ -20,10 +20,6 @@ Completed feature history → `_context/DONE.md`
 ### Group H — Bidirectional ETL (high effort)
 
 46. **Visual transformations → SQL** — prefix/suffix/replace/formula automatically generate equivalent SQL
-
-### Bug Fix — Timestamp display (low effort, independent)
-
-60. **Fix timestamp double-localization** — `formatTimestamp()` in `static/engine/js/utils.js` calls `new Date(isoString).toLocaleString("it-IT")` but the server emits local-time strings without a timezone suffix (e.g. `"2026-04-30 15:00:00"`); JS `Date` constructor treats timezone-naive strings inconsistently across browsers and may apply a UTC offset, causing wrong displayed times; fix: change `now_str()` in `engine/utils.py` to emit UTC ISO strings (`datetime.utcnow().isoformat() + "Z"`) and update all `DEFAULT (datetime('now'))` SQLite columns to `datetime('now')` (already UTC in SQLite), then let `formatTimestamp()` convert to local display as it already does
 
 ### Group I — Project file management (high effort, architecture ready)
 

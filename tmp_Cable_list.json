@@ -209,9 +209,27 @@
       ]
     }
 
+    ,
+
+    {
+      "id": "t_filter2",
+      "type": "filter",
+      "inputs": ["t_select"],
+      "mode": "where",
+      "condition": {
+        "type": "logical",
+        "op": "or",
+        "args": [
+          { "type": "is_not_null", "expr": { "type": "column_ref", "column_name": "certificato",  "table_alias": "" } },
+          { "type": "is_not_null", "expr": { "type": "column_ref", "column_name": "alimentazione","table_alias": "" } },
+          { "type": "is_not_null", "expr": { "type": "column_ref", "column_name": "cavo",         "table_alias": "" } }
+        ]
+      }
+    }
+
   ],
 
-  "final_relation_id": "t_select",
+  "final_relation_id": "t_filter2",
 
   "order_by": [
     { "expr": { "type": "column_ref", "column_name": "partenza", "table_alias": "" }, "direction": "asc" },
