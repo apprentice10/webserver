@@ -772,14 +772,31 @@ const EtlEditor = (() => {
     }
 
     async function _compileAndShow() {
-        const el = document.getElementById("etl-compiled-sql");
+        const el    = document.getElementById("etl-compiled-sql");
+        const errEl = document.getElementById("etl-compile-error");
         if (!el) return;
-        if (!_model.sources.length) { el.value = "-- Add a source to compile SQL."; return; }
+
+        function _clearError() {
+            el.classList.remove("etl-compiled-sql--error");
+            if (errEl) { errEl.style.display = "none"; errEl.textContent = ""; }
+        }
+        function _showError(msg) {
+            el.value = "";
+            el.classList.add("etl-compiled-sql--error");
+            if (errEl) { errEl.textContent = msg; errEl.style.display = "block"; }
+        }
+
+        if (!_model.sources.length) {
+            _clearError();
+            el.value = "-- Add a source to compile SQL.";
+            return;
+        }
         try {
             const r = await ApiClient.etlCompile(_model);
+            _clearError();
             el.value = r.sql || "";
         } catch (err) {
-            el.value = `-- Compile error: ${err.message}`;
+            _showError(err.message);
         }
     }
 

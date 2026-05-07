@@ -202,6 +202,8 @@
 .etl-input-xs:focus { border-color: var(--color-accent); outline: none; }
 .etl-expr-input { font-family: 'Consolas','Monaco',monospace; font-size: 11px; }
 .etl-expr-error { border-color: var(--color-danger) !important; background: color-mix(in srgb, var(--color-danger) 6%, var(--color-bg)); }
+.etl-compile-error { display: none; margin-top: 4px; padding: 5px 8px; font-size: 11px; color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 8%, var(--color-bg)); border-left: 3px solid var(--color-danger); white-space: pre-wrap; }
+.etl-compiled-sql--error { border-color: var(--color-danger) !important; }
 .etl-select-xs {
     height: 24px;
     padding: 0 4px;
@@ -363,6 +365,7 @@
                     <textarea id="etl-compiled-sql" class="etl-compiled-sql" readonly
                               placeholder="-- SQL will appear here after adding sources and transformations."
                               spellcheck="false"></textarea>
+                    <div id="etl-compile-error" class="etl-compile-error"></div>
                 </div>
 
             </div>
