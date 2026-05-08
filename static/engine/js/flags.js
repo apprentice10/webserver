@@ -5,7 +5,8 @@ const FlagsManager = (() => {
     let _flags = [];
 
     function _storageKey() {
-        return `hiddenFlags:${PROJECT_ID}:${TOOL_ID}`;
+        const proj = (typeof DB_PATH !== 'undefined') ? DB_PATH : 'global';
+        return `hiddenFlags:${proj}:${TOOL_ID}`;
     }
 
     function _loadHidden() {

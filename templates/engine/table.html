@@ -37,7 +37,7 @@
     <!-- SECONDARY TOOLBAR -->
     <div class="tool-toolbar">
         <div class="tool-toolbar-left">
-            <a href="/" class="btn btn-ghost btn-sm back-btn">← Projects</a>
+            <a href="/?db={{ db | urlencode }}" class="btn btn-ghost btn-sm back-btn">← Projects</a>
             <div class="toolbar-separator"></div>
             <div class="search-wrap">
                 <input
@@ -61,7 +61,7 @@
             <a
                 class="btn btn-ghost btn-sm"
                 id="btn-etl-editor"
-                href="/tool/{{ project_id }}/{{ tool_id }}/etl"
+                href="/etl?db={{ db | urlencode }}&tool={{ tool_id }}"
             >⚙ ETL</a>
             <div class="toolbar-separator"></div>
             <div class="segmented segmented-density">
@@ -153,9 +153,8 @@
     <div class="ctx-separator ctx-sep-keep-row" style="display:none"></div>
     <div class="ctx-item" data-action="remove-override" style="display:none"><span class="ctx-icon">↩</span><span data-i18n="ctx.remove_override">Remove manual override</span><span class="ctx-shortcut"></span></div>
     <div class="ctx-separator ctx-sep-override" style="display:none"></div>
-    <div class="ctx-item" data-action="log"><span class="ctx-icon">📋</span><span data-i18n="ctx.row_log">View row history</span><span class="ctx-shortcut"></span></div>
     <div class="ctx-separator ctx-sep-cell-log" style="display:none"></div>
-    <div class="ctx-item" data-action="cell-log" style="display:none"><span class="ctx-icon">📋</span><span data-i18n="ctx.cell_log">View cell history</span><span class="ctx-shortcut"></span></div>
+    <div class="ctx-item" data-action="cell-log" style="display:none"><span class="ctx-icon">📋</span><span data-i18n="ctx.cell_log">History</span><span class="ctx-shortcut"></span></div>
     <div class="ctx-item" data-action="range-log" style="display:none"><span class="ctx-icon">📋</span><span data-i18n="ctx.range_log">View selection history</span><span class="ctx-shortcut"></span></div>
     <div class="ctx-separator ctx-sep-flags" style="display:none"></div>
     <div class="ctx-item ctx-item-has-sub" data-action="flags-trigger" style="display:none">
@@ -193,8 +192,8 @@
 
 {% block extra_js %}
 <script>
-    const PROJECT_ID = {{ project_id }};
-    const TOOL_ID    = {{ tool_id }};
+    const DB_PATH = {{ db | tojson }};
+    const TOOL_ID = {{ tool_id }};
 </script>
 <script src="/static/engine/js/utils.js"></script>
 <script src="/static/engine/js/api.js"></script>
@@ -231,20 +230,25 @@
             return { isSingle, r: rMin, c: cMin, rMin, rMax, cMin, cMax };
         }
 
-        function _renderTimeline(entries) {
+        function _renderTimeline(entries, ctx) {
             if (!entries || !entries.length) return '<p class="panel-placeholder" style="font-size:12px">No changes recorded.</p>';
-            return `<div class="panel-timeline">${entries.map(e => {
-                const ct  = Utils.escHtml(e.change_type || e.action || 'edit');
-                const col = Utils.escHtml(e.col_slug || '(row)');
-                const ts  = Utils.escHtml(e.ts || '');
+            const colHeader = ctx
+                ? `<div class="panel-hist-group-col">${Utils.escHtml(ctx.colSlug || '(row)')}</div>`
+                : '';
+            const items = entries.map(e => {
+                const ct   = Utils.escHtml(e.change_type || e.action || 'edit');
+                const ts   = Utils.escHtml(e.ts || '');
                 const oldV = e.old_val != null ? Utils.escHtml(String(e.old_val)) : '∅';
                 const newV = e.new_val != null ? Utils.escHtml(String(e.new_val)) : '∅';
-                return `<div class="panel-tl-item panel-tl-${ct}">
-                    <div class="panel-tl-dot"></div>
-                    <div class="panel-tl-body">
+                const rollbackBtn = (ctx && ctx.rowId != null)
+                    ? `<button class="panel-tl-rollback-btn" data-row-id="${ctx.rowId}" data-row-tag="${Utils.escAttr(ctx.rowTag)}" data-col-slug="${Utils.escAttr(ctx.colSlug)}" data-entry-id="${e.id}" title="Restore this value">↩</button>`
+                    : '';
+                return `<div class="panel-hist-group panel-tl-${ct}">
+                    <div class="panel-hist-subgroup">
+                        <div class="panel-hist-subgroup-tag">${ct}</div>
                         <div class="panel-tl-header">
-                            <span class="panel-tl-col">${col}</span>
                             <span class="panel-tl-time">${ts}</span>
+                            ${rollbackBtn}
                         </div>
                         <div class="panel-tl-change">
                             <span class="panel-tl-old">${oldV}</span>
@@ -253,7 +257,33 @@
                         </div>
                     </div>
                 </div>`;
-            }).join('')}</div>`;
+            }).join('');
+            return `<div class="panel-timeline">${colHeader}${items}</div>`;
+        }
+
+        function _bindTimelineRollbacks(container, colSlug) {
+            container.querySelectorAll('.panel-tl-rollback-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const rowId   = parseInt(btn.dataset.rowId, 10);
+                    const rowTag  = btn.dataset.rowTag;
+                    const col     = btn.dataset.colSlug;
+                    const entryId = parseInt(btn.dataset.entryId, 10);
+                    const row = GridManager.getRowById(rowId);
+                    if (!row) { Utils.showToast('Row not found', 'error'); return; }
+                    try {
+                        const updated = await ApiClient.rollbackCell(row.id, col, entryId);
+                        GridManager.refreshRowDOM(updated.id, updated);
+                        Utils.showToast('Value restored', 'success');
+                        const logC = _getPanelContainer('history');
+                        if (logC) {
+                            _logLastKey = null;
+                            _refreshLog(logC, { type: 'cell', rowTag, rowId, colSlug: col });
+                        }
+                    } catch (err) {
+                        Utils.showToast(err.message || 'Rollback failed', 'error');
+                    }
+                });
+            });
         }
 
         // ── Info panel ────────────────────────────────────────────────
@@ -431,7 +461,8 @@
                         container.innerHTML = '<p class="panel-placeholder">No history for this cell.</p>';
                         return;
                     }
-                    container.innerHTML = _renderTimeline(entries);
+                    container.innerHTML = _renderTimeline(entries, { rowTag: sel.rowTag, rowId: sel.rowId, colSlug: sel.colSlug });
+                    _bindTimelineRollbacks(container);
                 } else {
                     const entries = await ApiClient.getAudit({
                         rowTags: sel.rowTags.join(','),
@@ -481,7 +512,7 @@
             if (!sel) return null;
             if (sel.isSingle) {
                 const row = filteredRows[sel.r], col = cols[sel.c];
-                return row && col ? { type: 'cell', rowTag: row.tag, colSlug: col.slug } : null;
+                return row && col ? { type: 'cell', rowTag: row.tag, rowId: row.id, colSlug: col.slug } : null;
             }
             const rowTags = [], colSlugs = [];
             const rowSet = new Set(), colSet = new Set();
@@ -502,7 +533,7 @@
                 const rowId = parseInt(ci.dataset.rowId);
                 const row   = !isNaN(rowId) ? GridManager.getRowById(rowId) : null;
                 const field = ci.dataset.field;
-                if (row && field) _refreshLog(logC, { type: 'cell', rowTag: row.tag, colSlug: field });
+                if (row && field) _refreshLog(logC, { type: 'cell', rowTag: row.tag, rowId: row.id, colSlug: field });
             }
         });
 
@@ -520,6 +551,9 @@
                 }
             }, 0);
         });
+
+        // Old-path history (showCellLog/showRowLog) resets cache so _refreshLog re-fetches on next interaction
+        document.addEventListener('grid:historyRendered', () => { _logLastKey = null; });
 
         // ── Panel registrations ───────────────────────────────────────
 

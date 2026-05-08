@@ -1,25 +1,22 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 
-from core.routes import router as core_router
+from core.routes import router as core_router, fs_router
 from engine.routes import router as engine_router
-from engine.project_index import init_index
 
 app = FastAPI(
     title="Instrument Manager",
-    version="0.3.0",
+    version="0.4.0",
     description="Web application per la progettazione elettro-strumentale"
 )
-
-# Inizializza l'indice progetti al primo avvio
-init_index()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 app.include_router(core_router)
+app.include_router(fs_router)
 app.include_router(engine_router)
 
 
@@ -30,40 +27,32 @@ async def root(request: Request):
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "app": "Instrument Manager", "version": "0.3.0"}
+    return {"status": "ok", "app": "Instrument Manager", "version": "0.4.0"}
 
 
-@app.get("/tool/{project_id}/{tool_id}", response_class=HTMLResponse)
-async def tool_page(request: Request, project_id: int, tool_id: int):
+@app.get("/tool", response_class=HTMLResponse)
+async def tool_page(request: Request, db: str = Query(...), tool: int = Query(...)):
     return templates.TemplateResponse(
-        request,
-        "engine/table.html",
-        {"project_id": project_id, "tool_id": tool_id}
+        request, "engine/table.html", {"db": db, "tool_id": tool}
     )
 
 
-@app.get("/tool/{project_id}/{tool_id}/etl", response_class=HTMLResponse)
-async def etl_page(request: Request, project_id: int, tool_id: int):
+@app.get("/etl", response_class=HTMLResponse)
+async def etl_page(request: Request, db: str = Query(...), tool: int = Query(...)):
     return templates.TemplateResponse(
-        request,
-        "engine/etl.html",
-        {"project_id": project_id, "tool_id": tool_id}
+        request, "engine/etl.html", {"db": db, "tool_id": tool}
     )
 
 
-@app.get("/project/{project_id}/etl-design", response_class=HTMLResponse)
-async def etl_design_page(request: Request, project_id: int):
+@app.get("/etl-design", response_class=HTMLResponse)
+async def etl_design_page(request: Request, db: str = Query(...)):
     return templates.TemplateResponse(
-        request,
-        "etl_design.html",
-        {"project_id": project_id}
+        request, "etl_design.html", {"db": db}
     )
 
 
-@app.get("/project/{project_id}/canvas/{tool_id}", response_class=HTMLResponse)
-async def etl_canvas_page(request: Request, project_id: int, tool_id: int):
+@app.get("/canvas", response_class=HTMLResponse)
+async def etl_canvas_page(request: Request, db: str = Query(...), tool: int = Query(...)):
     return templates.TemplateResponse(
-        request,
-        "etl_canvas.html",
-        {"project_id": project_id, "tool_id": tool_id}
+        request, "etl_canvas.html", {"db": db, "tool_id": tool}
     )

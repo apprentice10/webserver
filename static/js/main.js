@@ -1,407 +1,402 @@
 /**
  * main.js
  * --------
- * Modulo principale dell'applicazione.
- * Gestisce stato globale progetto, modal, navigazione.
+ * Project management, navigation, sidebar, modals.
+ * Projects are tracked in localStorage — the server is stateless.
  */
 
-// ============================================================
-// STATO GLOBALE — persiste in sessionStorage
-// ============================================================
+// ── Recents (localStorage) ────────────────────────────────────────────
 
-const App = {
+const RECENTS_KEY = 'im_recent_projects';
+const MAX_RECENTS = 10;
 
-    get currentProject() {
-        const stored = sessionStorage.getItem("currentProject");
-        return stored ? JSON.parse(stored) : null;
-    },
+function _getRecents() {
+    try { return JSON.parse(localStorage.getItem(RECENTS_KEY)) || []; }
+    catch (_) { return []; }
+}
 
-    set currentProject(project) {
-        if (project) {
-            sessionStorage.setItem("currentProject", JSON.stringify(project));
-        } else {
-            sessionStorage.removeItem("currentProject");
-        }
-    }
-};
+function _saveRecents(list) {
+    localStorage.setItem(RECENTS_KEY, JSON.stringify(list));
+}
+
+function _addRecent(project) {
+    let list = _getRecents().filter(p => p.path !== project.path);
+    list.unshift({ path: project.path, name: project.name, client: project.client || '', last_opened: new Date().toISOString() });
+    if (list.length > MAX_RECENTS) list = list.slice(0, MAX_RECENTS);
+    _saveRecents(list);
+}
+
+function _removeRecent(path) {
+    _saveRecents(_getRecents().filter(p => p.path !== path));
+}
+
+// Current active project (in-memory only — URL is the ground truth)
+let _activeProject = null;
 
 
-// ============================================================
-// INIT — restore state on page load
-// ============================================================
+// ── Sidebar / layout state ────────────────────────────────────────────
 
-document.addEventListener("DOMContentLoaded", () => {
-    const project = App.currentProject;
-    if (project) {
-        _applyProjectToUI(project);
-    }
+document.addEventListener('DOMContentLoaded', async () => {
+    const appEl    = document.getElementById('app');
+    const toggleBtn = document.getElementById('btn-sidebar-toggle');
 
-    // Restore sidebar state
-    const appEl = document.getElementById("app");
-    const toggleBtn = document.getElementById("btn-sidebar-toggle");
-    if (appEl && localStorage.getItem("sidebarCollapsed") === "1") {
-        appEl.dataset.sidebar = "collapsed";
-        if (toggleBtn) toggleBtn.textContent = "›";
+    if (appEl && localStorage.getItem('sidebarCollapsed') === '1') {
+        appEl.dataset.sidebar = 'collapsed';
+        if (toggleBtn) toggleBtn.textContent = '›';
     } else if (appEl) {
-        appEl.dataset.sidebar = "expanded";
-        if (toggleBtn) toggleBtn.textContent = "‹";
+        appEl.dataset.sidebar = 'expanded';
+        if (toggleBtn) toggleBtn.textContent = '‹';
     }
+    if (toggleBtn) toggleBtn.addEventListener('click', toggleSidebar);
 
-    if (toggleBtn) {
-        toggleBtn.addEventListener("click", toggleSidebar);
+    // Auto-open project from URL ?db=...
+    const params = new URLSearchParams(window.location.search);
+    const db = params.get('db');
+    if (db) {
+        await _openProjectFromPath(db, { updateUrl: false });
+    } else {
+        _renderWelcomeRecents();
     }
 });
 
 
-// ============================================================
-// SIDEBAR COLLAPSIBLE
-// ============================================================
+// ── Sidebar toggle ────────────────────────────────────────────────────
 
 function toggleSidebar() {
-    const appEl    = document.getElementById("app");
-    const toggleBtn = document.getElementById("btn-sidebar-toggle");
+    const appEl    = document.getElementById('app');
+    const toggleBtn = document.getElementById('btn-sidebar-toggle');
     if (!appEl) return;
-    const collapsed = appEl.dataset.sidebar !== "collapsed";
-    appEl.dataset.sidebar = collapsed ? "collapsed" : "expanded";
-    if (toggleBtn) toggleBtn.textContent = collapsed ? "›" : "‹";
-    localStorage.setItem("sidebarCollapsed", collapsed ? "1" : "0");
+    const collapsed = appEl.dataset.sidebar !== 'collapsed';
+    appEl.dataset.sidebar = collapsed ? 'collapsed' : 'expanded';
+    if (toggleBtn) toggleBtn.textContent = collapsed ? '›' : '‹';
+    localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0');
 }
 
 
-// ============================================================
-// MODAL
-// ============================================================
+// ── Modal helpers ─────────────────────────────────────────────────────
 
 function openModal(id) {
-    document.getElementById(id).classList.add("active");
+    document.getElementById(id).classList.add('active');
 }
 
 function closeModal(id) {
-    document.getElementById(id).classList.remove("active");
+    document.getElementById(id).classList.remove('active');
 }
 
-document.addEventListener("click", function (e) {
-    if (e.target.classList.contains("modal-overlay")) {
-        e.target.classList.remove("active");
+document.addEventListener('click', function (e) {
+    if (e.target.classList.contains('modal-overlay')) {
+        e.target.classList.remove('active');
     }
 });
 
-document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") {
-        document.querySelectorAll(".modal-overlay.active")
-            .forEach(m => m.classList.remove("active"));
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.modal-overlay.active')
+            .forEach(m => m.classList.remove('active'));
     }
 });
 
 
-// ============================================================
-// NUOVO PROGETTO
-// ============================================================
+// ── Welcome screen (recents list) ─────────────────────────────────────
+
+function _renderWelcomeRecents() {
+    const container = document.getElementById('welcome-recents');
+    if (!container) return;
+    const recents = _getRecents();
+    if (!recents.length) {
+        container.innerHTML = '<p class="text-muted" style="text-align:center;padding:16px 0">No recent projects. Create one or browse for a file.</p>';
+        return;
+    }
+    container.innerHTML = recents.map(p => `
+        <div class="recent-item" data-path="${escapeHtml(p.path)}">
+            <div class="recent-item-info" onclick="selectRecentProject('${escapeAttr(p.path)}')">
+                <span class="recent-name">${escapeHtml(p.name)}</span>
+                <span class="recent-client">${p.client ? escapeHtml(p.client) : ''}</span>
+                <span class="recent-path">${escapeHtml(p.path)}</span>
+            </div>
+            <div class="recent-item-actions">
+                <button class="btn-icon" title="Remove from recents" onclick="removeFromRecents(event, '${escapeAttr(p.path)}')">✕</button>
+                <button class="btn-icon btn-danger-hover" title="Delete file" onclick="deleteProjectFile(event, '${escapeAttr(p.path)}')">🗑</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function selectRecentProject(path) {
+    const container = document.getElementById('welcome-recents');
+    try {
+        await _openProjectFromPath(path, { updateUrl: true });
+    } catch (err) {
+        // Mark that entry as stale
+        if (container) {
+            const item = container.querySelector(`[data-path="${escapeAttr(path)}"]`);
+            if (item) {
+                const info = item.querySelector('.recent-item-info');
+                if (info) {
+                    info.onclick = null;
+                    info.style.cursor = 'default';
+                    info.innerHTML += `<span class="recent-stale">⚠ File not found — <button class="btn-link" onclick="removeFromRecents(event,'${escapeAttr(path)}')">Remove</button></span>`;
+                }
+            }
+        }
+    }
+}
+
+function removeFromRecents(event, path) {
+    event.stopPropagation();
+    _removeRecent(path);
+    _renderWelcomeRecents();
+}
+
+async function deleteProjectFile(event, path) {
+    event.stopPropagation();
+    if (!confirm(`Delete file permanently?\n\n${path}\n\nThis cannot be undone.`)) return;
+    try {
+        const res = await fetch(`/api/project?db=${encodeURIComponent(path)}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error((await res.json()).detail || 'Delete failed');
+        _removeRecent(path);
+        if (_activeProject && _activeProject.path === path) {
+            clearActiveProject();
+        }
+        _renderWelcomeRecents();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+
+// ── Open project from path ────────────────────────────────────────────
+
+async function _openProjectFromPath(path, { updateUrl = true } = {}) {
+    const res = await fetch('/api/project/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path })
+    });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Failed to open project');
+    }
+    const project = await res.json();
+    _addRecent(project);
+    setActiveProject(project);
+    if (updateUrl) {
+        const url = new URL(window.location);
+        url.searchParams.set('db', path);
+        window.history.pushState({}, '', url);
+    }
+    return project;
+}
+
+
+// ── New Project ───────────────────────────────────────────────────────
 
 function newProject() {
-    document.getElementById("input-project-name").value = "";
-    document.getElementById("input-project-client").value = "";
-    document.getElementById("input-project-description").value = "";
-    openModal("modal-new-project");
+    document.getElementById('input-project-path').value = '';
+    document.getElementById('input-project-name').value = '';
+    document.getElementById('input-project-client').value = '';
+    document.getElementById('input-project-description').value = '';
+    document.getElementById('btn-create-project').disabled = true;
+    openModal('modal-new-project');
+}
+
+function _validateNewProject() {
+    const path = document.getElementById('input-project-path').value.trim();
+    const name = document.getElementById('input-project-name').value.trim();
+    document.getElementById('btn-create-project').disabled = !(path && name);
 }
 
 async function submitNewProject() {
-    const name        = document.getElementById("input-project-name").value.trim();
-    const client      = document.getElementById("input-project-client").value.trim();
-    const description = document.getElementById("input-project-description").value.trim();
+    const path        = document.getElementById('input-project-path').value.trim();
+    const name        = document.getElementById('input-project-name').value.trim();
+    const client      = document.getElementById('input-project-client').value.trim();
+    const description = document.getElementById('input-project-description').value.trim();
 
-    if (!name) {
-        alert("Il nome del progetto è obbligatorio.");
+    if (!path || !name) return;
+
+    try {
+        const res = await fetch('/api/project/new', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path, name, client, description })
+        });
+        if (!res.ok) throw new Error((await res.json()).detail || 'Creation failed');
+        const project = await res.json();
+        closeModal('modal-new-project');
+        _addRecent(project);
+        setActiveProject(project);
+        const url = new URL(window.location);
+        url.searchParams.set('db', project.path);
+        window.history.pushState({}, '', url);
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+
+// ── Open Project (modal) ──────────────────────────────────────────────
+
+function openProject() {
+    openModal('modal-open-project');
+    _renderOpenProjectList();
+}
+
+function _renderOpenProjectList() {
+    const container = document.getElementById('projects-list');
+    if (!container) return;
+    const recents = _getRecents();
+    if (!recents.length) {
+        container.innerHTML = '<p class="text-muted">No recent projects. Use Browse to open a file.</p>';
         return;
     }
-
-    try {
-        const response = await fetch("/api/projects/", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name, client, description })
-        });
-
-        if (!response.ok) throw new Error("Errore nella creazione del progetto");
-
-        const project = await response.json();
-        closeModal("modal-new-project");
-        setActiveProject(project);
-
-    } catch (err) {
-        alert("Errore: " + err.message);
-    }
-}
-
-
-// ============================================================
-// APRI PROGETTO
-// ============================================================
-
-async function openProject() {
-    openModal("modal-open-project");
-    await loadProjectsList();
-}
-
-async function loadProjectsList() {
-    const container = document.getElementById("projects-list");
-    container.innerHTML = "<p class='text-muted'>Caricamento...</p>";
-
-    try {
-        const response = await fetch("/api/projects/");
-        if (!response.ok) throw new Error("Errore nel caricamento");
-
-        const projects = await response.json();
-
-        if (projects.length === 0) {
-            container.innerHTML = "<p class='text-muted'>Nessun progetto trovato. Creane uno nuovo.</p>";
-            return;
-        }
-
-        container.innerHTML = projects.map(p => `
-            <div class="project-list-item" onclick="selectProject(${p.id})">
-                <div class="project-list-info">
-                    <span class="project-list-name">${escapeHtml(p.name)}</span>
-                    <span class="project-list-client">
-                        ${p.client ? escapeHtml(p.client) : "Nessun cliente"}
-                    </span>
-                </div>
-                <div class="project-list-actions">
-                    <button
-                        class="btn-icon"
-                        title="Export"
-                        onclick="exportProject(event, ${p.id}, '${escapeHtml(p.name)}')"
-                    >⬇</button>
-                    <button
-                        class="btn-icon"
-                        title="Elimina"
-                        onclick="deleteProject(event, ${p.id})"
-                    >🗑</button>
-                </div>
+    container.innerHTML = recents.map(p => `
+        <div class="project-list-item" onclick="selectProjectFromModal('${escapeAttr(p.path)}')">
+            <div class="project-list-info">
+                <span class="project-list-name">${escapeHtml(p.name)}</span>
+                <span class="project-list-client">${p.client ? escapeHtml(p.client) : 'No client'}</span>
+                <span class="project-list-path">${escapeHtml(p.path)}</span>
             </div>
-        `).join("");
-
-    } catch (err) {
-        container.innerHTML = "<p class='text-error'>Errore nel caricamento dei progetti.</p>";
-    }
+            <div class="project-list-actions">
+                <button class="btn-icon" title="Remove from recents"
+                    onclick="event.stopPropagation(); _removeRecent('${escapeAttr(p.path)}'); _renderOpenProjectList()">✕</button>
+                <button class="btn-icon" title="Delete file"
+                    onclick="deleteProjectFile(event, '${escapeAttr(p.path)}')">🗑</button>
+            </div>
+        </div>
+    `).join('');
 }
 
-async function selectProject(id) {
+async function selectProjectFromModal(path) {
     try {
-        const response = await fetch(`/api/projects/${id}`);
-        if (!response.ok) throw new Error("Progetto non trovato");
-
-        const project = await response.json();
-        closeModal("modal-open-project");
-        setActiveProject(project);
-
+        await _openProjectFromPath(path, { updateUrl: true });
+        closeModal('modal-open-project');
     } catch (err) {
-        alert("Errore: " + err.message);
-    }
-}
-
-async function deleteProject(event, id) {
-    event.stopPropagation();
-
-    if (!confirm("Eliminare questo progetto? L'operazione è irreversibile.")) return;
-
-    try {
-        const response = await fetch(`/api/projects/${id}`, { method: "DELETE" });
-        if (!response.ok) throw new Error("Errore nell'eliminazione");
-
-        if (App.currentProject && App.currentProject.id === id) {
-            clearActiveProject();
-        }
-
-        await loadProjectsList();
-
-    } catch (err) {
-        alert("Errore: " + err.message);
+        alert('Cannot open: ' + err.message);
     }
 }
 
 
-// ============================================================
-// EXPORT / IMPORT PROJECT
-// ============================================================
-
-function exportProject(event, id, name) {
-    event.stopPropagation();
-    const a = document.createElement("a");
-    a.href = `/api/projects/${id}/export`;
-    a.download = name + ".db";
-    a.click();
-}
-
-function importProjectFromFile() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".db";
-    input.onchange = async () => {
-        const file = input.files[0];
-        if (!file) return;
-
-        const formData = new FormData();
-        formData.append("file", file);
-
-        try {
-            const response = await fetch("/api/projects/import", {
-                method: "POST",
-                body: formData,
-            });
-
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.detail || "Import failed");
-            }
-
-            await loadProjectsList();
-
-        } catch (err) {
-            alert("Import error: " + err.message);
-        }
-    };
-    input.click();
-}
-
-
-// ============================================================
-// GESTIONE PROGETTO ATTIVO
-// ============================================================
+// ── Active project UI ─────────────────────────────────────────────────
 
 function setActiveProject(project) {
-    App.currentProject = project;
+    _activeProject = project;
     _applyProjectToUI(project);
 }
 
 function clearActiveProject() {
-    App.currentProject = null;
-    const nameEl = document.getElementById("project-name");
-    if (nameEl) nameEl.textContent = "No project open";
-    const nav = document.getElementById("tools-nav");
-    if (nav) nav.innerHTML = "";
-    const btn = document.getElementById("btn-new-tool");
-    if (btn) btn.classList.add("disabled");
+    _activeProject = null;
+    const nameEl = document.getElementById('project-name');
+    if (nameEl) nameEl.textContent = 'No project open';
+    const nav = document.getElementById('tools-nav');
+    if (nav) nav.innerHTML = '';
+    const btn = document.getElementById('btn-new-tool');
+    if (btn) btn.classList.add('disabled');
+    const etlDesignBtn = document.getElementById('btn-side-etl-design');
+    if (etlDesignBtn) etlDesignBtn.style.display = 'none';
 }
 
-/**
- * Applica il progetto all'UI: aggiorna nome, abilita pulsanti
- * e popola la sidebar con i tool del progetto.
- */
 async function _applyProjectToUI(project) {
-    const nameEl = document.getElementById("project-name");
+    const nameEl = document.getElementById('project-name');
     if (nameEl) nameEl.textContent = project.name;
 
-    const btn = document.getElementById("btn-new-tool");
-    if (btn) btn.classList.remove("disabled");
+    const btn = document.getElementById('btn-new-tool');
+    if (btn) btn.classList.remove('disabled');
 
-    const etlDesignBtn = document.getElementById("btn-side-etl-design");
+    const etlDesignBtn = document.getElementById('btn-side-etl-design');
     if (etlDesignBtn) {
-        etlDesignBtn.href = `/project/${project.id}/etl-design`;
-        etlDesignBtn.style.display = "";
+        etlDesignBtn.href = `/etl-design?db=${encodeURIComponent(project.path)}`;
+        etlDesignBtn.style.display = '';
     }
 
-    try {
-        const tools = await fetch(`/api/tools/project/${project.id}`).then(r => r.json());
-        _renderSidebarTools(tools, project.id);
-    } catch (_) {
-        // Se il fetch fallisce la sidebar rimane vuota
+    if (project.tools) {
+        _renderSidebarTools(project.tools, project.path);
+    } else {
+        try {
+            const tools = await fetch(`/api/tools/project?db=${encodeURIComponent(project.path)}`).then(r => r.json());
+            _renderSidebarTools(tools, project.path);
+        } catch (_) {}
     }
+
+    // Run on-open backup if configured
+    _runOnOpenBackup(project.path);
+    _startBackupTimer(project.path);
 }
 
-/**
- * Builds tool links in the left sidebar for each tool in the project.
- * Marks the current tool as active if TOOL_ID is defined.
- */
-function _renderSidebarTools(tools, projectId) {
-    const nav = document.getElementById("tools-nav");
+function _renderSidebarTools(tools, dbPath) {
+    const nav = document.getElementById('tools-nav');
     if (!nav) return;
-
-    if (tools.length === 0) {
+    if (!tools.length) {
         nav.innerHTML = '<div class="side-empty">No tools — create one!</div>';
         return;
     }
-
-    const currentToolId = (typeof TOOL_ID !== "undefined") ? TOOL_ID : null;
-
+    const params = new URLSearchParams(window.location.search);
+    const currentToolId = params.has('tool') ? parseInt(params.get('tool')) : null;
     nav.innerHTML = tools.map(tool => `
-        <a href="#" class="side-item${tool.id === currentToolId ? " active" : ""}"
+        <a href="#" class="side-item${tool.id === currentToolId ? ' active' : ''}"
            data-tool-id="${tool.id}"
-           onclick="openToolById(${tool.id}, ${projectId}); return false;">
-            <span class="si-icon">${escapeHtml(tool.icon || "📄")}</span>
+           onclick="openToolById(${tool.id}, '${escapeAttr(dbPath)}'); return false;">
+            <span class="si-icon">${escapeHtml(tool.icon || '📄')}</span>
             <span class="si-label">${escapeHtml(tool.name)}</span>
             ${tool.is_stale ? '<span class="si-stale" title="ETL stale"></span>' : ''}
         </a>
-    `).join("");
+    `).join('');
 }
 
 
-// ============================================================
-// NAVIGAZIONE TOOL
-// ============================================================
+// ── Navigation ────────────────────────────────────────────────────────
 
-function openToolById(toolId, projectId) {
-    window.location.href = `/tool/${projectId}/${toolId}`;
+function openToolById(toolId, dbPath) {
+    window.location.href = `/tool?db=${encodeURIComponent(dbPath)}&tool=${toolId}`;
 }
 
 
-// ============================================================
-// NUOVO TOOL — modal catalogo
-// ============================================================
+// ── New Tool ──────────────────────────────────────────────────────────
 
 let _selectedCatalogType = null;
 let _selectedTemplateId  = null;
 let _selectedEtlSql      = null;
 
 async function newTool() {
-    const project = App.currentProject;
-    if (!project) return;
-
+    if (!_activeProject) return;
     _selectedCatalogType = null;
     _selectedTemplateId  = null;
     _selectedEtlSql      = null;
 
-    // Reset modal
-    const nameGroup = document.getElementById("tool-name-group");
-    if (nameGroup) nameGroup.style.display = "none";
-    const templatesGroup = document.getElementById("tool-templates-group");
-    if (templatesGroup) templatesGroup.style.display = "none";
-    const createBtn = document.getElementById("btn-create-tool");
+    const nameGroup = document.getElementById('tool-name-group');
+    if (nameGroup) nameGroup.style.display = 'none';
+    const templatesGroup = document.getElementById('tool-templates-group');
+    if (templatesGroup) templatesGroup.style.display = 'none';
+    const createBtn = document.getElementById('btn-create-tool');
     if (createBtn) createBtn.disabled = true;
-    const nameInput = document.getElementById("input-tool-name");
-    if (nameInput) nameInput.value = "";
-    const fileNameEl = document.getElementById("file-etl-name");
-    if (fileNameEl) { fileNameEl.style.display = "none"; fileNameEl.textContent = ""; }
+    const nameInput = document.getElementById('input-tool-name');
+    if (nameInput) nameInput.value = '';
+    const fileNameEl = document.getElementById('file-etl-name');
+    if (fileNameEl) { fileNameEl.style.display = 'none'; fileNameEl.textContent = ''; }
 
-    openModal("modal-new-tool");
+    openModal('modal-new-tool');
     await _loadToolCatalog();
 }
 
 async function _loadToolCatalog() {
-    const grid = document.getElementById("catalog-grid");
+    const grid = document.getElementById('catalog-grid');
     if (!grid) return;
-
-    grid.innerHTML = "<p class='text-muted'>Caricamento...</p>";
-
+    grid.innerHTML = "<p class='text-muted'>Loading…</p>";
     try {
-        const types = await fetch("/api/tools/types").then(r => r.json());
-
-        if (types.length === 0) {
-            grid.innerHTML = "<p class='text-muted'>Nessun tipo di tool disponibile.</p>";
+        const types = await fetch('/api/tools/types').then(r => r.json());
+        if (!types.length) {
+            grid.innerHTML = "<p class='text-muted'>No tool types available.</p>";
             return;
         }
-
         grid.innerHTML = types.map(t => `
             <div class="catalog-card" data-type-slug="${escapeHtml(t.type_slug)}"
-                 onclick="selectCatalogType('${escapeHtml(t.type_slug)}', '${escapeHtml(t.name)}', '${escapeHtml(t.icon)}')">
+                 onclick="selectCatalogType('${escapeAttr(t.type_slug)}', '${escapeAttr(t.name)}', '${escapeAttr(t.icon)}')">
                 <div class="catalog-card-icon">${escapeHtml(t.icon)}</div>
                 <div class="catalog-card-name">${escapeHtml(t.name)}</div>
                 <div class="catalog-card-desc">${escapeHtml(t.description)}</div>
             </div>
-        `).join("");
-
+        `).join('');
     } catch (err) {
-        grid.innerHTML = "<p class='text-error'>Errore caricamento catalogo.</p>";
+        grid.innerHTML = "<p class='text-error'>Error loading catalog.</p>";
     }
 }
 
@@ -409,104 +404,83 @@ function selectCatalogType(typeSlug, typeName, typeIcon) {
     _selectedCatalogType = { typeSlug, typeName, typeIcon };
     _selectedTemplateId  = null;
 
-    // Evidenzia la card selezionata
-    document.querySelectorAll(".catalog-card").forEach(el => {
-        el.classList.toggle("selected", el.dataset.typeSlug === typeSlug);
+    document.querySelectorAll('.catalog-card').forEach(el => {
+        el.classList.toggle('selected', el.dataset.typeSlug === typeSlug);
     });
 
-    // Mostra il campo nome e pre-compila con il nome del tipo
-    const nameGroup = document.getElementById("tool-name-group");
-    if (nameGroup) nameGroup.style.display = "flex";
-
-    const nameInput = document.getElementById("input-tool-name");
-    if (nameInput && !nameInput.value) {
-        nameInput.value = typeName;
-    }
+    const nameGroup = document.getElementById('tool-name-group');
+    if (nameGroup) nameGroup.style.display = 'flex';
+    const nameInput = document.getElementById('input-tool-name');
+    if (nameInput && !nameInput.value) nameInput.value = typeName;
     if (nameInput) nameInput.focus();
-
-    const createBtn = document.getElementById("btn-create-tool");
+    const createBtn = document.getElementById('btn-create-tool');
     if (createBtn) createBtn.disabled = false;
 
-    // Carica i template disponibili per questo tipo (sempre mostra la sezione)
     _loadTemplatesInModal(typeSlug);
-    const templatesGroup = document.getElementById("tool-templates-group");
-    if (templatesGroup) templatesGroup.style.display = "flex";
+    const templatesGroup = document.getElementById('tool-templates-group');
+    if (templatesGroup) templatesGroup.style.display = 'flex';
 }
 
 async function _loadTemplatesInModal(typeSlug) {
-    const list = document.getElementById("templates-list");
-    if (!list) return;
-
-    const project = App.currentProject;
-    const params  = new URLSearchParams();
-    if (typeSlug)          params.set("type_slug",  typeSlug);
-    if (project?.id)       params.set("project_id", project.id);
-
+    const list = document.getElementById('templates-list');
+    if (!list || !_activeProject) return;
+    const params = new URLSearchParams({ db: _activeProject.path });
+    if (typeSlug) params.set('type_slug', typeSlug);
     try {
-        const templates = await fetch(
-            `/api/tools/templates?${params.toString()}`
-        ).then(r => r.json());
-
-        if (templates.length === 0) {
-            list.innerHTML = '<div style="font-size:12px;color:var(--color-text-muted)">Nessun template salvato.</div>';
+        const templates = await fetch(`/api/tools/templates?${params}`).then(r => r.json());
+        if (!templates.length) {
+            list.innerHTML = '<div style="font-size:12px;color:var(--color-text-muted)">No saved templates.</div>';
             return;
         }
-
         list.innerHTML = templates.map(t => `
             <div class="template-item" data-template-id="${t.id}"
                  onclick="selectTemplate(${t.id}, this)">
                 <span class="template-item-name">${escapeHtml(t.name)}</span>
                 <button class="template-item-delete"
-                        onclick="deleteTemplateFromModal(event, ${t.id}, '${escapeHtml(typeSlug)}')"
-                        title="Elimina template">✕</button>
+                        onclick="deleteTemplateFromModal(event, ${t.id}, '${escapeAttr(typeSlug)}')"
+                        title="Delete template">✕</button>
             </div>
-        `).join("");
-
+        `).join('');
     } catch (_) {
-        list.innerHTML = "";
+        list.innerHTML = '';
     }
 }
 
 function selectTemplate(templateId, el) {
-    const alreadySelected = el.classList.contains("selected");
-
-    document.querySelectorAll(".template-item").forEach(i => i.classList.remove("selected"));
-
+    const alreadySelected = el.classList.contains('selected');
+    document.querySelectorAll('.template-item').forEach(i => i.classList.remove('selected'));
     if (alreadySelected) {
         _selectedTemplateId = null;
     } else {
-        el.classList.add("selected");
+        el.classList.add('selected');
         _selectedTemplateId = templateId;
-        _selectedEtlSql = null;  // template ha precedenza su file importato
-        const fileNameEl = document.getElementById("file-etl-name");
-        if (fileNameEl) { fileNameEl.style.display = "none"; fileNameEl.textContent = ""; }
+        _selectedEtlSql = null;
+        const fileNameEl = document.getElementById('file-etl-name');
+        if (fileNameEl) { fileNameEl.style.display = 'none'; fileNameEl.textContent = ''; }
     }
 }
 
 function importEtlFromFile() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".sql,.json,.txt";
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.sql,.json,.txt';
     input.onchange = async () => {
         const file = input.files[0];
         if (!file) return;
         try {
             const text = await file.text();
             let sql = text;
-            if (file.name.endsWith(".json")) {
+            if (file.name.endsWith('.json')) {
                 const parsed = JSON.parse(text);
                 sql = parsed.etl_sql || parsed.sql || text;
             }
             _selectedEtlSql = sql.trim();
             _selectedTemplateId = null;
-            document.querySelectorAll(".template-item").forEach(i => i.classList.remove("selected"));
-            const fileNameEl = document.getElementById("file-etl-name");
-            if (fileNameEl) {
-                fileNameEl.textContent = `✓ ${file.name}`;
-                fileNameEl.style.display = "inline";
-            }
+            document.querySelectorAll('.template-item').forEach(i => i.classList.remove('selected'));
+            const fileNameEl = document.getElementById('file-etl-name');
+            if (fileNameEl) { fileNameEl.textContent = `✓ ${file.name}`; fileNameEl.style.display = 'inline'; }
         } catch (err) {
-            alert("Errore lettura file: " + err.message);
+            alert('Error reading file: ' + err.message);
         }
     };
     input.click();
@@ -514,77 +488,222 @@ function importEtlFromFile() {
 
 async function deleteTemplateFromModal(event, templateId, typeSlug) {
     event.stopPropagation();
-    if (!confirm("Eliminare questo template?")) return;
-
+    if (!confirm('Delete this template?')) return;
+    if (!_activeProject) return;
     try {
-        await fetch(`/api/tools/templates/${templateId}`, { method: "DELETE" });
+        await fetch(`/api/tools/templates/${templateId}?db=${encodeURIComponent(_activeProject.path)}`, { method: 'DELETE' });
         await _loadTemplatesInModal(typeSlug);
     } catch (err) {
-        alert("Errore: " + err.message);
+        alert('Error: ' + err.message);
     }
 }
 
 async function submitNewTool() {
-    if (!_selectedCatalogType) return;
-
-    const project = App.currentProject;
-    if (!project) return;
-
-    const nameInput = document.getElementById("input-tool-name");
+    if (!_selectedCatalogType || !_activeProject) return;
+    const nameInput = document.getElementById('input-tool-name');
     const name = nameInput ? nameInput.value.trim() : _selectedCatalogType.typeName;
+    if (!name) { alert('Tool name is required.'); return; }
 
-    if (!name) {
-        alert("Il nome del tool è obbligatorio.");
-        return;
-    }
-
-    const createBtn = document.getElementById("btn-create-tool");
+    const createBtn = document.getElementById('btn-create-tool');
     if (createBtn) createBtn.disabled = true;
 
     try {
-        const payload = {
-            name,
-            tool_type: _selectedCatalogType.typeSlug,
-            icon: _selectedCatalogType.typeIcon
-        };
-        if (_selectedTemplateId) {
-            payload.template_id = _selectedTemplateId;
-        } else if (_selectedEtlSql) {
-            payload.etl_sql = _selectedEtlSql;
-        }
+        const payload = { name, tool_type: _selectedCatalogType.typeSlug, icon: _selectedCatalogType.typeIcon };
+        if (_selectedTemplateId) payload.template_id = _selectedTemplateId;
+        else if (_selectedEtlSql) payload.etl_sql = _selectedEtlSql;
 
-        const response = await fetch(`/api/tools/project/${project.id}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+        const res = await fetch(`/api/tools/project?db=${encodeURIComponent(_activeProject.path)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-
-        if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.detail || "Errore creazione tool");
-        }
-
-        const tool = await response.json();
-        closeModal("modal-new-tool");
-
-        // Naviga direttamente al nuovo tool
-        window.location.href = `/tool/${project.id}/${tool.id}`;
-
+        if (!res.ok) throw new Error((await res.json()).detail || 'Tool creation failed');
+        const tool = await res.json();
+        closeModal('modal-new-tool');
+        window.location.href = `/tool?db=${encodeURIComponent(_activeProject.path)}&tool=${tool.id}`;
     } catch (err) {
-        alert("Errore: " + err.message);
+        alert('Error: ' + err.message);
         if (createBtn) createBtn.disabled = false;
     }
 }
 
 
-// ============================================================
-// UTILITY
-// ============================================================
+// ── Filesystem browser ────────────────────────────────────────────────
+
+const FsBrowser = (() => {
+    let _mode    = null;  // 'folder' | 'file'
+    let _current = null;
+    let _resolve = null;
+
+    async function _browse(path) {
+        try {
+            const res = await fetch(`/api/fs/browse?path=${encodeURIComponent(path)}`);
+            if (!res.ok) throw new Error('Browse failed');
+            const data = await res.json();
+            _current = data.path;
+            _render(data);
+        } catch (err) {
+            alert('Browse error: ' + err.message);
+        }
+    }
+
+    function _render(data) {
+        document.getElementById('fs-path-input').value = data.path;
+        document.getElementById('fs-btn-up').disabled = !data.parent;
+
+        const entriesEl = document.getElementById('fs-entries');
+        if (!data.entries.length) {
+            entriesEl.innerHTML = '<div class="fs-empty">Empty folder</div>';
+        } else {
+            entriesEl.innerHTML = data.entries.map(e => {
+                if (e.type === 'dir') {
+                    return `<div class="fs-entry fs-dir" onclick="FsBrowser._enter('${escapeAttr(data.path + '/' + e.name)}')">
+                        <span class="fs-icon">📁</span><span>${escapeHtml(e.name)}</span></div>`;
+                } else {
+                    const kb = e.size ? Math.round(e.size / 1024) + ' KB' : '';
+                    const sel = _mode === 'file'
+                        ? `onclick="FsBrowser._selectFile('${escapeAttr(data.path + '/' + e.name)}')"` : '';
+                    return `<div class="fs-entry fs-file${_mode === 'file' ? ' fs-selectable' : ''}" ${sel}>
+                        <span class="fs-icon">🗄</span><span>${escapeHtml(e.name)}</span>
+                        <span class="fs-size">${kb}</span></div>`;
+                }
+            }).join('');
+        }
+
+        if (_mode === 'folder') {
+            const fnRow = document.getElementById('fs-filename-row');
+            if (fnRow) fnRow.style.display = '';
+            document.getElementById('fs-select-btn').disabled = false;
+        }
+    }
+
+    function _enter(path) {
+        _browse(path);
+    }
+
+    function _selectFile(path) {
+        if (_mode !== 'file') return;
+        closeModal('modal-fs-browser');
+        if (_resolve) _resolve(path);
+    }
+
+    function goUp() {
+        if (!_current) return;
+        fetch(`/api/fs/browse?path=${encodeURIComponent(_current)}`).then(r => r.json()).then(d => {
+            if (d.parent) _browse(d.parent);
+        });
+    }
+
+    function cancel() {
+        closeModal('modal-fs-browser');
+        if (_resolve) _resolve(null);
+    }
+
+    function select() {
+        if (_mode !== 'folder') return;
+        const filename = (document.getElementById('fs-filename-input').value || '').trim();
+        if (!filename) { alert('Enter a file name.'); return; }
+        const name = filename.endsWith('.db') ? filename : filename + '.db';
+        const path = _current.replace(/[\/\\]+$/, '') + '\\' + name;
+        closeModal('modal-fs-browser');
+        if (_resolve) _resolve(path);
+    }
+
+    async function _open(mode, title) {
+        _mode = mode;
+        document.getElementById('fs-browser-title').textContent = title;
+        const fnRow = document.getElementById('fs-filename-row');
+        if (fnRow) fnRow.style.display = mode === 'folder' ? '' : 'none';
+        const filenameInput = document.getElementById('fs-filename-input');
+        if (filenameInput) filenameInput.value = '';
+        document.getElementById('fs-select-btn').disabled = mode !== 'folder';
+        openModal('modal-fs-browser');
+
+        const lastPath = localStorage.getItem('im_last_browse_path');
+        const startPath = lastPath || await fetch('/api/fs/cwd').then(r => r.json()).then(d => d.path);
+        await _browse(startPath);
+
+        return new Promise(resolve => { _resolve = (path) => { if (path) localStorage.setItem('im_last_browse_path', _current); resolve(path); }; });
+    }
+
+    async function openForNew() {
+        const path = await _open('folder', 'Choose save location');
+        if (path) {
+            document.getElementById('input-project-path').value = path;
+            _validateNewProject();
+        }
+    }
+
+    async function openForOpen() {
+        const path = await _open('file', 'Open project file');
+        if (path) {
+            closeModal('modal-open-project');
+            try {
+                await _openProjectFromPath(path, { updateUrl: true });
+            } catch (err) {
+                alert('Cannot open: ' + err.message);
+            }
+        }
+    }
+
+    return { _enter, _selectFile, goUp, cancel, select, openForNew, openForOpen };
+})();
+
+
+// ── Backup helpers ────────────────────────────────────────────────────
+
+let _backupTimer = null;
+
+function _getBackupPrefs() {
+    try { return JSON.parse(localStorage.getItem('im.prefs')) || {}; } catch (_) { return {}; }
+}
+
+function _runOnOpenBackup(dbPath) {
+    const prefs = _getBackupPrefs();
+    if (!prefs.backup?.onOpen) return;
+    const cooldownMs = (parseInt(prefs.backup?.onOpenCooldown) || 1440) * 60 * 1000;
+    const lastAt = parseInt(localStorage.getItem('im.backup.lastOnOpen') || '0');
+    if (Date.now() - lastAt < cooldownMs) return;
+    localStorage.setItem('im.backup.lastOnOpen', String(Date.now()));
+    _doBackup(dbPath);
+}
+
+function _startBackupTimer(dbPath) {
+    if (_backupTimer) clearInterval(_backupTimer);
+    const prefs = _getBackupPrefs();
+    const mins  = parseInt(prefs.backup?.interval) || 0;
+    if (!mins) return;
+    _backupTimer = setInterval(() => _doBackup(dbPath), mins * 60 * 1000);
+}
+
+async function _doBackup(dbPath) {
+    const prefs = _getBackupPrefs();
+    const b = prefs.backup || {};
+    try {
+        await fetch(`/api/project/backup?db=${encodeURIComponent(dbPath)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                subfolder: b.subfolder || '_backups',
+                keep:      parseInt(b.keep) || 10,
+            })
+        });
+    } catch (_) {}
+}
+
+
+// ── Utility ───────────────────────────────────────────────────────────
 
 function escapeHtml(str) {
     return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function escapeAttr(str) {
+    return String(str)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'");
 }

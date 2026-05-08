@@ -254,7 +254,7 @@ const ToolbarManager = (() => {
     // --------------------------------------------------------
 
     function exportExcel() {
-        const url = `/api/tools/${TOOL_ID}/export/excel?project_id=${PROJECT_ID}`;
+        const url = `/api/tools/${TOOL_ID}/export/excel?db=${encodeURIComponent(DB_PATH)}`;
         window.location.href = url;
     }
 

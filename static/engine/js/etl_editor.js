@@ -889,7 +889,7 @@ const EtlEditor = (() => {
         if (!el) return;
         try {
             const params = [];
-            if (typeof PROJECT_ID !== "undefined") params.push(`project_id=${PROJECT_ID}`);
+            if (typeof DB_PATH !== "undefined") params.push(`db=${encodeURIComponent(DB_PATH)}`);
             if (_toolType) params.push(`type_slug=${encodeURIComponent(_toolType)}`);
             const url = "/api/tools/templates" + (params.length ? "?" + params.join("&") : "");
             _cachedTemplates = await fetch(url).then(r => r.json());
@@ -923,7 +923,7 @@ const EtlEditor = (() => {
                 type_slug:  _toolType || "",
                 name:       name.trim(),
                 etl_sql:    JSON.stringify(_model),
-                project_id: typeof PROJECT_ID !== "undefined" ? PROJECT_ID : null
+                project_id: null
             });
             Utils.showToast("Template saved.", "success");
             await refreshTemplates();
@@ -1131,11 +1131,26 @@ const EtlEditor = (() => {
 
 
     // --------------------------------------------------------
+    // Canvas bridge — read/write the live model
+    // --------------------------------------------------------
+
+    function getModel() {
+        return JSON.parse(JSON.stringify(_model));
+    }
+
+    function loadModel(m) {
+        _model = m;
+        _renderModel();
+    }
+
+
+    // --------------------------------------------------------
     // PUBLIC API
     // --------------------------------------------------------
 
     return {
         init, setToolType,
+        getModel, loadModel,
         preview, apply, saveVersion,
         refreshSchema, refreshTemplates,
         insertColumn,

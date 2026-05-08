@@ -1,5 +1,12 @@
 const PanelSystem = (() => {
-    const STORAGE_KEY = 'instrumentManager.layout.v2';
+    function _storageKey() {
+        if (typeof DB_PATH !== 'undefined' && DB_PATH) {
+            let h = 5381;
+            for (let i = 0; i < DB_PATH.length; i++) h = (h * 33 ^ DB_PATH.charCodeAt(i)) >>> 0;
+            return `im_panels_${h.toString(36)}`;
+        }
+        return 'instrumentManager.layout.v2';
+    }
     const FLOAT_W     = 320;
     const FLOAT_H     = 400;
     const SNAP_DIST   = 48;  // px proximity threshold for K-7
@@ -13,7 +20,7 @@ const PanelSystem = (() => {
 
     function _loadState() {
         try {
-            const raw = localStorage.getItem(STORAGE_KEY);
+            const raw = localStorage.getItem(_storageKey());
             if (raw) {
                 const s = JSON.parse(raw);
                 if (s.version === 4) return s;
@@ -38,7 +45,7 @@ const PanelSystem = (() => {
     }
 
     function _saveState() {
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(_state)); } catch (_) {}
+        try { localStorage.setItem(_storageKey(), JSON.stringify(_state)); } catch (_) {}
     }
 
     // ── DOM helpers ───────────────────────────────────────────
@@ -445,11 +452,11 @@ const PanelSystem = (() => {
     function showPanel(id, opts) {
         const dockName = opts && opts.dock === 'bottom' ? 'bottom' : 'right';
 
-        // Already floating — just refresh content
+        // Already floating — just refresh content (skip onActivate if silent)
         const floatEntry = (_state.floats || []).find(f => f.id === id);
         if (floatEntry) {
             const floatEl = document.querySelector(`.panel-float[data-panel-id="${id}"]`);
-            if (floatEl && _registry[id]?.onActivate) {
+            if (floatEl && _registry[id]?.onActivate && !(opts && opts.silent)) {
                 _registry[id].onActivate(floatEl.querySelector('.panel-float-body'));
             }
             return;

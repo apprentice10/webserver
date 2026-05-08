@@ -10,7 +10,7 @@ const EtlDesign = (() => {
 
     // ── State ─────────────────────────────────────────────────────────────
 
-    let _projectId = null;
+    let _dbPath = null;
     let _graph     = { nodes: [], edges: [] };
     let _positions = {};   // { slug: {x, y} }
     let _pan       = { x: 40, y: 40 };
@@ -32,7 +32,10 @@ const EtlDesign = (() => {
     // ── localStorage ──────────────────────────────────────────────────────
 
     function _posKey() {
-        return `instrumentManager.etlDesign.${_projectId}.positions`;
+        let h = 5381;
+        const s = _dbPath || '';
+        for (let i = 0; i < s.length; i++) h = (h * 33 ^ s.charCodeAt(i)) >>> 0;
+        return `instrumentManager.etlDesign.${h.toString(36)}.positions`;
     }
 
     function _loadPositions() {
@@ -54,13 +57,13 @@ const EtlDesign = (() => {
     // ── Fetch ──────────────────────────────────────────────────────────────
 
     async function _fetchGraph() {
-        const res = await fetch(`/api/projects/${_projectId}/etl-graph`);
+        const res = await fetch(`/api/project/etl-graph?db=${encodeURIComponent(_dbPath)}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
     }
 
     async function _postRun(endpoint) {
-        const res = await fetch(`/api/projects/${_projectId}/${endpoint}`, {
+        const res = await fetch(`/api/project/${endpoint}?db=${encodeURIComponent(_dbPath)}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
         });
@@ -257,11 +260,11 @@ const EtlDesign = (() => {
             if (_dragMoved) { e.stopPropagation(); e.preventDefault(); return; }
             const id = el.dataset.id;
             if (e.ctrlKey || e.metaKey) {
-                window.location.href = `/tool/${_projectId}/${id}/etl`;
+                window.location.href = `/etl?db=${encodeURIComponent(_dbPath)}&tool=${id}`;
             } else if (e.shiftKey) {
-                window.location.href = `/tool/${_projectId}/${id}`;
+                window.location.href = `/tool?db=${encodeURIComponent(_dbPath)}&tool=${id}`;
             } else {
-                window.location.href = `/project/${_projectId}/canvas/${id}`;
+                window.location.href = `/canvas?db=${encodeURIComponent(_dbPath)}&tool=${id}`;
             }
         });
     }
@@ -340,7 +343,7 @@ const EtlDesign = (() => {
 
     async function _loadProjectName() {
         try {
-            const proj = await fetch(`/api/projects/${_projectId}`).then(r => r.json());
+            const proj = await fetch(`/api/project?db=${encodeURIComponent(_dbPath)}`).then(r => r.json());
             const el = document.getElementById("project-name");
             if (el) el.textContent = proj.name || "Project";
         } catch (_) {}
@@ -349,8 +352,8 @@ const EtlDesign = (() => {
 
     // ── Public API ────────────────────────────────────────────────────────
 
-    async function init(projectId) {
-        _projectId = projectId;
+    async function init(dbPath) {
+        _dbPath = dbPath;
         _loadPositions();
         _initCanvas();
         _loadProjectName();

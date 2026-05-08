@@ -11,6 +11,241 @@
 <link rel="stylesheet" href="/static/engine/css/modal.css">
 <link rel="stylesheet" href="/static/engine/css/etl.css">
 <style>
+/* ── Canvas editor view ─────────────────────────────────────────── */
+#ecv-view {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+}
+#ecv-canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: var(--color-bg);
+    cursor: grab;
+    user-select: none;
+}
+#ecv-canvas-wrap.ecv-panning  { cursor: grabbing; }
+#ecv-canvas-inner {
+    position: absolute;
+    top: 0; left: 0;
+    transform-origin: 0 0;
+}
+#ecv-edges-svg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 4000px; height: 4000px;
+    overflow: visible;
+}
+.ecv-edge {
+    fill: none;
+    stroke: var(--color-border);
+    stroke-width: 1.5;
+    marker-end: url(#ecv-arrow);
+    pointer-events: none;
+}
+.ecv-edge-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 14;
+    pointer-events: stroke;
+    cursor: pointer;
+}
+#ecv-nodes-layer {
+    position: absolute;
+    top: 0; left: 0;
+    width: 4000px; height: 4000px;
+    pointer-events: none;
+}
+.ecv-node { pointer-events: auto; }
+/* ── Node cards ─────────────────────────────────────────────────── */
+.ecv-node {
+    position: absolute;
+    border: 2px solid var(--color-border);
+    border-left-width: 4px;
+    border-radius: 8px;
+    background: var(--color-surface);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    box-sizing: border-box;
+    min-height: 56px;
+    transition: box-shadow .15s;
+}
+.ecv-node:hover { box-shadow: 0 4px 18px rgba(0,0,0,.35); }
+.ecv-node-icon  { font-size: 18px; flex-shrink: 0; width: 22px; text-align: center; }
+.ecv-node-body  { flex: 1; min-width: 0; }
+.ecv-node-label { font-size: 13px; font-weight: 600; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ecv-node-detail{ font-size: 10px; color: var(--color-text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ecv-node--table          { border-left-color: #3b82f6; }
+.ecv-node--cte            { border-left-color: #8b5cf6; }
+.ecv-node--generate_series{ border-left-color: #14b8a6; }
+.ecv-node--select         { border-left-color: #22c55e; }
+.ecv-node--filter         { border-left-color: #f97316; }
+.ecv-node--join           { border-left-color: #eab308; }
+.ecv-node--aggregate      { border-left-color: #a855f7; }
+.ecv-node--compute_column { border-left-color: #06b6d4; }
+.ecv-node--dest           { border-left-color: #10b981; border-style: dashed; }
+/* ── + port button ──────────────────────────────────────────────── */
+.ecv-add-btn {
+    position: absolute;
+    right: -13px; top: 50%;
+    transform: translateY(-50%);
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 2px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: 15px; line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 10;
+    padding: 0;
+}
+.ecv-add-btn:hover { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
+/* ── Side panel ─────────────────────────────────────────────────── */
+#ecv-panel {
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: 300px;
+    background: var(--color-surface);
+    border-left: 1px solid var(--color-border);
+    display: flex; flex-direction: column;
+    transform: translateX(100%);
+    transition: transform .2s ease;
+    z-index: 20;
+}
+#ecv-panel.ecv-panel--open { transform: translateX(0); }
+.ecv-panel-header {
+    display: flex; align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 13px; font-weight: 600; gap: 8px;
+    flex-shrink: 0;
+}
+.ecv-panel-close {
+    margin-left: auto;
+    border: none; background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer; font-size: 16px;
+    padding: 2px 6px; border-radius: 3px;
+}
+.ecv-panel-close:hover { background: var(--color-surface-subtle); }
+.ecv-panel-body    { flex: 1; overflow-y: auto; padding: 12px; }
+.ecv-panel-section { margin-bottom: 16px; }
+.ecv-panel-label   { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--color-text-muted); letter-spacing: .5px; margin-bottom: 6px; }
+.ecv-panel-json    { font-family: 'Consolas','Monaco',monospace; font-size: 11px; white-space: pre-wrap; word-break: break-all; color: var(--color-text-muted); background: var(--color-bg); padding: 8px; border-radius: 4px; border: 1px solid var(--color-border); max-height: 500px; overflow-y: auto; }
+.ecv-dest-cols     { list-style: none; padding: 0; margin: 0; font-size: 12px; color: var(--color-text); }
+.ecv-dest-cols li  { padding: 4px 0; border-bottom: 1px solid var(--color-border); }
+.ecv-dest-cols li:last-child { border-bottom: none; }
+.ecv-muted         { color: var(--color-text-muted) !important; }
+/* ── Panel form elements ────────────────────────────────────────── */
+.ecv-info-row      { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 1px solid var(--color-border); }
+.ecv-info-row span:first-child { color: var(--color-text-muted); }
+.ecv-info-row:last-child { border-bottom: none; }
+.ecv-panel-select  { font-size: 12px; background: var(--color-bg); color: var(--color-text); border: 1px solid var(--color-border); border-radius: 4px; padding: 2px 4px; width: 100%; box-sizing: border-box; }
+.ecv-formula-bar   { width: 100%; box-sizing: border-box; font-size: 12px; font-family: 'Consolas','Monaco',monospace; resize: vertical; background: var(--color-bg); color: var(--color-text); border: 1px solid var(--color-border); border-radius: 4px; padding: 4px 6px; }
+.ecv-formula-bar--error { border-color: #ef4444; }
+.ecv-formula-err   { font-size: 11px; color: #ef4444; min-height: 14px; margin-top: 2px; word-break: break-word; }
+.ecv-mono          { font-family: 'Consolas','Monaco',monospace; }
+.ecv-col-list      { display: flex; flex-direction: column; gap: 3px; margin-bottom: 4px; }
+.ecv-col-row       { display: grid; grid-template-columns: 80px 1fr auto auto; gap: 4px; align-items: start; }
+.ecv-col-alias     { font-size: 12px; background: var(--color-bg); color: var(--color-text); border: 1px solid var(--color-border); border-radius: 4px; padding: 2px 4px; min-width: 0; }
+.ecv-col-formula   { font-size: 11px; background: var(--color-bg); color: var(--color-text); border: 1px solid var(--color-border); border-radius: 4px; padding: 2px 4px; min-width: 0; }
+.ecv-col-err       { grid-column: 2 / 4; font-size: 10px; color: #ef4444; min-height: 0; }
+.ecv-col-remove    { background: none; border: none; color: var(--color-text-muted); cursor: pointer; font-size: 14px; padding: 0 2px; line-height: 1; }
+.ecv-col-remove:hover { color: #ef4444; }
+.ecv-col-add       { font-size: 11px; background: none; border: 1px dashed var(--color-border); color: var(--color-text-muted); padding: 2px 8px; border-radius: 4px; cursor: pointer; margin-top: 4px; }
+.ecv-col-add:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.ecv-gb-row        { display: flex; gap: 4px; align-items: start; }
+.ecv-gb-row input  { flex: 1; min-width: 0; }
+/* ── Canvas toolbar ─────────────────────────────────────────────── */
+#ecv-toolbar {
+    position: absolute; top: 10px; left: 10px; z-index: 25;
+    display: flex; gap: 6px; pointer-events: all;
+}
+#ecv-toolbar button {
+    font-size: 12px; padding: 4px 10px;
+    background: var(--color-surface); border: 1px solid var(--color-border);
+    border-radius: 5px; cursor: pointer; color: var(--color-text);
+    box-shadow: 0 2px 6px rgba(0,0,0,.2);
+}
+#ecv-toolbar button:hover { background: var(--color-surface-subtle); }
+/* ── Source popup ───────────────────────────────────────────────── */
+#ecv-src-popup {
+    position: absolute; z-index: 30; display: none;
+    background: var(--color-surface); border: 1px solid var(--color-border);
+    border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.35);
+    padding: 4px; min-width: 180px;
+}
+#ecv-src-popup button {
+    display: block; width: 100%; text-align: left;
+    padding: 7px 12px; font-size: 12px;
+    border: none; background: transparent;
+    color: var(--color-text); cursor: pointer; border-radius: 4px;
+}
+#ecv-src-popup button:hover { background: var(--color-surface-subtle); }
+.ecv-src-sep  { border: none; border-top: 1px solid var(--color-border); margin: 4px 0; }
+.ecv-src-loading { padding: 8px 12px; font-size: 12px; color: var(--color-text-muted); }
+/* ── Edge preview panel ─────────────────────────────────────────── */
+#ecv-preview-panel {
+    position: absolute; z-index: 35; display: none; flex-direction: column;
+    background: var(--color-surface); border: 1px solid var(--color-border);
+    border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.4);
+    width: 480px; max-height: 320px;
+}
+.ecv-pv-header {
+    display: flex; align-items: center; padding: 8px 12px;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 12px; font-weight: 600; gap: 8px; flex-shrink: 0;
+}
+#ecv-preview-body {
+    flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0;
+}
+.ecv-pv-info    { font-size: 11px; color: var(--color-text-muted); padding: 4px 10px; flex-shrink: 0; }
+.ecv-pv-scroll  { flex: 1; overflow: auto; }
+.ecv-pv-table   { width: max-content; border-collapse: collapse; font-size: 11px; }
+.ecv-pv-table th { padding: 3px 8px; background: var(--color-surface-subtle); border-bottom: 1px solid var(--color-border); text-align: left; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
+.ecv-pv-table td { padding: 2px 8px; border-bottom: 1px solid var(--color-border); white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.ecv-pv-loading, .ecv-pv-empty, .ecv-pv-err { padding: 20px; font-size: 12px; color: var(--color-text-muted); }
+.ecv-pv-err { color: #ef4444; }
+/* ── Add popup ──────────────────────────────────────────────────── */
+#ecv-add-popup {
+    position: absolute; z-index: 30; display: none;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.35);
+    padding: 4px; min-width: 150px;
+}
+#ecv-add-popup button {
+    display: block; width: 100%; text-align: left;
+    padding: 7px 12px; font-size: 12px;
+    border: none; background: transparent;
+    color: var(--color-text); cursor: pointer; border-radius: 4px;
+}
+#ecv-add-popup button:hover { background: var(--color-surface-subtle); }
+/* ── View toggle ────────────────────────────────────────────────── */
+.ecv-view-toggle {
+    display: flex; gap: 2px;
+    background: var(--color-surface-subtle);
+    border: 1px solid var(--color-border);
+    border-radius: 5px; padding: 2px;
+}
+.ecv-toggle-btn {
+    padding: 3px 12px; font-size: 12px;
+    border: none; border-radius: 3px;
+    background: transparent; color: var(--color-text-muted);
+    cursor: pointer;
+}
+.ecv-toggle-btn--active {
+    background: var(--color-surface);
+    color: var(--color-text);
+    box-shadow: 0 1px 3px rgba(0,0,0,.25);
+}
 .etl-page-layout {
     display: flex;
     flex-direction: column;
@@ -296,14 +531,19 @@
 
     <!-- TOPBAR INTERNA -->
     <div class="etl-page-topbar">
-        <a href="/tool/{{ project_id }}/{{ tool_id }}"
-           class="btn btn-ghost btn-sm">← Torna alla tabella</a>
+        <a href="/tool?db={{ db | urlencode }}&tool={{ tool_id }}"
+           class="btn btn-ghost btn-sm">← Back to table</a>
         <div class="toolbar-separator"></div>
         <span class="etl-page-title">ETL Editor</span>
         <span class="etl-page-tool-name" id="etl-tool-name">—</span>
+        <div style="flex:1"></div>
+        <div class="ecv-view-toggle">
+            <button id="ecv-btn-canvas" class="ecv-toggle-btn" onclick="EtlCanvasEditor.activate()">⬡ Canvas</button>
+            <button id="ecv-btn-code"   class="ecv-toggle-btn ecv-toggle-btn--active" onclick="EtlCanvasEditor.deactivate()">&#60;/&#62; Code</button>
+        </div>
     </div>
 
-    <div class="etl-page-body">
+    <div class="etl-page-body" id="ecv-code-view">
 
         <!-- MAIN: model builder + preview -->
         <div class="etl-page-main">
@@ -424,20 +664,72 @@
 
         </div>
     </div>
+
+    <!-- CANVAS VIEW (hidden until toggle) -->
+    <div id="ecv-view" style="display:none;">
+        <div id="ecv-canvas-wrap">
+            <!-- Floating canvas toolbar -->
+            <div id="ecv-toolbar">
+                <button id="ecv-btn-add-source" onclick="EtlCanvasEditor.showAddSourcePopup(event)">+ Source</button>
+            </div>
+            <!-- Source type popup -->
+            <div id="ecv-src-popup"></div>
+            <!-- Edge data preview panel -->
+            <div id="ecv-preview-panel">
+                <div class="ecv-pv-header">
+                    <span id="ecv-preview-title">Data Preview</span>
+                    <button class="ecv-panel-close" onclick="EtlCanvasEditor.closePreview()">✕</button>
+                </div>
+                <div id="ecv-preview-body"></div>
+            </div>
+            <div id="ecv-canvas-inner">
+                <svg id="ecv-edges-svg" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <marker id="ecv-arrow" markerWidth="9" markerHeight="6"
+                                refX="9" refY="3" orient="auto">
+                            <path d="M0,0 L0,6 L9,3 z" fill="var(--color-border)"/>
+                        </marker>
+                    </defs>
+                </svg>
+                <div id="ecv-nodes-layer"></div>
+            </div>
+        </div>
+
+        <!-- Side panel -->
+        <div id="ecv-panel">
+            <div class="ecv-panel-header">
+                <span id="ecv-panel-title">Node</span>
+                <button class="ecv-panel-close" onclick="EtlCanvasEditor.closePanel()">✕</button>
+            </div>
+            <div id="ecv-panel-body" class="ecv-panel-body"></div>
+        </div>
+
+        <!-- Add-node popup -->
+        <div id="ecv-add-popup">
+            <button onclick="EtlCanvasEditor.addNode('select')">📋 Select</button>
+            <button onclick="EtlCanvasEditor.addNode('filter')">🔍 Filter</button>
+            <button onclick="EtlCanvasEditor.addNode('join')">🔗 Join</button>
+            <button onclick="EtlCanvasEditor.addNode('aggregate')">∑ Aggregate</button>
+            <button onclick="EtlCanvasEditor.addNode('compute_column')">ƒ Compute</button>
+        </div>
+    </div>
+
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-    const PROJECT_ID = {{ project_id }};
-    const TOOL_ID    = {{ tool_id }};
+    const DB_PATH = {{ db | tojson }};
+    const TOOL_ID = {{ tool_id }};
 </script>
 <script src="/static/engine/js/utils.js"></script>
 <script src="/static/engine/js/api.js"></script>
 <script src="/static/engine/js/etl_editor.js"></script>
+<script src="/static/engine/js/etl_dsl.js"></script>
+<script src="/static/engine/js/etl_canvas_panel.js"></script>
+<script src="/static/engine/js/etl_canvas_preview.js"></script>
+<script src="/static/engine/js/etl_canvas_editor.js"></script>
 <script>
-    const showToast = Utils.showToast;
-
     document.addEventListener("DOMContentLoaded", async () => {
         // Carica nome tool
         try {
@@ -448,6 +740,7 @@
         } catch (e) {}
 
         await EtlEditor.init();
+        EtlCanvasEditor.init(DB_PATH, TOOL_ID);
     });
 </script>
 {% endblock %}

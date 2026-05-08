@@ -1,6 +1,6 @@
 // app_shell.js
 // Manages: theme, accent, density, sidebar state, topbar tool-pill inline edit,
-// REV chip inline edit, settings modal (appearance + language tabs).
+// REV chip inline edit, settings modal (appearance + language + backup tabs).
 // Depends on: I18n, ApiClient (for tool name/icon/rev persistence)
 const AppShell = (() => {
     const PREFS_KEY = 'im.prefs';
@@ -75,6 +75,7 @@ const AppShell = (() => {
     <div class="settings-tabs">
       <button class="settings-tab active" data-tab="appearance">${t('settings.tab.appearance')}</button>
       <button class="settings-tab" data-tab="language">${t('settings.tab.language')}</button>
+      <button class="settings-tab" data-tab="backup">Backup</button>
     </div>
     <div class="modal-body settings-body">
       <!-- Appearance tab -->
@@ -134,6 +135,37 @@ const AppShell = (() => {
         </div>
         <p class="settings-hint">💡 ${t('settings.hint')}</p>
       </div>
+      <!-- Backup tab -->
+      <div class="settings-tab-pane" data-pane="backup" style="display:none">
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="backup-on-open" ${(prefs.backup?.onOpen) ? 'checked' : ''}>
+            Backup on project open
+          </label>
+          <p style="font-size:12px;color:var(--ink-muted);margin-top:4px">Creates a timestamped copy each time a project is opened.</p>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+            <label style="margin:0;white-space:nowrap;font-size:13px">Min between on-open backups</label>
+            <input type="number" id="backup-on-open-cooldown" class="form-control" min="1" step="1"
+                   value="${prefs.backup?.onOpenCooldown ?? 1440}" style="width:100px">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Auto-backup interval (minutes, 0 = disabled)</label>
+          <input type="number" id="backup-interval" class="form-control" min="0" step="1"
+                 value="${prefs.backup?.interval ?? 0}" style="width:100px">
+        </div>
+        <div class="form-group">
+          <label>Backups to keep</label>
+          <input type="number" id="backup-keep" class="form-control" min="1" step="1"
+                 value="${prefs.backup?.keep ?? 10}" style="width:100px">
+        </div>
+        <div class="form-group">
+          <label>Backup subfolder name</label>
+          <input type="text" id="backup-subfolder" class="form-control"
+                 value="${Utils.escAttr(prefs.backup?.subfolder ?? '_backups')}" style="max-width:220px">
+          <p style="font-size:12px;color:var(--ink-muted);margin-top:4px">Subfolder created next to each project file.</p>
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" id="btn-settings-cancel">${t('settings.cancel')}</button>
@@ -184,7 +216,15 @@ const AppShell = (() => {
         const doClose = () => closeSettings();
         document.getElementById('btn-settings-close').addEventListener('click', doClose);
         document.getElementById('btn-settings-cancel').addEventListener('click', doClose);
-        document.getElementById('btn-settings-save').addEventListener('click', doClose);
+        document.getElementById('btn-settings-save').addEventListener('click', () => {
+            const onOpen         = overlay.querySelector('#backup-on-open')?.checked ?? false;
+            const onOpenCooldown = parseInt(overlay.querySelector('#backup-on-open-cooldown')?.value, 10) || 1440;
+            const interval       = parseInt(overlay.querySelector('#backup-interval')?.value, 10) || 0;
+            const keep           = parseInt(overlay.querySelector('#backup-keep')?.value, 10) || 10;
+            const subfolder      = overlay.querySelector('#backup-subfolder')?.value.trim() || '_backups';
+            _savePrefs({ backup: { onOpen, onOpenCooldown, interval, keep, subfolder } });
+            doClose();
+        });
         overlay.addEventListener('click', e => { if (e.target === overlay) doClose(); });
 
         // Escape key
@@ -377,9 +417,7 @@ const AppShell = (() => {
             btn.setAttribute('aria-pressed', btn.dataset.value === density ? 'true' : 'false');
         });
 
-        // Settings button in topbar
-        const settingsBtn = document.getElementById('btn-settings');
-        if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
+        // Settings trigger in side-bottom bar calls openSettings directly
 
         _initToolPill();
         _initRevChip();

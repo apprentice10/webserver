@@ -28,7 +28,6 @@
         </div>
         <div class="topbar-right" id="topbar-right">
             {% block topbar_actions %}{% endblock %}
-            <button class="btn btn-ghost btn-sm" id="btn-settings" title="Settings">⚙</button>
         </div>
     </header>
 
@@ -49,7 +48,15 @@
                 <span class="si-icon">🔀</span>
                 <span class="si-label">ETL Design</span>
             </a>
-            <a class="side-item" id="btn-side-settings" onclick="document.getElementById('btn-settings').click()">
+            <a class="side-item" onclick="newProject()">
+                <span class="si-icon">+</span>
+                <span class="si-label">New Project</span>
+            </a>
+            <a class="side-item" onclick="openProject()">
+                <span class="si-icon">📂</span>
+                <span class="si-label">Open Project</span>
+            </a>
+            <a class="side-item" id="btn-side-settings" onclick="AppShell.openSettings()">
                 <span class="si-icon">⚙</span>
                 <span class="si-label" data-i18n="side.settings">Settings</span>
             </a>
@@ -72,8 +79,17 @@
         </div>
         <div class="modal-body">
             <div class="form-group">
+                <label for="input-project-path">Save location *</label>
+                <div style="display:flex;gap:6px">
+                    <input type="text" id="input-project-path" placeholder="e.g. C:\Projects\acme.db"
+                           oninput="_validateNewProject()" style="flex:1">
+                    <button class="btn btn-ghost btn-sm" onclick="FsBrowser.openForNew()">Browse…</button>
+                </div>
+            </div>
+            <div class="form-group">
                 <label for="input-project-name">Project name *</label>
-                <input type="text" id="input-project-name" placeholder="e.g. Production Line A">
+                <input type="text" id="input-project-name" placeholder="e.g. Production Line A"
+                       oninput="_validateNewProject()">
             </div>
             <div class="form-group">
                 <label for="input-project-client">Client</label>
@@ -81,12 +97,12 @@
             </div>
             <div class="form-group">
                 <label for="input-project-description">Description</label>
-                <textarea id="input-project-description" rows="3" placeholder="Optional project description"></textarea>
+                <textarea id="input-project-description" rows="3" placeholder="Optional"></textarea>
             </div>
         </div>
         <div class="modal-footer">
             <button class="btn btn-outline" onclick="closeModal('modal-new-project')">Cancel</button>
-            <button class="btn btn-primary" onclick="submitNewProject()">Create Project</button>
+            <button class="btn btn-primary" id="btn-create-project" onclick="submitNewProject()" disabled>Create Project</button>
         </div>
     </div>
 </div>
@@ -105,7 +121,7 @@
         </div>
         <div class="modal-footer">
             <button class="btn btn-outline" onclick="closeModal('modal-open-project')">Close</button>
-            <button class="btn btn-ghost btn-sm" onclick="importProjectFromFile()">📂 Import from file</button>
+            <button class="btn btn-ghost btn-sm" onclick="FsBrowser.openForOpen()">📂 Browse…</button>
         </div>
     </div>
 </div>
@@ -141,6 +157,32 @@
         <div class="modal-footer">
             <button class="btn btn-outline" onclick="closeModal('modal-new-tool')">Cancel</button>
             <button class="btn btn-primary" id="btn-create-tool" onclick="submitNewTool()" disabled>Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: FILESYSTEM BROWSER -->
+<div class="modal-overlay" id="modal-fs-browser">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 id="fs-browser-title">Browse</h2>
+            <button class="modal-close" onclick="FsBrowser.cancel()">✕</button>
+        </div>
+        <div class="modal-body" style="padding:0">
+            <div style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border)">
+                <button class="btn btn-ghost btn-sm" id="fs-btn-up" onclick="FsBrowser.goUp()">↑ Up</button>
+                <input type="text" id="fs-path-input" readonly
+                       style="flex:1;font-size:11px;font-family:var(--font-mono);background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:4px 8px;color:var(--ink-muted)">
+            </div>
+            <div id="fs-entries" style="max-height:320px;overflow-y:auto;padding:4px 0"></div>
+            <div id="fs-filename-row" class="form-group" style="display:none;padding:8px 12px;border-top:1px solid var(--border)">
+                <label for="fs-filename-input" style="font-size:12px">File name</label>
+                <input type="text" id="fs-filename-input" placeholder="project.db">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="FsBrowser.cancel()">Cancel</button>
+            <button class="btn btn-primary" id="fs-select-btn" onclick="FsBrowser.select()" disabled>Select</button>
         </div>
     </div>
 </div>

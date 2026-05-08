@@ -51,7 +51,6 @@ class ToolResponse(BaseModel):
     current_rev: str
     note:        Optional[str]
     icon:        Optional[str]
-    project_id:  Optional[int] = None   # non in _tools, lo inseriamo nel route
 
     class Config:
         from_attributes = True
@@ -62,7 +61,6 @@ class TemplateCreate(BaseModel):
     name:        str
     description: Optional[str] = None
     etl_sql:     str
-    project_id:  Optional[int] = None
     tool_id:     Optional[int] = None
 
 
@@ -73,7 +71,6 @@ class TemplateResponse(BaseModel):
     description: Optional[str]
     etl_sql:     str
     created_at:  Optional[datetime]
-    project_id:  Optional[int] = None
     tool_id:     Optional[int] = None
 
     class Config:
@@ -168,7 +165,7 @@ class CellFlagToggleRequest(BaseModel):
 # HELPER — adatta il dict _tools al formato ToolResponse
 # ============================================================
 
-def _tool_to_response(tool: dict, project_id: int = None) -> dict:
+def _tool_to_response(tool: dict) -> dict:
     config = {}
     if tool.get("query_config"):
         try:
@@ -183,7 +180,6 @@ def _tool_to_response(tool: dict, project_id: int = None) -> dict:
         "current_rev": tool.get("rev", "A"),
         "note":        tool.get("note"),
         "icon":        tool.get("icon", "📄"),
-        "project_id":  project_id,
         "is_stale":    bool(tool.get("is_stale", 0)),
         "has_etl":     bool(config.get("etl_sql", "").strip()),
     }
@@ -200,8 +196,7 @@ def get_tool_types():
 
 @router.get("/templates", response_model=list[TemplateResponse])
 def list_templates(
-    type_slug:  Optional[str] = Query(None),
-    project_id: Optional[int] = Query(None),
+    type_slug: Optional[str] = Query(None),
     conn: sqlite3.Connection = Depends(get_project_conn),
 ):
     return service.get_templates(conn, type_slug)
@@ -210,7 +205,6 @@ def list_templates(
 @router.post("/templates", response_model=TemplateResponse)
 def create_template(
     data: TemplateCreate,
-    project_id: Optional[int] = Query(None),
     conn: sqlite3.Connection = Depends(get_project_conn),
 ):
     return service.create_template(
@@ -225,7 +219,6 @@ def create_template(
 @router.delete("/templates/{template_id}")
 def delete_template(
     template_id: int,
-    project_id: Optional[int] = Query(None),
     conn: sqlite3.Connection = Depends(get_project_conn),
 ):
     service.delete_template(conn, template_id)
@@ -237,10 +230,7 @@ def delete_template(
 # ============================================================
 
 @router.get("/flags")
-def list_flags(
-    project_id: Optional[int] = Query(None),
-    conn: sqlite3.Connection = Depends(get_project_conn),
-):
+def list_flags(conn: sqlite3.Connection = Depends(get_project_conn)):
     rows = conn.execute(
         "SELECT id, name, color, is_system FROM _flags ORDER BY is_system ASC, name ASC"
     ).fetchall()
@@ -250,7 +240,6 @@ def list_flags(
 @router.post("/flags", status_code=201)
 def create_flag(
     data: FlagCreate,
-    project_id: Optional[int] = Query(None),
     conn: sqlite3.Connection = Depends(get_project_conn),
 ):
     from fastapi import HTTPException as _HTTP
@@ -272,7 +261,6 @@ def create_flag(
 def update_flag(
     flag_id: int,
     data: FlagUpdate,
-    project_id: Optional[int] = Query(None),
     conn: sqlite3.Connection = Depends(get_project_conn),
 ):
     from fastapi import HTTPException as _HTTP
@@ -299,7 +287,6 @@ def update_flag(
 @router.delete("/flags/{flag_id}", status_code=204)
 def delete_flag(
     flag_id: int,
-    project_id: Optional[int] = Query(None),
     conn: sqlite3.Connection = Depends(get_project_conn),
 ):
     from fastapi import HTTPException as _HTTP
@@ -316,10 +303,9 @@ def delete_flag(
 
 @router.post("/{tool_id}/cell-flags/toggle", status_code=200)
 def toggle_cell_flags(
-    tool_id:    int,
-    project_id: int = Query(...),
-    data:       CellFlagToggleRequest = ...,
-    conn:       sqlite3.Connection = Depends(get_project_conn),
+    tool_id: int,
+    data:    CellFlagToggleRequest = ...,
+    conn:    sqlite3.Connection = Depends(get_project_conn),
 ):
     from fastapi import HTTPException as _HTTP
     tool      = service.get_tool(conn, tool_id)
@@ -369,18 +355,14 @@ def toggle_cell_flags(
 # TOOL
 # ============================================================
 
-@router.get("/project/{project_id}")
-def list_tools(
-    project_id: int,
-    conn: sqlite3.Connection = Depends(get_project_conn)
-):
+@router.get("/project")
+def list_tools(conn: sqlite3.Connection = Depends(get_project_conn)):
     tools = service.get_tools_for_project(conn)
-    return [_tool_to_response(t, project_id) for t in tools]
+    return [_tool_to_response(t) for t in tools]
 
 
-@router.post("/project/{project_id}")
+@router.post("/project")
 def create_tool(
-    project_id: int,
     data: ToolCreate,
     conn: sqlite3.Connection = Depends(get_project_conn),
 ):
@@ -394,35 +376,31 @@ def create_tool(
         default_columns=data.default_columns,
         etl_sql=data.etl_sql
     )
-    return _tool_to_response(tool, project_id)
+    return _tool_to_response(tool)
 
 
 @router.get("/{tool_id}")
 def get_tool(
     tool_id: int,
-    project_id: int = Query(...),
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
     tool = service.get_tool(conn, tool_id)
-    return _tool_to_response(tool, project_id)
+    return _tool_to_response(tool)
 
 
 @router.patch("/{tool_id}/settings")
 def update_tool_settings(
     tool_id: int,
-    project_id: int = Query(...),
     data: ToolSettingsUpdate = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
     payload = data.model_dump(exclude_unset=True)
-    # alias current_rev → rev
     if "current_rev" in payload and "rev" not in payload:
         payload["rev"] = payload.pop("current_rev")
     elif "current_rev" in payload:
         payload.pop("current_rev")
-
     tool = service.update_tool_settings(conn, tool_id, payload)
-    return _tool_to_response(tool, project_id)
+    return _tool_to_response(tool)
 
 
 # ============================================================
@@ -432,7 +410,6 @@ def update_tool_settings(
 @router.get("/{tool_id}/columns")
 def list_columns(
     tool_id: int,
-    project_id: int = Query(...),
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
     return service.get_columns(conn, tool_id)
@@ -441,7 +418,6 @@ def list_columns(
 @router.post("/{tool_id}/columns")
 def add_column(
     tool_id: int,
-    project_id: int = Query(...),
     data: ColumnCreate = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
@@ -459,7 +435,6 @@ def add_column(
 @router.put("/{tool_id}/columns/reorder")
 def reorder_columns(
     tool_id: int,
-    project_id: int = Query(...),
     data: ColumnReorder = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
@@ -470,7 +445,6 @@ def reorder_columns(
 def update_column(
     tool_id: int,
     column_id: int,
-    project_id: int = Query(...),
     data: ColumnUpdate = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
@@ -483,7 +457,6 @@ def update_column(
 def delete_column(
     tool_id: int,
     column_id: int,
-    project_id: int = Query(...),
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
     return service.delete_column(conn, tool_id, column_id)
@@ -494,7 +467,6 @@ def update_column_width(
     tool_id: int,
     column_id: int,
     data: ColumnWidthUpdate,
-    project_id: int = Query(...),
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
     return service.update_column_width(conn, tool_id, column_id, data.width)
@@ -507,64 +479,56 @@ def update_column_width(
 @router.get("/{tool_id}/rows")
 def list_rows(
     tool_id: int,
-    project_id: int = Query(...),
     include_deleted: bool = Query(False),
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.get_rows(conn, tool_id, project_id, include_deleted)
+    return service.get_rows(conn, tool_id, None, include_deleted)
 
 
 @router.post("/{tool_id}/rows")
 def create_row(
     tool_id: int,
-    project_id: int = Query(...),
     data: RowCreate = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.create_row(conn, tool_id, project_id, data.cells)
+    return service.create_row(conn, tool_id, None, data.cells)
 
 
 @router.post("/{tool_id}/rows/paste")
 def paste_rows(
     tool_id: int,
-    project_id: int = Query(...),
     data: PasteData = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.paste_rows(conn, tool_id, project_id, data.rows)
+    return service.paste_rows(conn, tool_id, None, data.rows)
 
 
 @router.patch("/{tool_id}/rows/{row_id}/cell")
 def update_cell(
     tool_id: int,
     row_id: int,
-    project_id: int = Query(...),
     data: CellUpdate = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.update_cell(
-        conn, tool_id, row_id, project_id, data.slug, data.value
-    )
+    return service.update_cell(conn, tool_id, row_id, None, data.slug, data.value)
 
 
 @router.post("/{tool_id}/rows/{row_id}/delete")
 def soft_delete_row(
     tool_id: int,
     row_id: int,
-    project_id: int = Query(...),
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.soft_delete_row(conn, tool_id, row_id, project_id)
+    return service.soft_delete_row(conn, tool_id, row_id, None)
 
 
-@router.post("/{tool_id}/rows/{row_id}/restore")
+@router.post("/{tool_id}/rows/{trash_id}/restore")
 def restore_row(
     tool_id: int,
-    row_id: int,
-    project_id: int = Query(...),
+    trash_id: int,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.restore_row(conn, tool_id, row_id, project_id)
+    return service.restore_row(conn, tool_id, trash_id, None)
 
 
 @router.delete("/{tool_id}/rows/{row_id}/override")
@@ -572,17 +536,15 @@ def remove_override(
     tool_id: int,
     row_id: int,
     col: str = Query(...),
-    project_id: int = Query(...),
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.remove_override(conn, tool_id, row_id, col, project_id)
+    return service.remove_override(conn, tool_id, row_id, col, None)
 
 
 @router.post("/{tool_id}/rows/{row_id}/keep")
 def keep_row(
     tool_id: int,
     row_id: int,
-    project_id: int = Query(...),
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
     from fastapi import HTTPException as _HTTP
@@ -606,9 +568,8 @@ def keep_row(
 
 @router.get("/{tool_id}/audit")
 def get_audit_log(
-    tool_id:   int,
-    project_id: int = Query(...),
-    row_tag:   Optional[str] = Query(None),
+    tool_id:  int,
+    row_tag:  Optional[str] = Query(None),
     row_tags:  Optional[str] = Query(None),
     col_slug:  Optional[str] = Query(None),
     col_slugs: Optional[str] = Query(None),
@@ -621,7 +582,7 @@ def get_audit_log(
     params: list = [tool_slug]
 
     all_tags = [t.strip() for t in (row_tags or "").split(",") if t.strip()]
-    if row_tag:
+    if row_tag is not None:
         all_tags.append(row_tag)
     if all_tags:
         ph = ",".join("?" * len(all_tags))
@@ -649,24 +610,22 @@ def get_audit_log(
 
 @router.post("/{tool_id}/rows/{row_id}/rollback")
 def rollback_cell(
-    tool_id:    int,
-    row_id:     int,
-    col:        str = Query(...),
-    entry_id:   int = Query(...),
-    project_id: int = Query(...),
-    conn:       sqlite3.Connection = Depends(get_project_conn),
+    tool_id:  int,
+    row_id:   int,
+    col:      str = Query(...),
+    entry_id: int = Query(...),
+    conn:     sqlite3.Connection = Depends(get_project_conn),
 ):
-    return service.rollback_cell(conn, tool_id, row_id, project_id, col, entry_id)
+    return service.rollback_cell(conn, tool_id, row_id, None, col, entry_id)
 
 
 @router.post("/{tool_id}/rows/{row_id}/hard-delete")
 def hard_delete_row(
     tool_id: int,
-    row_id: int,
-    project_id: int = Query(...),
-    conn: sqlite3.Connection = Depends(get_project_conn)
+    row_id:  int,
+    conn:    sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.hard_delete_row(conn, tool_id, row_id, project_id)
+    return service.hard_delete_row(conn, tool_id, row_id, None)
 
 
 # ============================================================
@@ -676,7 +635,6 @@ def hard_delete_row(
 @router.post("/{tool_id}/sql")
 def run_sql(
     tool_id: int,
-    project_id: int = Query(...),
     data: SqlQuery = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
@@ -710,7 +668,6 @@ def run_sql(
 @router.get("/{tool_id}/export/excel")
 def export_excel(
     tool_id: int,
-    project_id: int = Query(...),
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
     import openpyxl
@@ -782,7 +739,6 @@ def export_excel(
 @router.post("/{tool_id}/etl/compile")
 def etl_compile(
     tool_id: int,
-    project_id: int = Query(...),
     data: EtlModelBody = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
@@ -798,7 +754,6 @@ def etl_compile(
 @router.post("/{tool_id}/etl/preview")
 def etl_preview(
     tool_id: int,
-    project_id: int = Query(...),
     data: EtlModelBody = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
@@ -809,7 +764,6 @@ def etl_preview(
 @router.post("/{tool_id}/etl/apply")
 def etl_apply(
     tool_id: int,
-    project_id: int = Query(...),
     data: EtlModelBody = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
@@ -820,7 +774,6 @@ def etl_apply(
 @router.post("/{tool_id}/etl/run")
 def etl_run(
     tool_id: int,
-    project_id: int = Query(...),
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
     from engine.etl import etl_run_saved
@@ -830,7 +783,6 @@ def etl_run(
 @router.post("/{tool_id}/etl/save")
 def etl_save(
     tool_id: int,
-    project_id: int = Query(...),
     data: EtlModelBody = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
@@ -841,7 +793,6 @@ def etl_save(
 @router.get("/{tool_id}/etl/config")
 def etl_config(
     tool_id: int,
-    project_id: int = Query(...),
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
     from engine.etl import get_etl_config
@@ -851,7 +802,6 @@ def etl_config(
 @router.patch("/{tool_id}/etl/config")
 def etl_save_draft(
     tool_id: int,
-    project_id: int = Query(...),
     data: EtlModelBody = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
@@ -862,7 +812,6 @@ def etl_save_draft(
 @router.post("/{tool_id}/etl/sql_to_model")
 def etl_sql_to_model(
     tool_id: int,
-    project_id: int = Query(...),
     data: EtlSqlImportBody = ...,
 ):
     from engine.sql_to_model import sql_to_model
@@ -877,7 +826,6 @@ def etl_sql_to_model(
 @router.get("/{tool_id}/etl/schema")
 def etl_schema(
     tool_id: int,
-    project_id: int = Query(...),
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
     from engine.etl import get_etl_schema

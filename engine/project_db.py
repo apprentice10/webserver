@@ -8,13 +8,19 @@ Le tabelle di sistema sono prefissate con _ (underscore).
 Le tabelle dei tool sono flat tables con nome = slug del tool.
 """
 
+import shutil
 import sqlite3
 import json
 from pathlib import Path
 from typing import Generator, TYPE_CHECKING
 from fastapi import HTTPException, Depends, Request
 
-DATA_DIR = Path("data")
+DATA_DIR    = Path("data")
+BACKUPS_DIR = DATA_DIR / "backups"
+
+# Bump this whenever DDL_SYSTEM_TABLES or any system table structure changes.
+# See engine/project_db.py.md for the full rule.
+SCHEMA_VERSION = 1
 
 SYSTEM_COLUMNS = {"tag", "rev", "log"}
 INTERNAL_PREFIX = "__"
@@ -130,15 +136,25 @@ def create_project_db(db_path: Path) -> None:
     conn = sqlite3.connect(str(db_path))
     conn.executescript(DDL_SYSTEM_TABLES)
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     conn.commit()
     conn.close()
 
 
 # ============================================================
-# CONNESSIONE
+# MIGRATIONS
 # ============================================================
 
-def _migrate_project_db(conn: sqlite3.Connection) -> None:
+def _backup_pre_migration(db_path: Path, from_version: int) -> None:
+    """Safety copy to BACKUPS_DIR before migrating. Skipped if backup already exists."""
+    BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
+    backup_path = BACKUPS_DIR / f"{db_path.stem}_pre_migration_v{from_version}.db"
+    if not backup_path.exists():
+        shutil.copy2(db_path, backup_path)
+
+
+def _migrate_to_v1(conn: sqlite3.Connection) -> None:
+    """Absorbs all pre-versioning ad-hoc schema checks into a single formal step."""
     tools_cols = {row[1] for row in conn.execute("PRAGMA table_info(_tools)").fetchall()}
     if "is_stale" not in tools_cols:
         conn.execute("ALTER TABLE _tools ADD COLUMN is_stale INTEGER DEFAULT 0")
@@ -152,61 +168,83 @@ def _migrate_project_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE _overrides ADD COLUMN etl_value TEXT")
 
     audit_cols = {row[1] for row in conn.execute("PRAGMA table_info(_audit)").fetchall()}
-    for col_def in [
+    for col_name, col_type in [
         ("change_type", "TEXT"),
         ("col_slug",    "TEXT"),
         ("revision",    "TEXT"),
         ("changed_by",  "TEXT"),
     ]:
-        if col_def[0] not in audit_cols:
-            conn.execute(f"ALTER TABLE _audit ADD COLUMN {col_def[0]} {col_def[1]}")
+        if col_name not in audit_cols:
+            conn.execute(f"ALTER TABLE _audit ADD COLUMN {col_name} {col_type}")
 
-    existing_tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-    if "_project" not in existing_tables:
+    existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "_project" not in existing:
         conn.execute("""CREATE TABLE _project (
             id INTEGER PRIMARY KEY, name TEXT NOT NULL, client TEXT NOT NULL DEFAULT '',
             description TEXT NOT NULL DEFAULT '', created_at TEXT DEFAULT (datetime('now')),
             updated_at TEXT DEFAULT (datetime('now')))""")
-    if "_templates" not in existing_tables:
+    if "_templates" not in existing:
         conn.execute("""CREATE TABLE _templates (
             id INTEGER PRIMARY KEY AUTOINCREMENT, type_slug TEXT NOT NULL,
             name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
-            etl_sql TEXT NOT NULL DEFAULT '',
-            created_at TEXT DEFAULT (datetime('now')))""")
-
-    if "_flags" not in existing_tables:
+            etl_sql TEXT NOT NULL DEFAULT '', created_at TEXT DEFAULT (datetime('now')))""")
+    if "_flags" not in existing:
         conn.execute("""CREATE TABLE _flags (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            color TEXT NOT NULL DEFAULT '#888888',
-            is_system INTEGER NOT NULL DEFAULT 0)""")
-
-    if "_cell_flags" not in existing_tables:
+            id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL,
+            color TEXT NOT NULL DEFAULT '#888888', is_system INTEGER NOT NULL DEFAULT 0)""")
+    if "_cell_flags" not in existing:
         conn.execute("""CREATE TABLE _cell_flags (
-            tool_slug TEXT NOT NULL,
-            row_tag   TEXT NOT NULL,
-            col_slug  TEXT NOT NULL DEFAULT '',
-            flag_id   INTEGER NOT NULL REFERENCES _flags(id) ON DELETE CASCADE,
+            tool_slug TEXT NOT NULL, row_tag TEXT NOT NULL, col_slug TEXT NOT NULL DEFAULT '',
+            flag_id INTEGER NOT NULL REFERENCES _flags(id) ON DELETE CASCADE,
             PRIMARY KEY (tool_slug, row_tag, col_slug, flag_id))""")
 
-    # Idempotent seed: system flags must always exist
-    conn.execute("""
-        INSERT OR IGNORE INTO _flags (name, color, is_system) VALUES
-            ('manual_edit',     '#FF8C00', 1),
-            ('ETL: Eliminated', '#DC143C', 1)
-    """)
+    conn.execute("""INSERT OR IGNORE INTO _flags (name, color, is_system) VALUES
+        ('manual_edit', '#FF8C00', 1), ('ETL: Eliminated', '#DC143C', 1)""")
 
-    conn.commit()
+    for (tbl,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall():
+        if tbl.startswith("_"):
+            continue
+        cols = {r[1] for r in conn.execute(f'PRAGMA table_info("{tbl}")')}
+        if "__position" in cols:
+            conn.execute(f'CREATE INDEX IF NOT EXISTS "idx_{tbl}_pos" ON "{tbl}" (__position)')
 
+
+_MIGRATIONS: dict = {1: _migrate_to_v1}
+
+
+def _run_migrations(conn: sqlite3.Connection, db_path: Path) -> None:
+    """Runs all pending migrations in version order. Takes a backup before first migration."""
+    current = conn.execute("PRAGMA user_version").fetchone()[0]
+    if current >= SCHEMA_VERSION:
+        return
+    _backup_pre_migration(db_path, current)
+    for version in range(current + 1, SCHEMA_VERSION + 1):
+        try:
+            _MIGRATIONS[version](conn)
+            conn.execute(f"PRAGMA user_version = {version}")
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            raise RuntimeError(
+                f"Migration to schema v{version} failed. "
+                f"Pre-migration backup saved to {BACKUPS_DIR}. Error: {exc}"
+            ) from exc
+
+
+# ============================================================
+# CONNESSIONE
+# ============================================================
 
 def open_project_db(db_path: Path) -> sqlite3.Connection:
     if not db_path.exists():
-        raise HTTPException(status_code=404, detail=f"File DB progetto non trovato: {db_path.name}")
+        raise HTTPException(status_code=404, detail=f"Project DB not found: {db_path.name}")
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
-    _migrate_project_db(conn)
+    db_version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if db_version <= SCHEMA_VERSION:
+        _run_migrations(conn, db_path)
     return conn
 
 
@@ -217,23 +255,18 @@ def open_project_db(db_path: Path) -> sqlite3.Connection:
 def get_project_conn(
     request: "Request",
 ) -> Generator[sqlite3.Connection, None, None]:
-    from engine.project_index import get_db_path
-
-    # project_id può venire dal path (/project/{project_id}) o dal query string
-    pid_raw = (
-        request.path_params.get("project_id")
-        or request.query_params.get("project_id")
-    )
-    if not pid_raw:
-        raise HTTPException(status_code=400, detail="project_id richiesto")
-    try:
-        project_id = int(pid_raw)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="project_id non valido")
-
-    db_path = get_db_path(project_id)
+    db_raw = request.query_params.get("db")
+    if not db_raw:
+        raise HTTPException(status_code=400, detail="db path required")
+    db_path = Path(db_raw)
     conn = open_project_db(db_path)
     try:
+        db_version = conn.execute("PRAGMA user_version").fetchone()[0]
+        if db_version > SCHEMA_VERSION and request.method != "GET":
+            raise HTTPException(
+                status_code=403,
+                detail=f"Project schema v{db_version} is newer than this server (supports up to v{SCHEMA_VERSION}). Project is read-only.",
+            )
         yield conn
     finally:
         conn.close()
@@ -254,6 +287,7 @@ def create_tool_table(conn: sqlite3.Connection, slug: str) -> None:
             rev          TEXT DEFAULT 'A'
         )
     """)
+    conn.execute(f'CREATE INDEX IF NOT EXISTS "idx_{slug}_pos" ON "{slug}" (__position)')
 
 
 def add_column_to_table(conn: sqlite3.Connection, slug: str, col_slug: str) -> None:

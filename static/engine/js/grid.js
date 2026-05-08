@@ -36,6 +36,7 @@ const GridManager = (() => {
     let _isAdditive    = false; // true when Ctrl is held (ranges accumulate)
     let _ctxFlagsCache = null;  // [{id,name,color}] — non-system flags; null = reload on next submenu open
     let _logSidebarCtx = null;  // {rowId, colSlug} — last LOG sidebar context for refresh after rollback
+    let _rafPending    = false; // virtual scroll: RAF throttle flag
 
 
     // --------------------------------------------------------
@@ -49,6 +50,7 @@ const GridManager = (() => {
 
             _rows = await ApiClient.loadRows(true); // Carica tutto inclusi deleted
             _applyFilters();
+            _initVirtualScroll();
             render();
 
             PasteManager.init();
@@ -68,11 +70,15 @@ const GridManager = (() => {
     // RENDERING
     // --------------------------------------------------------
 
+    const OVERSCAN = 10;
+
+    function _getRowHeight() {
+        return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--row-h')) + 1;
+    }
+
     function render() {
-        _clearRange();
         const tbody   = document.getElementById("grid-body");
         const columns = ColumnsManager.getColumns();
-
         let html = "";
 
         if (_filteredRows.length === 0 && _rows.filter(r => !r.is_deleted).length === 0) {
@@ -81,15 +87,41 @@ const GridManager = (() => {
                             Nessuna riga. Inizia a digitare nella riga vuota qui sotto.
                         </td>
                     </tr>`;
-        } else {
-            html = _filteredRows.map((row, i) => _renderRow(row, columns, i)).join("");
+            html += _renderGhostRow(columns);
+            tbody.innerHTML = html;
+            _attachListeners();
+            _updateRangeHighlight();
+            return;
         }
 
-        // Ghost row sempre in fondo
+        const container = document.getElementById('grid-scroll-container');
+        const scrollTop = container ? container.scrollTop : 0;
+        const viewH     = container ? container.clientHeight : window.innerHeight;
+        const rowH      = _getRowHeight();
+        const colSpan   = columns.length + 1;
+
+        const firstVis = Math.floor(scrollTop / rowH);
+        const lastVis  = Math.ceil((scrollTop + viewH) / rowH);
+        const start    = Math.max(0, firstVis - OVERSCAN);
+        const end      = Math.min(_filteredRows.length - 1, lastVis + OVERSCAN);
+
+        const topPad    = start * rowH;
+        const bottomPad = Math.max(0, (_filteredRows.length - 1 - end) * rowH);
+
+        if (topPad > 0) {
+            html += `<tr class="vs-spacer" style="height:${topPad}px"><td colspan="${colSpan}"></td></tr>`;
+        }
+        for (let i = start; i <= end; i++) {
+            html += _renderRow(_filteredRows[i], columns, i);
+        }
+        if (bottomPad > 0) {
+            html += `<tr class="vs-spacer" style="height:${bottomPad}px"><td colspan="${colSpan}"></td></tr>`;
+        }
         html += _renderGhostRow(columns);
 
         tbody.innerHTML = html;
         _attachListeners();
+        _updateRangeHighlight();
     }
 
     function _flagBadgesHtml(flags, overrideEtlValue) {
@@ -217,6 +249,43 @@ const GridManager = (() => {
         if (!rowLog) return '<span style="opacity:0.3">—</span>';
         const first = rowLog.split("\n")[0];
         return _escHtml(first);
+    }
+
+    function _initVirtualScroll() {
+        const container = document.getElementById('grid-scroll-container');
+        if (!container) return;
+        container.addEventListener('scroll', () => {
+            if (_rafPending) return;
+            _rafPending = true;
+            requestAnimationFrame(() => { _rafPending = false; render(); });
+        });
+        // Re-render when density changes (--row-h updates)
+        new MutationObserver(() => render())
+            .observe(document.documentElement, { attributes: true, attributeFilter: ['data-density'] });
+    }
+
+    // Scrolls rowIdx into view if needed, then forces a render if the row is not yet in the DOM.
+    function _scrollRowIntoView(rowIdx) {
+        const container = document.getElementById('grid-scroll-container');
+        if (!container) return;
+        const rowH    = _getRowHeight();
+        const headerH = document.querySelector('#data-grid thead')?.offsetHeight || rowH;
+        const rowTop  = rowIdx * rowH;
+        const rowBot  = rowTop + rowH;
+        const viewTop = container.scrollTop + headerH;
+        const viewBot = container.scrollTop + container.clientHeight;
+
+        if (rowTop < viewTop) {
+            container.scrollTop = Math.max(0, rowTop - headerH);
+        } else if (rowBot > viewBot) {
+            container.scrollTop = rowBot - container.clientHeight + rowH;
+        }
+
+        // Only re-render if the target row is not yet in the DOM
+        const targetRow = _filteredRows[rowIdx];
+        if (targetRow && !document.querySelector(`input[data-row-id="${targetRow.id}"]`)) {
+            render();
+        }
     }
 
 
@@ -380,24 +449,53 @@ const GridManager = (() => {
      * Sposta il focus a una cella adiacente.
      * dCol: -1 = sinistra, +1 = destra
      * dRow: -1 = su, +1 = giù
+     * Uses absolute row/col indices so it works across the virtual scroll window.
      */
     function _moveFocus(currentInput, dCol, dRow) {
-        const allInputs = Array.from(
-            document.querySelectorAll(".cell-input[data-editable]")
-        );
-        const idx = allInputs.indexOf(currentInput);
-        if (idx === -1) return;
+        const td = currentInput.closest('td[data-row-idx]');
 
-        // Calcola posizione nella griglia
-        const columns = ColumnsManager.getColumns()
-            .filter(c => c.slug !== "log" && c.slug !== "rev");
-        const colCount = columns.length;
-
-        const newIdx = idx + dCol + dRow * colCount;
-        if (newIdx >= 0 && newIdx < allInputs.length) {
-            allInputs[newIdx].focus();
-            allInputs[newIdx].select();
+        if (!td) {
+            // Ghost row fallback: ArrowUp moves to last data row
+            if (dRow < 0 && _filteredRows.length > 0) {
+                const lastIdx = _filteredRows.length - 1;
+                const editableCols = ColumnsManager.getColumns().filter(c => c.slug !== 'log' && c.slug !== 'rev');
+                if (!editableCols.length) return;
+                _scrollRowIntoView(lastIdx);
+                const target = _filteredRows[lastIdx];
+                requestAnimationFrame(() => {
+                    const input = document.querySelector(`input[data-row-id="${target.id}"][data-field="${editableCols[0].slug}"]`);
+                    if (input) { input.focus(); input.select(); }
+                });
+            }
+            return;
         }
+
+        const editableCols = ColumnsManager.getColumns().filter(c => c.slug !== 'log' && c.slug !== 'rev');
+        const field      = currentInput.dataset.field;
+        const curColIdx  = editableCols.findIndex(c => c.slug === field);
+        if (curColIdx === -1) return;
+
+        const curRowIdx = +td.dataset.rowIdx;
+        const newRowIdx = curRowIdx + dRow;
+        const newColIdx = curColIdx + dCol;
+
+        if (newColIdx < 0 || newColIdx >= editableCols.length) return;
+
+        // Past last row → move to ghost row
+        if (newRowIdx >= _filteredRows.length) {
+            const ghost = document.querySelector(`[data-ghost][data-field="${editableCols[newColIdx].slug}"]`);
+            if (ghost) ghost.focus();
+            return;
+        }
+        if (newRowIdx < 0) return;
+
+        _scrollRowIntoView(newRowIdx);
+        const targetRow = _filteredRows[newRowIdx];
+        const targetCol = editableCols[newColIdx];
+        requestAnimationFrame(() => {
+            const input = document.querySelector(`input[data-row-id="${targetRow.id}"][data-field="${targetCol.slug}"]`);
+            if (input) { input.focus(); input.select(); }
+        });
     }
 
 
@@ -639,33 +737,29 @@ const GridManager = (() => {
         try {
             const newRow = await ApiClient.createRow({ tag });
 
-            // Appende in fondo — non in cima
             _rows.push(newRow);
             _applyFilters();
+
+            // Scroll to the new row before render so it lands in the virtual window
+            const newIndex = _filteredRows.findIndex(r => r.id === newRow.id);
+            if (newIndex >= 0) {
+                const container = document.getElementById('grid-scroll-container');
+                if (container) container.scrollTop = newIndex * _getRowHeight();
+            }
             render();
 
-            // Focus sulla nuova riga — seconda cella editabile
+            // Focus the first editable cell of the new row
             setTimeout(() => {
-                const newRowEl = document.querySelector(
-                    `tr[data-row-id="${newRow.id}"]`
-                );
+                const newRowEl = document.querySelector(`tr[data-row-id="${newRow.id}"]`);
                 if (newRowEl) {
-                    const inputs = newRowEl.querySelectorAll(
-                        ".cell-input:not([readonly])"
-                    );
-                    if (inputs[1]) {
-                        inputs[1].focus();
-                    } else if (inputs[0]) {
-                        inputs[0].focus();
-                    }
+                    const input = newRowEl.querySelector('.cell-input[data-editable]');
+                    if (input) { input.focus(); input.select(); }
                 }
-            }, 50);
+            }, 0);
 
         } catch (err) {
             showToast(err.message, "error");
-            const ghostTag = document.querySelector(
-                "[data-ghost][data-field='tag']"
-            );
+            const ghostTag = document.querySelector("[data-ghost][data-field='tag']");
             if (ghostTag) ghostTag.value = "";
         }
     }
@@ -873,7 +967,6 @@ const GridManager = (() => {
             if (action === "hard-delete")     await hardDeleteRow(rowId);
             if (action === "keep-row")        await keepRow(rowId);
             if (action === "remove-override") await removeOverride(rowId, colSlug);
-            if (action === "log")             showRowLog(rowId);
             if (action === "cell-log") {
                 const cells = _getSelectedCells();
                 if (cells.length > 0) {
@@ -1124,6 +1217,7 @@ const GridManager = (() => {
             html += `<div class="sidebar-log-actions"><button class="btn-icon btn-log-export" onclick="GridManager.exportLog()">Export history</button></div>`;
             SidebarManager.setContent(html);
             _bindRollbackButtons();
+            document.dispatchEvent(new CustomEvent('grid:historyRendered'));
         } catch (e) {
             SidebarManager.setContent('<p class="sidebar-log-empty">Error loading log.</p>');
         }
@@ -1161,6 +1255,7 @@ const GridManager = (() => {
                 : '';
             SidebarManager.setContent(headerHtml + bodyHtml + actionsHtml);
             _bindRollbackButtons();
+            document.dispatchEvent(new CustomEvent('grid:historyRendered'));
         } catch (e) {
             SidebarManager.setContent('<p class="sidebar-log-empty">Error loading log.</p>');
         }
@@ -1308,23 +1403,10 @@ const GridManager = (() => {
     }
 
     async function _rollbackCell(rowId, colSlug, entryId) {
-        if (!confirm('Restore cell to this audit entry value?')) return;
         try {
             const updated = await ApiClient.rollbackCell(rowId, colSlug, entryId);
-            const idx  = _rows.findIndex(r => r.id === rowId);
-            if (idx  !== -1) _rows[idx]  = updated;
-            const fidx = _filteredRows.findIndex(r => r.id === rowId);
-            if (fidx !== -1) _filteredRows[fidx] = updated;
-            _updateLogCell(rowId, updated.row_log);
-
-            const columns = ColumnsManager.getColumns();
-            const rowEl   = document.querySelector(`tr[data-row-id="${rowId}"]`);
-            if (rowEl) {
-                const rowIdx = _filteredRows.findIndex(r => r.id === rowId);
-                rowEl.outerHTML = _renderRow(updated, columns, rowIdx);
-            }
+            refreshRowDOM(rowId, updated);
             showToast('Value restored', 'success');
-            // Refresh sidebar
             showCellLog(rowId, colSlug);
         } catch (e) {
             showToast(e.message || 'Rollback failed', 'error');
@@ -1406,6 +1488,26 @@ const GridManager = (() => {
      */
     function getRowById(rowId) {
         return _rows.find(r => r.id === rowId) || null;
+    }
+
+    function getRowByTag(tag) {
+        return _rows.find(r => r.tag === tag) || null;
+    }
+
+    function refreshRowDOM(rowId, updatedRow) {
+        const idx = _rows.findIndex(r => r.id === rowId);
+        if (idx !== -1) _rows[idx] = updatedRow;
+        const fidx = _filteredRows.findIndex(r => r.id === rowId);
+        if (fidx !== -1) _filteredRows[fidx] = updatedRow;
+        _updateLogCell(rowId, updatedRow.row_log);
+        const columns = ColumnsManager.getColumns();
+        const rowEl   = document.querySelector(`tr[data-row-id="${rowId}"]`);
+        if (rowEl) {
+            const rowIdx = _filteredRows.findIndex(r => r.id === rowId);
+            rowEl.outerHTML = _renderRow(updatedRow, columns, rowIdx);
+            _attachListeners();
+            _updateRangeHighlight();
+        }
     }
 
     async function hardDeleteRow(rowId) {
@@ -1539,6 +1641,8 @@ const GridManager = (() => {
         appendRows,
         updateRowData,
         getRowById,
+        getRowByTag,
+        refreshRowDOM,
         softDeleteRow,
         restoreRow,
         hardDeleteRow,

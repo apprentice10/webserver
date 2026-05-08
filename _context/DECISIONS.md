@@ -78,6 +78,30 @@
 
 ---
 
+## D-S1 through D-S8 — Stateless server + local file management
+
+**D-S1 — Project identity is the full `.db` path**: passed as `?db=...` on every API call. No integer IDs, no server registry.
+**D-S2 — Filesystem browser is server-side**: `/api/fs/browse?path=...` returns dirs + `.db` files; `/api/fs/cwd` returns working directory. Last-used path from `localStorage`.
+**D-S3 — Path required on New Project**: no silent default. UI disables Create button until both path and name are filled.
+**D-S4 — Backup naming**: `{project_dir}/{subfolder_name}/{YYYYMMDD_HHMMSS}_{stem}.db`.
+**D-S5 — Client-side backup trigger**: on-open (opt-in toggle) + `setInterval` timer (0 = disabled). Server only executes the backup, never schedules it.
+**D-S6 — Remove from recents = localStorage only; Delete file = API**: `DELETE /api/project?db=...` removes the `.db` from disk.
+**D-S7 — Export endpoint removed**: file is already local; user manages it via OS.
+**D-S8 — `data/projects.db` deleted**: existing `.db` files must be re-opened manually via Open Project.
+**Rejected:** keeping a server-side project list. Would require sync logic between server state and client state, and prevents running the server in read-only mode.
+
+---
+
+## D11 — Virtual scrolling for grid performance (not server-side pagination)
+
+**Decision:** The grid renders only the visible window (~50 rows) into the DOM using fixed-height virtual scrolling. All rows are still fetched in a single API call and held in `_rows`.
+**Rationale:** Column-copy must work on the full column (not just the visible page), client-side search must operate on the full dataset, and ETL operations are server-side. Virtual scrolling satisfies all three with no new endpoints.
+**Constraints:** Row height is fixed (single-line cells, no wrapping). Overscan = 10 rows. Scroll handler throttled with `requestAnimationFrame`. After new-row creation, `scrollTop` is set to `newRowIndex × ROW_HEIGHT` before the DOM focus query.
+**Scale target:** 20,000 rows per tool. JSON payload at that scale (~6–9 MB) is acceptable for localhost; `api.js` `loadRows()` signature is kept clean (`?limit=&offset=` can be added later for LAN/multi-user without touching `grid.js`).
+**Rejected:** Server-side pagination (LIMIT/OFFSET on the row endpoint). Breaks column-copy, client-side search, and ETL preview without significant added complexity.
+
+---
+
 ## D09 — Plugin discovery via `tools/*/tool.json` manifests
 
 **Decision:** Tool types are discovered at startup by scanning `tools/*/tool.json`. `TOOL_CATALOG` in `engine/catalog.py` is built dynamically, not hardcoded.
@@ -85,3 +109,12 @@
 **What is NOT in the manifest:** `SYSTEM_COLUMN_DEFS` (tag/rev/log) — these are engine contracts, not per-plugin. ETL merge logic and `SYSTEM_SLUGS` depend on them being universal.
 **Rejected:** Hardcoded list in catalog.py. Requires code change + redeploy for each new tool type.
 
+---
+
+## D12 — Schema versioning via `PRAGMA user_version` (Group J)
+
+**Decision:** `PRAGMA user_version` stores the schema version integer. `SCHEMA_VERSION` constant in `engine/project_db.py` defines the version the running server produces. Migrations run in `_run_migrations()`, one transaction per version step. Legacy DBs (pre-versioning) have `user_version = 0` and are migrated to v1 on first open.
+**Rationale:** `PRAGMA user_version` is built-in SQLite, zero schema overhead, always readable. A `_schema_version` table would add complexity with no benefit.
+**Newer-DB-than-server:** `get_project_conn` returns HTTP 403 on non-GET requests; `GET /api/project` returns a `schema_warning` string so the frontend can show a banner.
+**Safety:** A file copy is made to `data/backups/<stem>_pre_migration_v<N>.db` before any migration. If the copy fails, migration is aborted. If the migration fails mid-step, the transaction is rolled back; the DB stays at the previous version.
+**Rejected:** Per-table version columns in `_project`; `_schema_version` table. Both add schema overhead without benefit over the built-in pragma.

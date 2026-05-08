@@ -10,8 +10,8 @@ const EtlCanvas = (() => {
 
     // ── State ─────────────────────────────────────────────────────────────
 
-    let _projectId = null;
-    let _toolId    = null;
+    let _dbPath = null;
+    let _toolId = null;
     let _model     = { sources: [], transformations: [], final_relation_id: null };
     let _positions = {};
     let _pan       = { x: 60, y: 60 };
@@ -32,7 +32,10 @@ const EtlCanvas = (() => {
     // ── localStorage ──────────────────────────────────────────────────────
 
     function _posKey() {
-        return `instrumentManager.etlCanvas.${_projectId}.${_toolId}.positions`;
+        let h = 5381;
+        const s = (_dbPath || '') + ':' + (_toolId || '');
+        for (let i = 0; i < s.length; i++) h = (h * 33 ^ s.charCodeAt(i)) >>> 0;
+        return `instrumentManager.etlCanvas.${h.toString(36)}.positions`;
     }
 
     function _loadPositions() {
@@ -343,13 +346,13 @@ const EtlCanvas = (() => {
 
     async function _loadToolInfo() {
         try {
-            const tools = await fetch(`/api/tools/project/${_projectId}`).then(r => r.json());
+            const tools = await fetch(`/api/tools/project?db=${encodeURIComponent(_dbPath)}`).then(r => r.json());
             const tool  = tools.find(t => t.id === _toolId);
             if (tool) {
                 const el = document.getElementById("tool-name");
                 if (el) el.textContent = tool.name || "Tool";
             }
-            const proj = await fetch(`/api/projects/${_projectId}`).then(r => r.json());
+            const proj = await fetch(`/api/project?db=${encodeURIComponent(_dbPath)}`).then(r => r.json());
             const pelEl = document.getElementById("project-name");
             if (pelEl) pelEl.textContent = proj.name || "Project";
         } catch (_) {}
@@ -358,16 +361,16 @@ const EtlCanvas = (() => {
 
     // ── Public API ────────────────────────────────────────────────────────
 
-    async function init(projectId, toolId) {
-        _projectId = projectId;
-        _toolId    = toolId;
+    async function init(dbPath, toolId) {
+        _dbPath = dbPath;
+        _toolId = toolId;
         _loadPositions();
         _initCanvas();
         _loadToolInfo();
 
         try {
             const config = await fetch(
-                `/api/tools/${toolId}/etl/config?project_id=${projectId}`
+                `/api/tools/${toolId}/etl/config?db=${encodeURIComponent(dbPath)}`
             ).then(r => r.json());
             _model = config.etl_model || { sources: [], transformations: [], final_relation_id: null };
         } catch (err) {
@@ -391,7 +394,7 @@ const EtlCanvas = (() => {
         if (btn) btn.disabled = true;
         try {
             const res = await fetch(
-                `/api/tools/${_toolId}/etl/run?project_id=${_projectId}`,
+                `/api/tools/${_toolId}/etl/run?db=${encodeURIComponent(_dbPath)}`,
                 { method: "POST" }
             );
             if (!res.ok) {

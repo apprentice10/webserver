@@ -3,24 +3,23 @@
 
 **Description:** Main grid rendering and interaction: row/cell render, keyboard nav, cell save, soft/hard delete/restore, toggle LOG/REV, context menu, filters, ghost row, range selection, clipboard copy.
 
-## Index (~1490 lines)
+## Index (~1640 lines)
 
 | Lines    | Section |
 |----------|---------|
-| 1–55     | State variables + `init()` |
-| 56–215   | Rendering (`render`, `_flagBadgesHtml`, `_renderRow`, `_renderCell`, `_renderGhostRow`) |
-| 218–305  | Event listeners (`_attachListeners`, `_onCellFocus`, `_onCellBlur`, `_onCellKeydown`, `_onCellDblClick`, `_onCellPaste`) |
-| 301–395  | Keyboard nav (`_moveFocus`) + edit mode (`_enterEditMode`) |
-| 397–574  | Range selection (`_initRangeSelection`, `_onTdMousedown`, `_onTdMouseenter`, `_updateRangeHighlight`, `_clearRange`, `_initColumnHeaderSelection`, `_selectColumn`, `_selectRow`, `_initCopyToClipboard`) |
-| 581–614  | Ghost row (`_onGhostKeydown`, `_onGhostBlur`, `_createFromGhost`) |
-| 620–690  | Cell save (`_doSaveCell`, `_updateLogCell`) |
-| 695–760  | Soft-delete / restore / hard-delete |
-| 722–745  | Override removal (`_doRemoveOverride`, `removeOverride` compat wrapper) |
-| 775–820  | Toggle deleted/LOG/REV + context menu |
-| 820–960  | Filters, search, appendRows, `showRowLog`, `showCellLog` |
-| 960–1100 | Range LOG (`_isSingleCellSelection`, `showRangeLog`), Utility |
-| 1304–1340 | Utility helpers (`_normalizeCellsFromInput`, `updateRowData`, `getRowById`) |
-| 1355–1490 | Flag submenu helpers (`_getSelectedCells`, `_flagCheckState`, `_populateFlagsSubmenu`), public API |
+| 1–65     | State variables + `init()` |
+| 70–290   | Rendering: `OVERSCAN`, `_getRowHeight`, `render` (virtual scroll), `_flagBadgesHtml`, `_renderRow`, `_renderCell`, `_renderGhostRow`, `_formatLogPreview`, `_initVirtualScroll`, `_scrollRowIntoView` |
+| 292–360  | Event listeners (`_attachListeners`, `_onCellFocus`, `_onCellBlur`, `_onCellKeydown`, `_onCellDblClick`, `_onCellPaste`) |
+| 360–510  | Keyboard nav (`_moveFocus` — index-based) + edit mode (`_enterEditMode`) |
+| 510–660  | Range selection (`_initRangeSelection`, `_onTdMousedown`, `_onTdMouseenter`, `_updateRangeHighlight`, `_clearRange`, `_initColumnHeaderSelection`, `_selectColumn`, `_selectRow`, `_initCopyToClipboard`) |
+| 660–760  | Ghost row (`_onGhostKeydown`, `_onGhostBlur`, `_createFromGhost`) |
+| 760–830  | Cell save (`_doSaveCell`, `_updateLogCell`) |
+| 830–900  | Soft-delete / restore / hard-delete / override removal |
+| 900–960  | Toggle deleted/LOG/REV + context menu |
+| 960–1100 | Filters, search, appendRows, `showRowLog`, `showCellLog` |
+| 1100–1280 | Range LOG (`_isSingleCellSelection`, `showRangeLog`), audit helpers, utility |
+| 1280–1420 | Utility helpers (`_normalizeCellsFromInput`, `updateRowData`, `getRowById`) |
+| 1420–1640 | Flag submenu helpers (`_getSelectedCells`, `_flagCheckState`, `_populateFlagsSubmenu`), public API |
 
 ## State variables
 
@@ -39,6 +38,7 @@
 | `_isDragging` | `boolean` | True while mouse button is held during range drag |
 | `_isAdditive` | `boolean` | True when Ctrl was held at mousedown (ranges accumulate) |
 | `_ctxFlagsCache` | `Array\|null` | Non-system flags list cached for the duration of one context menu open; `null` = reload on next hover |
+| `_rafPending`    | `boolean`     | Virtual scroll: true while a `requestAnimationFrame` render is already queued; prevents RAF stacking on fast scroll |
 
 **Row object shape** (`Row`): plain object from API — `{id, tag, is_deleted, row_log, [col_slug]: value, …}`. Access cell value as `row[col.slug]`.
 
@@ -51,6 +51,7 @@ ColumnsManager.loadColumns()
 ColumnsManager.renderHeader()
 ApiClient.loadRows(true)   → _rows
 _applyFilters()            → _filteredRows
+_initVirtualScroll()       → attaches scroll listener + MutationObserver
 render()
 PasteManager.init()
 _initContextMenu()
@@ -121,5 +122,6 @@ Legacy compat wrappers (keep old `(rowId, colSlug)` signature for internal conte
 - **Context menu**: managed entirely in `grid.js`, not a separate module. Right-click on a cell that is **inside** the current `_ranges` selection keeps the range intact (range context menu). Right-click on a cell **outside** any range collapses `_ranges` to that single cell before opening the menu. Right-click on the `row-num` cell (no `data-col-idx`) is treated as outside any range.
 - **Flag submenu**: fly-out submenu on the "🏷 Flags" context menu item. Flags are loaded lazily via `ApiClient.listFlags()` on `mouseenter`, filtered to `is_system=0`, cached in `_ctxFlagsCache` (reset to `null` on each `openContextMenu` and `_closeContextMenu`). Toggle uses `_getSelectedCells()` to collect all cells in `_ranges` (skipping `log`/`rev` columns). Toggle semantics: ALL cells have flag → remove from all; ANY missing → add to missing. Local `_rows` state is patched immediately after the API call (no full reload). `flagsSnap` captures the cache before `_closeContextMenu()` nulls it. Event delegation via the existing `menu.addEventListener("click")` catches dynamically injected `.ctx-flag-item[data-action="toggle-flag"]` items.
 - **Edit mode guard**: `_editingInput !== null` means a cell is in edit mode. Always check this before intercepting keyboard shortcuts to avoid stealing input from the user.
-- **Range selection coordinates**: each data `<td>` has `data-row-idx` (index in `_filteredRows`) and `data-col-idx` (index in `ColumnsManager.getColumns()`). `_ranges` is an array of `{start:{r,c}, end:{r,c}}`. Cleared by `render()`, `_enterEditMode()`, and Escape.
+- **Range selection coordinates**: each data `<td>` has `data-row-idx` (index in `_filteredRows`) and `data-col-idx` (index in `ColumnsManager.getColumns()`). `_ranges` is an array of `{start:{r,c}, end:{r,c}}`. Cleared by `_enterEditMode()` and Escape. `render()` does NOT clear `_ranges` — it preserves them across virtual scroll repaints and calls `_updateRangeHighlight()` at the end to re-apply CSS to the newly rendered DOM.
+- **Virtual scrolling**: `render()` computes a visible window (`scrollTop / rowH ± OVERSCAN`) and renders only that slice of `_filteredRows` between two spacer `<tr class="vs-spacer">` rows. All data remains in `_rows` / `_filteredRows`. Column copy reads `_filteredRows` directly, unaffected. `_moveFocus()` uses `data-row-idx` from `<td>` (absolute index) and calls `_scrollRowIntoView(rowIdx)` to bring out-of-viewport rows into the DOM before focusing. `_createFromGhost` sets `container.scrollTop` to the new row's position before `render()` so the row is always in the rendered window.
 - **Ctrl+C copy**: `_initCopyToClipboard()` intercepts `Ctrl+C`/`Cmd+C` on `document` when `_ranges` is non-empty and `_editingInput` is null. Computes the bounding box across all ranges, builds a tab-separated string (rows joined by `\n`), writes to clipboard via `navigator.clipboard.writeText()`. Cells in the bounding box but outside any selected range (discontinuous Ctrl+click) are written as empty strings.

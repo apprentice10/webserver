@@ -18,6 +18,18 @@
     overflow: auto;
 }
 
+/* Virtual scroll spacer rows — no border, no hover, no padding */
+.data-grid tbody tr.vs-spacer,
+.data-grid tbody tr.vs-spacer:hover {
+    background: transparent;
+    border: none;
+}
+.data-grid tbody tr.vs-spacer td {
+    padding: 0;
+    border: none;
+    height: inherit;
+}
+
 .data-grid {
     border-collapse: collapse;
     font-size: 13px;

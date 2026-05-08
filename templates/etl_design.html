@@ -42,8 +42,8 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>const PROJECT_ID = {{ project_id }};</script>
+<script>const DB_PATH = {{ db | tojson }};</script>
 <script src="/static/engine/js/utils.js"></script>
 <script src="/static/engine/js/etl_design.js"></script>
-<script>EtlDesign.init(PROJECT_ID);</script>
+<script>EtlDesign.init(DB_PATH);</script>
 {% endblock %}
