@@ -1,6 +1,6 @@
 # CURRENT_STATE.md
 
-*Last updated: 2026-05-08*
+*Last updated: 2026-05-14*
 
 Completed feature history → `_context/DONE.md`
 
@@ -10,6 +10,8 @@ Completed feature history → `_context/DONE.md`
 ## Active Plans
 
 ~~[Stateless Server + Local File Management](_context/PLAN_STATELESS_SERVER.md)~~ — **Done (2026-05-08)**. All D-S1–D-S8 decisions implemented. See `_context/DONE.md` and `_context/DECISIONS.md`.
+
+[Revision System — Group Q](PLAN_REVISION_SYSTEM.md) — **In planning (2026-05-14)**. Full design grilled and locked. Steps Q0–Q5. Start at Q0 (schema + migration).
 
 ---
 
@@ -59,7 +61,7 @@ Core done: `PanelSystem` with registry, tab bar, floats, DnD. `sidebar.js` thin 
 
 ---
 
-### Group Q — Revision system (high effort)
+### Group Q — Revision system (high effort) — [Plan](PLAN_REVISION_SYSTEM.md)
 
 A revision is project-wide (not per-tool). Integer counter, auto-incrementing.
 
