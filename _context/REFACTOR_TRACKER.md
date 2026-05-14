@@ -202,7 +202,7 @@ Read this at the start of every session before touching any file.
 
 | File | Current LOC | Strategy |
 |------|-------------|----------|
-| `static/engine/js/grid.js` | 1670 | Extract history subsystem first (P4-H1–H6), then selection, keyboard |
+| `static/engine/js/grid.js` | 1670 → **515** | P4-H1–H6 (history) ✓, P4-G1 (selection) ✓, P4-G2 (keyboard) ✓, P4-G3 (context menu) ✓, P4-G4 (rendering) ✓, P4-G5 (row-ops) ✓, P4-G6 (clipboard) ✓ |
 | `static/engine/js/etl_editor.js` | 1174 → **480** | P4-E1–E4 complete ✓ |
 | `static/engine/js/panel_system.js` | 634 | Extract state store from rendering |
 
@@ -339,6 +339,63 @@ One commit per logical task. Each commit must:
 - Verification: 61/61 tests pass
 - Companion files: created `etl-persistence.js.md`
 
+**P4-G6 — Extract clipboard copy → `clipboard/clipboard-manager.js`** ✓ 2026-05-14
+
+- Created `static/engine/js/clipboard/clipboard-manager.js` (63 LOC): `configure(deps)`, `init()`
+- `configure()` injects 4 deps: `getRanges`, `isEditing`, `getColumns`, `getFilteredRows`
+- `_initCopyToClipboard()` removed from grid.js; replaced by `ClipboardManager.configure()+init()` in `init()`
+- `<script>` added to `table.html` (after `row-ops.js`, before `grid.js`)
+- `grid.js` reduced 559 → 515 LOC; 61/61 tests pass
+- Companion files: created `clipboard/clipboard-manager.js.md`, updated `grid.js.md`
+
+**P4-G5 — Extract row mutation ops → `row-ops/row-ops.js`** ✓ 2026-05-14
+
+- Created `static/engine/js/row-ops/row-ops.js` (139 LOC): `softDeleteRow`, `restoreRow`, `hardDeleteRow`, `keepRow`, `removeOverride`, `_doRemoveOverride`
+- `configure()` injects 6 deps from grid.js: `getRows`, `getFilteredRows`, `updateRow`, `removeRows`, `applyFilters`, `render`
+- `ContextMenu.configure()` updated to receive `RowOps.*` functions; grid.js public API delegates to `RowOps.*`
+- `grid.js` reduced 658 → 559 LOC; 61/61 tests pass
+- Companion files: created `row-ops/row-ops.js.md`, updated `grid.js.md`
+
+**P4-G4 — Create `rendering/grid-renderer.js`** ✓ 2026-05-14
+
+- Created `static/engine/js/rendering/grid-renderer.js` (128 LOC): `flagBadgesHtml`, `formatLogPreview`, `renderRow`, `renderCell`, `renderGhostRow`
+- All five functions are pure HTML generators — no state, no DOM reads, all inputs explicit
+- `render()`, `_doSaveCell`, `_updateLogCell`, `refreshRowDOM` updated to call `GridRenderer.*`
+- `_escAttr` alias removed from grid.js (no longer used)
+- `<script>` added to `table.html` (after `context-menu.js`, before `grid.js`)
+- `grid.js` reduced 784 → 658 LOC; 61/61 tests pass
+- Companion files: created `rendering/grid-renderer.js.md`, updated `grid.js.md`
+
+**P4-G3 — Create `context-menu/context-menu.js`** ✓ 2026-05-14
+
+- Created `static/engine/js/context-menu/context-menu.js` (286 LOC): `configure`, `init`, `open`, `_close`, `_flagCheckState`, `_populateFlagsSubmenu`, `removeFlagFromCells`
+- 4 state vars (`_ctxRowId/ColSlug/ColSlugLog/FlagsCache`) moved here; `configure()` injects 9 grid.js dependencies
+- `GridManager.openContextMenu` kept as one-line wrapper (referenced by `_renderRow` template strings); `GridManager.removeFlagFromCells` delegates to `ContextMenu.removeFlagFromCells`
+- `_populateFlagsSubmenu` now uses `Utils.escHtml`/`Utils.escAttr` directly (no `_escHtml`/`_escAttr` aliases)
+- `<script>` added to `table.html` (after `cell-keyboard.js`, before `grid.js`)
+- `grid.js` reduced 987 → 784 LOC; 61/61 tests pass
+- Companion files: created `context-menu/context-menu.js.md`, updated `grid.js.md`
+
+**P4-G2 — Create `keyboard/cell-keyboard.js`** ✓ 2026-05-14
+
+- Created `static/engine/js/keyboard/cell-keyboard.js` (226 LOC): `configure`, `isEditing`, `enterEditMode`, `onCellFocus`, `onCellBlur`, `onCellDblClick`, `onCellKeydown`, `onCellPaste`, `onGhostKeydown`, `onGhostBlur`, `_moveFocus`, `_scrollRowIntoView`
+- `_editingInput` state moved here; `grid.js` uses `CellKeyboard.isEditing()` in `_initCopyToClipboard`
+- `_attachListeners` in grid.js wires `CellKeyboard.*` handlers via `addEventListener`
+- `CellKeyboard.configure({getFilteredRows, getRowHeight, normalizeCells, doSaveCell, createFromGhost, forceRender})` called in `grid.js init()`
+- `<script>` added to `table.html` (after `selection-manager.js`, before `grid.js`)
+- `grid.js` reduced 1171 → 987 LOC; 61/61 tests pass
+- Companion files: created `keyboard/cell-keyboard.js.md`, updated `grid.js.md`
+
+**P4-G1 — Extract range selection → `selection/selection-manager.js`** ✓ 2026-05-14
+
+- Created `static/engine/js/selection/selection-manager.js` (282 LOC): `_ranges`/`_activeDragIdx`/`_isDragging`/`_isAdditive` state + `configure`, `initGlobal`, `attachCellListeners`, `updateHighlight`, `clearRange`, `selectColumn`, `selectRow`, `collapseToCell`, `isSingleCellSelection`, `getSelectedRowIds`, `getSelectedCells`, `getRanges`, `getFirstRange`, `getSelectionForPaste`
+- `grid.js` reduced 1418 → 1171 LOC; 4 state vars + 12 functions removed
+- Grid.js calls `SelectionManager.configure(() => _filteredRows.length)` once in `init()`; `SelectionManager.initGlobal()` registers document-level and header listeners; `SelectionManager.attachCellListeners()` called from `_attachListeners()` after every render
+- All `_ranges` reads in `openContextMenu`, `_initCopyToClipboard`, context menu actions delegated to `SelectionManager.*`
+- `<script>` added to `table.html` after `history-actions.js`, before `grid.js`
+- Verification: 61/61 tests pass
+- Companion files: created `selection/selection-manager.js.md`, updated `grid.js.md`
+
 *(none — history subsystem complete)*
 
 **P4-H1 — Create `history/history-api.js`**
@@ -434,3 +491,9 @@ No client-side undo/redo (Ctrl+Z) is introduced in Phase 4. The history subsyste
 | 2026-05-14 | S17 | P4-E2 complete — model renderers extracted to `etl-editor/etl-model-renderer.js` (307 LOC); `etl_editor.js` 949→689 LOC; `_ea`/`_formatTs` removed from main; `final_relation_id` normalization moved to `_renderModel()`; 61/61 tests pass | Start P4-E3: create `etl-editor/etl-preview-renderer.js` |
 | 2026-05-14 | S18 | P4-E3 complete — preview renderers extracted to `etl-editor/etl-preview-renderer.js` (56 LOC); `etl_editor.js` 689→637 LOC; 61/61 tests pass | Start P4-E4: create `etl-editor/etl-persistence.js` |
 | 2026-05-14 | S19 | P4-E4 complete — templates + file I/O extracted to `etl-editor/etl-persistence.js` (200 LOC); `_cachedTemplates` moved; `etl:loadModel` event bridge established; `etl_editor.js` 637→480 LOC; 61/61 tests pass | etl_editor.js decomposition complete (1174→480 LOC); next: panel_system.js or grid.js |
+| 2026-05-14 | S20 | P4-G1 complete — range selection extracted to `selection/selection-manager.js` (282 LOC): 4 state vars + 12 functions moved; `configure(fn)` injects filteredRowCount getter; `initGlobal()` + `attachCellListeners()` split for once-vs-per-render registration; `grid.js` 1418→1171 LOC; 61/61 tests pass | Next: keyboard/cell-editing extraction from grid.js (P4-G2) |
+| 2026-05-14 | S21 | P4-G2 complete — keyboard + cell-editing extracted to `keyboard/cell-keyboard.js` (226 LOC): `_editingInput` state + all cell/ghost handlers + `_moveFocus` + `_scrollRowIntoView` moved; `configure()` injects 6 grid.js dependencies; `grid.js` 1171→987 LOC; 61/61 tests pass | Next: context menu or cell-save extraction (P4-G3) |
+| 2026-05-14 | S22 | P4-G3 complete — context menu + flag submenu extracted to `context-menu/context-menu.js` (286 LOC): 4 state vars + `_initContextMenu`, `openContextMenu`, `_closeContextMenu`, `_flagCheckState`, `_populateFlagsSubmenu`, `removeFlagFromCells` moved; `configure()` injects 9 grid.js dependencies; `grid.js` 987→784 LOC; 61/61 tests pass | Next: rendering cluster or cell-save extraction (P4-G4) |
+| 2026-05-14 | S23 | P4-G4 complete — rendering cluster extracted to `rendering/grid-renderer.js` (128 LOC): `_flagBadgesHtml`, `_renderRow`, `_renderCell`, `_renderGhostRow`, `_formatLogPreview` moved; 5 call sites in `render`, `_doSaveCell`, `_updateLogCell`, `refreshRowDOM` updated to `GridRenderer.*`; `_escAttr` alias removed; `grid.js` 784→658 LOC; 61/61 tests pass | Next: cell-save or remaining grid.js cluster |
+| 2026-05-14 | S24 | P4-G5 complete — row mutation ops extracted to `row-ops/row-ops.js` (139 LOC): `softDeleteRow`, `restoreRow`, `hardDeleteRow`, `keepRow`, `removeOverride`, `_doRemoveOverride` moved; `configure()` injects 6 deps; `grid.js` 658→559 LOC; 61/61 tests pass | Next: clipboard or cell-save extraction (P4-G6) |
+| 2026-05-14 | S25 | P4-G6 complete — clipboard copy extracted to `clipboard/clipboard-manager.js` (63 LOC): `configure(deps)`, `init()`; `_initCopyToClipboard()` removed from grid.js; `grid.js` 559→515 LOC; 61/61 tests pass | Next: cell-save extraction (P4-G7) |

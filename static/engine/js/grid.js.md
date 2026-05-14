@@ -1,25 +1,20 @@
 ---
 # static/engine/js/grid.js
 
-**Description:** Main grid rendering and interaction: row/cell render, keyboard nav, cell save, soft/hard delete/restore, toggle LOG/REV, context menu, filters, ghost row, range selection, clipboard copy.
+**Description:** Main grid orchestration: virtual scroll render, cell save, toggle LOG/REV, context menu wrapper, filters, ghost row. Row/cell HTML delegated to `GridRenderer` (P4-G4). Range selection delegated to `SelectionManager` (P4-G1). Keyboard nav + edit mode delegated to `CellKeyboard` (P4-G2). Context menu + flag submenu delegated to `ContextMenu` (P4-G3). Row mutation ops delegated to `RowOps` (P4-G5). Clipboard copy delegated to `ClipboardManager` (P4-G6).
 
-## Index (~1640 lines)
+## Index (~515 lines)
 
 | Lines    | Section |
 |----------|---------|
-| 1–65     | State variables + `init()` |
-| 70–290   | Rendering: `OVERSCAN`, `_getRowHeight`, `render` (virtual scroll), `_flagBadgesHtml`, `_renderRow`, `_renderCell`, `_renderGhostRow`, `_formatLogPreview`, `_initVirtualScroll`, `_scrollRowIntoView` |
-| 292–360  | Event listeners (`_attachListeners`, `_onCellFocus`, `_onCellBlur`, `_onCellKeydown`, `_onCellDblClick`, `_onCellPaste`) |
-| 360–510  | Keyboard nav (`_moveFocus` — index-based) + edit mode (`_enterEditMode`) |
-| 510–660  | Range selection (`_initRangeSelection`, `_onTdMousedown`, `_onTdMouseenter`, `_updateRangeHighlight`, `_clearRange`, `_initColumnHeaderSelection`, `_selectColumn`, `_selectRow`, `_initCopyToClipboard`) |
-| 660–760  | Ghost row (`_onGhostKeydown`, `_onGhostBlur`, `_createFromGhost`) |
-| 760–830  | Cell save (`_doSaveCell`, `_updateLogCell`) |
-| 830–900  | Soft-delete / restore / hard-delete / override removal |
-| 900–960  | Toggle deleted/LOG/REV + context menu |
-| 960–1100 | Filters, search, appendRows, `showRowLog`, `showCellLog` |
-| 1100–1280 | Range LOG (`_isSingleCellSelection`, `showRangeLog`), audit helpers, utility |
-| 1280–1420 | Utility helpers (`_normalizeCellsFromInput`, `updateRowData`, `getRowById`) |
-| 1420–1640 | Flag submenu helpers (`_getSelectedCells`, `_flagCheckState`, `_populateFlagsSubmenu`), public API |
+| 1–97     | State variables + `init()` — includes `RowOps.configure()`, `SelectionManager.configure()`, `CellKeyboard.configure()`, `ContextMenu.configure()`, `ClipboardManager.configure()+init()`, `grid:rowUpdated` listener |
+| 97–165   | Rendering: `OVERSCAN`, `_getRowHeight`, `render` (virtual scroll), `_initVirtualScroll` — HTML generation delegated to `GridRenderer.*` |
+| 165–215  | Event listeners (`_attachListeners`), search shortcut (`_initSearchShortcut`) |
+| 215–255  | Ghost row (`_createFromGhost`) |
+| 255–315  | Cell save (`_doSaveCell`, `_updateLogCell`) |
+| 315–340  | Toggle deleted/LOG/REV, context menu wrapper (`openContextMenu` → `ContextMenu.open`) |
+| 340–410  | Search (`search`), filters (`_applyFilters`), `appendRows` |
+| 410–515  | Utility (`_showError`, `_normalizeCellsFromInput`, `updateRowData`, `getRowById`, `getRowByTag`, `refreshRowDOM`), public API |
 
 ## State variables
 
@@ -32,13 +27,15 @@
 | `_ctxRowId` | `number\|null` | Row ID of the open context menu |
 | `_ctxColSlug` | `string\|null` | Col slug of an overridden cell for the remove-override action |
 | `_ctxColSlugLog` | `string\|null` | Col slug of any data cell for the cell-log sidebar action |
-| `_editingInput` | `HTMLInputElement\|null` | Currently active input in edit mode (not readonly); `null` = select mode |
-| `_ranges` | `Range[]` | Active selections: `[{start:{r,c}, end:{r,c}}, …]`; r/c are indices into `_filteredRows` / `ColumnsManager.getColumns()` |
-| `_activeDragIdx` | `number` | Index into `_ranges` of the range being dragged; `-1` = no drag |
-| `_isDragging` | `boolean` | True while mouse button is held during range drag |
-| `_isAdditive` | `boolean` | True when Ctrl was held at mousedown (ranges accumulate) |
-| `_ctxFlagsCache` | `Array\|null` | Non-system flags list cached for the duration of one context menu open; `null` = reload on next hover |
+| `_editingInput` | — | Moved to `CellKeyboard` (P4-G2); use `CellKeyboard.isEditing()` |
 | `_rafPending`    | `boolean`     | Virtual scroll: true while a `requestAnimationFrame` render is already queued; prevents RAF stacking on fast scroll |
+
+> `_logSidebarCtx` removed in P4-H6 → moved to `HistoryPanel`.
+> `_ranges`, `_activeDragIdx`, `_isDragging`, `_isAdditive` removed in P4-G1 → moved to `SelectionManager`.
+> `_editingInput` removed in P4-G2 → moved to `CellKeyboard`.
+> `_ctxRowId`, `_ctxColSlug`, `_ctxColSlugLog`, `_ctxFlagsCache` removed in P4-G3 → moved to `ContextMenu`.
+> `_flagBadgesHtml`, `_renderRow`, `_renderCell`, `_renderGhostRow`, `_formatLogPreview` removed in P4-G4 → moved to `GridRenderer`.
+> `softDeleteRow`, `restoreRow`, `hardDeleteRow`, `keepRow`, `removeOverride`, `_doRemoveOverride` removed in P4-G5 → moved to `RowOps`.
 
 **Row object shape** (`Row`): plain object from API — `{id, tag, is_deleted, row_log, [col_slug]: value, …}`. Access cell value as `row[col.slug]`.
 
@@ -53,11 +50,14 @@ ApiClient.loadRows(true)   → _rows
 _applyFilters()            → _filteredRows
 _initVirtualScroll()       → attaches scroll listener + MutationObserver
 render()
+SelectionManager.configure(() => _filteredRows.length)
+CellKeyboard.configure({...})  ← injects getFilteredRows, doSaveCell, createFromGhost, forceRender
 PasteManager.init()
 _initContextMenu()
-_initRangeSelection()
-_initColumnHeaderSelection()
-_initCopyToClipboard()     ← add new global keydown shortcuts here
+SelectionManager.initGlobal()  ← registers mouseup, range readout chip, column header click
+ClipboardManager.configure({...}) + ClipboardManager.init()  ← Ctrl+C copy; uses CellKeyboard.isEditing()
+_initSearchShortcut()
+document.addEventListener('grid:rowUpdated', ...)  ← dispatched by RollbackService after rollback
 ```
 
 To add a new global keyboard shortcut: create a new `_initXxx()` and call it from `init()`. Do **not** add global shortcuts inside `_onCellKeydown` (that handler only fires on focused `.cell-input` elements).
@@ -77,12 +77,11 @@ GridManager.toggleDeleted()
 GridManager.toggleLog()
 GridManager.toggleRev()
 GridManager.search(query)
-GridManager.showRowLog(rowId)
-GridManager.showCellLog(rowId, colSlug)  // opens sidebar with filtered cell log
-GridManager.showRangeLog()               // opens sidebar with aggregated log for current _ranges
 GridManager.openContextMenu(e, rowId)
 GridManager.getRange()                 // first range or null
 GridManager.getRanges()                // all ranges (copy)
+GridManager.getAllRows()               // snapshot of _rows (all, including deleted) — used by HistoryActions
+GridManager.refreshRowDOM(rowId, row)  // update one row in cache + DOM — called via grid:rowUpdated event
 GridManager.clearRange()
 GridManager.selectColumn(colIdx, additive)
 GridManager.selectRow(rowIdx, additive)
@@ -124,4 +123,4 @@ Legacy compat wrappers (keep old `(rowId, colSlug)` signature for internal conte
 - **Edit mode guard**: `_editingInput !== null` means a cell is in edit mode. Always check this before intercepting keyboard shortcuts to avoid stealing input from the user.
 - **Range selection coordinates**: each data `<td>` has `data-row-idx` (index in `_filteredRows`) and `data-col-idx` (index in `ColumnsManager.getColumns()`). `_ranges` is an array of `{start:{r,c}, end:{r,c}}`. Cleared by `_enterEditMode()` and Escape. `render()` does NOT clear `_ranges` — it preserves them across virtual scroll repaints and calls `_updateRangeHighlight()` at the end to re-apply CSS to the newly rendered DOM.
 - **Virtual scrolling**: `render()` computes a visible window (`scrollTop / rowH ± OVERSCAN`) and renders only that slice of `_filteredRows` between two spacer `<tr class="vs-spacer">` rows. All data remains in `_rows` / `_filteredRows`. Column copy reads `_filteredRows` directly, unaffected. `_moveFocus()` uses `data-row-idx` from `<td>` (absolute index) and calls `_scrollRowIntoView(rowIdx)` to bring out-of-viewport rows into the DOM before focusing. `_createFromGhost` sets `container.scrollTop` to the new row's position before `render()` so the row is always in the rendered window.
-- **Ctrl+C copy**: `_initCopyToClipboard()` intercepts `Ctrl+C`/`Cmd+C` on `document` when `_ranges` is non-empty and `_editingInput` is null. Computes the bounding box across all ranges, builds a tab-separated string (rows joined by `\n`), writes to clipboard via `navigator.clipboard.writeText()`. Cells in the bounding box but outside any selected range (discontinuous Ctrl+click) are written as empty strings.
+- **Ctrl+C copy**: delegated to `ClipboardManager` (P4-G6). See `clipboard/clipboard-manager.js.md`.

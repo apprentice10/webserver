@@ -200,6 +200,18 @@
 <script src="/static/engine/js/columns.js"></script>
 <script src="/static/engine/js/resize.js"></script>
 <script src="/static/engine/js/paste.js"></script>
+<!-- history subsystem — load order: history-api → history-renderer → history-panel → rollback-service → history-actions -->
+<script src="/static/engine/js/history/history-api.js"></script>
+<script src="/static/engine/js/history/history-renderer.js"></script>
+<script src="/static/engine/js/history/history-panel.js"></script>
+<script src="/static/engine/js/history/rollback-service.js"></script>
+<script src="/static/engine/js/history/history-actions.js"></script>
+<script src="/static/engine/js/selection/selection-manager.js"></script>
+<script src="/static/engine/js/keyboard/cell-keyboard.js"></script>
+<script src="/static/engine/js/context-menu/context-menu.js"></script>
+<script src="/static/engine/js/rendering/grid-renderer.js"></script>
+<script src="/static/engine/js/row-ops/row-ops.js"></script>
+<script src="/static/engine/js/clipboard/clipboard-manager.js"></script>
 <script src="/static/engine/js/grid.js"></script>
 <script src="/static/engine/js/toolbar.js"></script>
 <script src="/static/engine/js/panel_system.js"></script>
