@@ -203,7 +203,7 @@ Read this at the start of every session before touching any file.
 | File | Current LOC | Strategy |
 |------|-------------|----------|
 | `static/engine/js/grid.js` | 1670 | Extract history subsystem first (P4-H1–H6), then selection, keyboard |
-| `static/engine/js/etl_editor.js` | 1174 → **637** | P4-E1+E2+E3 done; P4-E4 pending (target ~480 LOC) |
+| `static/engine/js/etl_editor.js` | 1174 → **480** | P4-E1–E4 complete ✓ |
 | `static/engine/js/panel_system.js` | 634 | Extract state store from rendering |
 
 ---
@@ -327,14 +327,17 @@ One commit per logical task. Each commit must:
 - Verification: 61/61 tests pass
 - Companion files: created `etl-preview-renderer.js.md`
 
-**P4-E4 — Create `etl-editor/etl-persistence.js`**
+**P4-E4 — Create `etl-editor/etl-persistence.js`** ✓ 2026-05-14
 
-- New IIFE `EtlPersistence`
-- Extract: `refreshTemplates()`, `saveAsTemplate()`, `loadTemplate(id)`, `deleteTemplate(id)`, `importFromFile()`, `exportToFile()`, `importFromSql()`
-- Functions that replace `_model` dispatch `etl:loadModel` CustomEvent `{ detail: { model } }` — `EtlEditor` listens, sets `_model` and calls `_renderModel()` (mirrors P4-D2 pattern)
-- `exportToFile` reads model via `EtlEditor.getModel()` (already public)
-- `refreshTemplates` calls `EtlModelRenderer.renderTemplatesList(templates)` after fetching
-- Load order: before `etl_editor.js`, after `api.js` and `etl-model-renderer.js`
+- Created `static/engine/js/etl-editor/etl-persistence.js` (200 LOC): 7 public functions + `configure(toolType)` + `_dispatch(model)` helper
+- `_cachedTemplates` and `_toolType` moved here; removed from `etl_editor.js`
+- Model-replacing ops dispatch `etl:loadModel` CustomEvent; `EtlEditor.init()` registers listener
+- `EtlEditor.setToolType()` and `EtlEditor.init()` both call `EtlPersistence.configure(_toolType)`
+- 7 public functions in `EtlEditor` reduced to 1-line wrappers
+- `etl_editor.js` reduced 637 → 480 LOC
+- `<script>` added to `etl.html`
+- Verification: 61/61 tests pass
+- Companion files: created `etl-persistence.js.md`
 
 *(none — history subsystem complete)*
 
@@ -430,3 +433,4 @@ No client-side undo/redo (Ctrl+Z) is introduced in Phase 4. The history subsyste
 | 2026-05-14 | S16 | P4-E1 complete — expression DSL extracted to `etl-editor/etl-expr.js` (235 LOC): `tokenize`, `parseExpr`, `exprToText`; `etl_editor.js` 1174→949 LOC; 8 call sites updated; 61/61 tests pass. P4-E2/E3/E4 plan written to tracker | Start P4-E2: create `etl-editor/etl-model-renderer.js` |
 | 2026-05-14 | S17 | P4-E2 complete — model renderers extracted to `etl-editor/etl-model-renderer.js` (307 LOC); `etl_editor.js` 949→689 LOC; `_ea`/`_formatTs` removed from main; `final_relation_id` normalization moved to `_renderModel()`; 61/61 tests pass | Start P4-E3: create `etl-editor/etl-preview-renderer.js` |
 | 2026-05-14 | S18 | P4-E3 complete — preview renderers extracted to `etl-editor/etl-preview-renderer.js` (56 LOC); `etl_editor.js` 689→637 LOC; 61/61 tests pass | Start P4-E4: create `etl-editor/etl-persistence.js` |
+| 2026-05-14 | S19 | P4-E4 complete — templates + file I/O extracted to `etl-editor/etl-persistence.js` (200 LOC); `_cachedTemplates` moved; `etl:loadModel` event bridge established; `etl_editor.js` 637→480 LOC; 61/61 tests pass | etl_editor.js decomposition complete (1174→480 LOC); next: panel_system.js or grid.js |
