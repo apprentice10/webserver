@@ -2,24 +2,21 @@
 
 **Description:** Best-effort SQL → EtlModel converter for migrating legacy SQL-based ETL to the model-first IR. Produces fully valid EtlModel AST — no `expr_sql` fallback.
 
+Expression subsystem (`_EXPR_KEYWORDS`, `_tokenize_expr`, `_ExprParser`, `_try_rewrite_split_part`, `_parse_expr`) lives in `engine/sql_to_model_expr.py` (extracted P1-004b).
+Lexer utilities (`_mask_strings`, `_unmask`, `_comma_split`, `_find_clauses`) live in `engine/sql_to_model_lexer.py` (extracted P1-004c).
+
 ## Index
 
 | Lines / Symbol | Description |
 |----------------|-------------|
-| 40–64 | `_mask_strings(sql)` — replace `'...'` literals with `\x00Sn$` placeholders |
-| 66–68 | `_unmask(s, tbl)` — restore placeholders |
-| 70–84 | `_comma_split(text)` — depth-0 comma split |
-| 86–120 | `_find_clauses(sql)` — ordered `[(tag, kw_text, content)]` at paren-depth 0 |
-| 122–200 | `_detect_generate_series_cte(name, sql, str_tbl)` — detect recursive/UNION-ALL number-generator CTEs; returns generate_series source dict or None |
-| 202–235 | `_extract_ctes(sql, str_tbl)` — extract CTEs; delegates to `_detect_generate_series_cte` for each |
-| 238–255 | `_unquote`, `_table_ref` — identifier helpers |
-| 258–310 | `_tokenize_expr(text, str_tbl)` — SQL expression tokenizer |
-| 315–460 | `_ExprParser` — recursive-descent expression parser |
-| 465–520 | `_try_rewrite_split_part(expr)` — post-parse AST rewriter: SPLIT_PART pass-through + SUBSTR/INSTR → SPLIT_PART detection |
-| 523 | `_parse_expr(text, str_tbl)` — tokenize + parse + `_try_rewrite_split_part`; raises `ValueError` on failure |
-| 530–555 | `_parse_col_item(item, str_tbl)` — parse one SELECT list item |
-| 558 | `_join_type(kw_text)` — extract uppercase join type |
-| 566–640 | `sql_to_model(sql)` — main converter; passes `str_tbl` to `_extract_ctes` |
+| 22–36 | Imports — `re`, `uuid`, expression subsystem from `sql_to_model_expr`, lexer from `sql_to_model_lexer` |
+| 39 | `_gen_id()` — generate short random IDs for model nodes |
+| 41–107 | `_detect_generate_series_cte(name, sql, str_tbl)` — detect recursive/UNION-ALL number-generator CTEs; returns generate_series source dict or None |
+| 109–155 | `_extract_ctes(sql, str_tbl)` — extract CTEs; delegates to `_detect_generate_series_cte` for each |
+| 157–172 | `_unquote`, `_table_ref` — identifier helpers |
+| 174–203 | `_parse_col_item(item, str_tbl)` — parse one SELECT list item |
+| 205–213 | `_join_type(kw_text)` — extract uppercase join type |
+| 219–388 | `sql_to_model(sql)` — main converter; passes `str_tbl` to `_extract_ctes` |
 
 ## Decisions
 
