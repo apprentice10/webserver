@@ -1,6 +1,8 @@
 # static/engine/js/etl_editor.js
 
-**Description:** ETL Editor standalone — used by `/tool/{pid}/{tid}/etl`. Model-first architecture: maintains an `EtlModel` JS object as state; SQL is compiled on demand via `POST /etl/compile`. Expressions are stored as structured AST nodes (v1 grammar) and round-tripped through a mini expression parser/renderer.
+**Description:** ETL Editor standalone — used by `/tool/{pid}/{tid}/etl`. Model-first architecture: maintains an `EtlModel` JS object as state; SQL is compiled on demand via `POST /etl/compile`. Expressions are stored as structured AST nodes (v1 grammar) and round-tripped via `EtlExpr` (extracted in P4-E1).
+
+**Depends on (load before):** `utils.js`, `api.js`, `etl-editor/etl-expr.js`
 
 ## Index
 
@@ -8,10 +10,7 @@
 |--------|-------|-------------|
 | `_model` | state | EtlModel plain JS object (sources, transformations, final_relation_id, order_by, meta) |
 | `_activeExprEl` | state | Last focused expr `<input>` — schema column click inserts here |
-| `_tokenize(text)` | internal | Tokenizer for the expression mini-parser; returns token array |
-| `_parseExpr(text)` | internal | Recursive descent parser: text → AST node (or null for empty); throws on syntax error |
-| `_exprToText(node)` | internal | AST node → display text for `<input>` value; no parens (compiler adds them) |
-| `_applyExpr(text, el, setter)` | internal | Parse + call setter + error styling; red border + `title` tooltip on parse failure |
+| `_applyExpr(text, el, setter)` | internal | Parse via `EtlExpr.parseExpr` + call setter + error styling; red border + `title` tooltip on parse failure |
 | `setToolType(type)` | public | Injected by Jinja2 before `init()` |
 | `init()` | public | Loads `etlLoadConfig` → populates `_model` + history; calls `_renderModel()`, `refreshSchema()`, `refreshTemplates()` |
 | `_renderModel()` | internal | Renders all 4 sections: sources, transformations, final relation, order by; schedules compile |
