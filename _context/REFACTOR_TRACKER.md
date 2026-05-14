@@ -20,9 +20,9 @@ Read this at the start of every session before touching any file.
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| 1 | Safe backend extraction — pure functions, helpers, ETL compiler internals | **ACTIVE** |
-| 2 | Bug isolation instrumentation — columns endpoint race condition | Pending |
-| 3 | routes.py / service.py decomposition | Blocked until Phase 2 complete |
+| 1 | Safe backend extraction — pure functions, helpers, ETL compiler internals | **DONE** |
+| 2 | Bug isolation instrumentation — columns endpoint race condition | **ACTIVE** |
+| 3 | routes.py / service.py decomposition | Blocked until Phase 2 produces observations |
 | 4 | Frontend decomposition — grid.js, etl_editor.js, panel_system.js | Pending |
 
 ---
@@ -103,6 +103,28 @@ Do not restructure request lifecycle code here until Phase 2 produces observatio
 
 ---
 
+## Phase 2 Task Log
+
+### COMPLETED
+
+**P2-001 — Add diagnostic logging to columns endpoint and connection lifecycle** ✓ 2026-05-14
+
+- Added `logging.getLogger("engine.project_db")` to `engine/project_db.py`
+- `open_project_db`: wrapped body in try/except; logs ERROR + full traceback on any non-HTTP exception; fixed off-by-one in migration condition (`<=` → `<`)
+- `get_project_conn`: logs DEBUG on every open (method, path, db_path, exists); logs ERROR + traceback on any unhandled exception in the generator body
+- Added `logging.getLogger("engine.routes")` to `engine/routes.py`
+- `list_columns`: logs DEBUG on entry (tool_id); logs ERROR + traceback on any exception before re-raising
+- Verification: 61/61 tests pass; imports clean
+- Companion files: updated `engine/project_db.py.md`, `engine/routes.py.md`
+
+### ACTIVE
+
+*(none — awaiting a 500 occurrence to collect logs)*
+
+### PENDING
+
+---
+
 ## Module Decomposition Plan
 
 ### Backend
@@ -175,3 +197,4 @@ One commit per logical task. Each commit must:
 | 2026-05-14 | S04 | P1-003 committed; P1-004 assessment complete; P1-004a complete — 29 unit tests added (61 total); tracker updated | Commit P1-004a, then start P1-004b (expression extraction) |
 | 2026-05-14 | S05 | P1-004b complete — expression subsystem extracted to `sql_to_model_expr.py`; `sql_to_model.py` reduced 895 → ~510 LOC; 61/61 tests pass | Commit P1-004b, then start P1-004c (SQL lexer extraction) |
 | 2026-05-14 | S06 | P1-004c complete — SQL lexer utilities extracted to `sql_to_model_lexer.py`; `sql_to_model.py` reduced ~510 → 388 LOC; 61/61 tests pass | Commit P1-004c; Phase 1 pending tasks exhausted — assess Phase 2 |
+| 2026-05-14 | S07 | P2-001 complete — diagnostic logging added to `project_db.py` (get_project_conn + open_project_db) and `routes.py` (list_columns); migration condition fixed (`<=` → `<`) | Commit P2-001; await next 500 occurrence; analyse uvicorn logs |

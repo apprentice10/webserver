@@ -8,12 +8,15 @@ Le tabelle di sistema sono prefissate con _ (underscore).
 Le tabelle dei tool sono flat tables con nome = slug del tool.
 """
 
+import logging
 import shutil
 import sqlite3
 import json
 from pathlib import Path
 from typing import Generator, TYPE_CHECKING
 from fastapi import HTTPException, Depends, Request
+
+logger = logging.getLogger("engine.project_db")
 
 DATA_DIR    = Path("data")
 BACKUPS_DIR = DATA_DIR / "backups"
@@ -238,14 +241,21 @@ def _run_migrations(conn: sqlite3.Connection, db_path: Path) -> None:
 def open_project_db(db_path: Path) -> sqlite3.Connection:
     if not db_path.exists():
         raise HTTPException(status_code=404, detail=f"Project DB not found: {db_path.name}")
-    conn = sqlite3.connect(str(db_path), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    db_version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if db_version <= SCHEMA_VERSION:
-        _run_migrations(conn, db_path)
-    return conn
+    try:
+        conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        db_version = conn.execute("PRAGMA user_version").fetchone()[0]
+        if db_version < SCHEMA_VERSION:
+            logger.info("open_project_db: migrating %s from v%d to v%d", db_path.name, db_version, SCHEMA_VERSION)
+            _run_migrations(conn, db_path)
+        return conn
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error("open_project_db: failed to open db_path=%s", db_path, exc_info=True)
+        raise
 
 
 # ============================================================
@@ -259,6 +269,7 @@ def get_project_conn(
     if not db_raw:
         raise HTTPException(status_code=400, detail="db path required")
     db_path = Path(db_raw)
+    logger.debug("get_project_conn: %s %s db=%s exists=%s", request.method, request.url.path, db_path, db_path.exists())
     conn = open_project_db(db_path)
     try:
         db_version = conn.execute("PRAGMA user_version").fetchone()[0]
@@ -268,6 +279,11 @@ def get_project_conn(
                 detail=f"Project schema v{db_version} is newer than this server (supports up to v{SCHEMA_VERSION}). Project is read-only.",
             )
         yield conn
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error("get_project_conn: unhandled exception for db=%s path=%s", db_path, request.url.path, exc_info=True)
+        raise
     finally:
         conn.close()
 

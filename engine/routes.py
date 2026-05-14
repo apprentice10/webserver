@@ -6,12 +6,15 @@ Endpoints HTTP del Table Engine — thin layer su service.py ed etl.py.
 
 import io
 import json
+import logging
 import sqlite3
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, Any
 from datetime import datetime
+
+logger = logging.getLogger("engine.routes")
 
 from engine.project_db import get_project_conn
 from engine import service
@@ -412,7 +415,12 @@ def list_columns(
     tool_id: int,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.get_columns(conn, tool_id)
+    logger.debug("list_columns: tool_id=%s", tool_id)
+    try:
+        return service.get_columns(conn, tool_id)
+    except Exception:
+        logger.error("list_columns: failed for tool_id=%s", tool_id, exc_info=True)
+        raise
 
 
 @router.post("/{tool_id}/columns")
