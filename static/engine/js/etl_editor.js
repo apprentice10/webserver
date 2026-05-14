@@ -352,14 +352,14 @@ const EtlEditor = (() => {
     // --------------------------------------------------------
 
     async function preview() {
-        if (!_model.sources.length) { _showPreviewMsg("Add at least one source.", "warning"); return; }
-        _showPreviewMsg("Running preview...", "info");
+        if (!_model.sources.length) { EtlPreviewRenderer.showMsg("Add at least one source.", "warning"); return; }
+        EtlPreviewRenderer.showMsg("Running preview...", "info");
         try {
             const data = await ApiClient.etlPreview(_model);
             _previewData = data;
-            _renderPreview(data);
+            EtlPreviewRenderer.renderPreview(data);
         } catch (err) {
-            _showPreviewMsg(`⚠ ${err.message}`, "error");
+            EtlPreviewRenderer.showMsg(`⚠ ${err.message}`, "error");
         }
     }
 
@@ -368,10 +368,10 @@ const EtlEditor = (() => {
         if (!_previewData)          { Utils.showToast("Run Preview first.", "error"); return; }
         const rc = _previewData.row_count || 0;
         if (!confirm(`Apply ETL?\n\n${rc} rows will be processed.\nManually-edited cells will not be overwritten.`)) return;
-        _showPreviewMsg("Applying ETL...", "info");
+        EtlPreviewRenderer.showMsg("Applying ETL...", "info");
         try {
             const result = await ApiClient.etlApply(_model);
-            _renderApplyResult(result);
+            EtlPreviewRenderer.renderApplyResult(result);
             Utils.showToast(
                 `ETL complete: ${result.created} rows created, ${result.updated} updated` +
                 (result.columns_created > 0 ? `, ${result.columns_created} columns added` : "") + ".",
@@ -379,7 +379,7 @@ const EtlEditor = (() => {
             );
             ApiClient.etlSaveDraft(_model).then(() => { _savedJson = JSON.stringify(_model); }).catch(() => {});
         } catch (err) {
-            _showPreviewMsg(`⚠ ${err.message}`, "error");
+            EtlPreviewRenderer.showMsg(`⚠ ${err.message}`, "error");
             Utils.showToast("ETL error: " + err.message, "error");
         }
     }
@@ -583,58 +583,6 @@ const EtlEditor = (() => {
         document.getElementById("etl-sql-import-textarea").value = "";
         document.getElementById("etl-sql-import-error").style.display = "none";
         document.getElementById("etl-sql-import-textarea").focus();
-    }
-
-
-    // --------------------------------------------------------
-    // PREVIEW RENDERING
-    // --------------------------------------------------------
-
-    function _renderPreview(data) {
-        const el = document.getElementById("etl-preview-container");
-        if (!el) return;
-        let warn = "";
-        if (data.warnings && data.warnings.length) {
-            warn = `<div class="etl-warnings">${data.warnings.map(w => `<div class="etl-warning">⚠ ${_esc(w)}</div>`).join("")}</div>`;
-        }
-        if (!data.rows || !data.rows.length) {
-            el.innerHTML = warn + '<div class="etl-empty">Query executed — no results.</div>';
-            return;
-        }
-        const rows = data.rows.slice(0, 50);
-        const heads = data.columns.map(c => `<th>${_esc(c)}</th>`).join("");
-        const body  = rows.map(r =>
-            `<tr>${data.columns.map(c => `<td>${_esc(String(r[c] ?? ""))}</td>`).join("")}</tr>`
-        ).join("");
-        const note = data.rows.length > 50
-            ? `<div class="etl-note">Showing 50 of ${data.rows.length} rows.</div>` : "";
-        el.innerHTML = `${warn}
-            <div class="etl-preview-info">${data.row_count} rows returned</div>
-            ${note}
-            <div class="etl-preview-table-wrapper">
-                <table class="etl-preview-table"><thead><tr>${heads}</tr></thead><tbody>${body}</tbody></table>
-            </div>`;
-    }
-
-    function _renderApplyResult(result) {
-        const el = document.getElementById("etl-preview-container");
-        if (!el) return;
-        const errs = result.errors && result.errors.length
-            ? `<div class="etl-warnings">${result.errors.map(e => `<div class="etl-warning">⚠ ${_esc(e)}</div>`).join("")}</div>` : "";
-        el.innerHTML = `${errs}
-            <div class="etl-apply-result">
-                ${result.columns_created > 0 ? `<div class="etl-result-item etl-result-updated">+ ${result.columns_created} columns created automatically</div>` : ""}
-                <div class="etl-result-item etl-result-created">✓ ${result.created} rows created</div>
-                <div class="etl-result-item etl-result-updated">↺ ${result.updated} rows updated</div>
-                <div class="etl-result-item etl-result-skipped">⊘ ${result.skipped_cells} cells preserved (manually edited)</div>
-            </div>`;
-    }
-
-    function _showPreviewMsg(msg, type = "info") {
-        const el = document.getElementById("etl-preview-container");
-        if (!el) return;
-        const colors = { info: "var(--color-text-muted)", error: "var(--color-danger)", warning: "var(--color-warning)", success: "var(--color-success)" };
-        el.innerHTML = `<div style="color:${colors[type]||colors.info};padding:12px 0;font-size:13px">${_esc(msg)}</div>`;
     }
 
 
