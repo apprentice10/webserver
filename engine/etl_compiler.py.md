@@ -2,25 +2,28 @@
 
 **Description:** Model-first SQL compiler. Accepts an `EtlModel` (or plain dict), validates it, builds a relation DAG, topologically sorts it, and compiles each relation into a SQL fragment. The final relation's SQL is assembled with ORDER BY and WITH clauses and returned. SQL is never parsed or inspected at any point.
 
+**Expression-to-SQL primitives** (exceptions, constants, `expr_to_sql`) live in `engine/etl_compiler_expr.py` and are re-exported from this module for backward compatibility.
+
 ## Index
 
 | Lines / Symbol | Description |
 |----------------|-------------|
-| 14–23 | `EtlValidationError` / `EtlCompilationError` exceptions |
-| 27 | `_ALLOWED_BINARY_OPS` — frozenset of permitted `binary_op` operators |
-| 29 | `_FIXED_ARITY_FUNCTIONS` — dict of function names with fixed arg counts (e.g. SPLIT_PART → 3) |
-| 30 | `_SPLIT_PART_MAX_INDEX` — compilation limit (8) for SPLIT_PART literal index |
-| 35–65 | `_sqlite_split_part(s, d, n)` / `_compile_split_part(args)` — translate SPLIT_PART to nested SQLite SUBSTR/INSTR |
-| 70–115 | `expr_to_sql(expr)` — pure recursive dispatch; raises on unknown type; SPLIT_PART dispatches to `_compile_split_part` |
-| 120–175 | `_validate_expr(expr, errors, context)` — recursive expression validator; includes SPLIT_PART arity and index checks |
-| 178–215 | `_exprs_in_transformation(tr)` — collect all (expr, context) pairs from a transformation |
-| 218–252 | `_kahn_sort(graph)` — topological sort; raises `EtlCompilationError` on cycle |
-| 255–268 | `_collect_ancestors(relation_id, graph)` — BFS backwards from a relation id |
-| 270–295 | `_output_aliases_for(relation_id, model)` — infer output column aliases for ORDER BY validation |
-| 298–490 | `validate_model(model)` — Check 0: generate_series fields; Checks 1–14: existing structural and expression validation |
-| 495–615 | `compile_sql(model)` — Steps 0–8; generate_series source compiles to inline WITH RECURSIVE subquery |
+| 7–14 | Imports — re-exports `EtlValidationError`, `EtlCompilationError`, `expr_to_sql` from `etl_compiler_expr` |
+| 21–117 | `_validate_expr(expr, errors, context)` — recursive expression validator; includes SPLIT_PART arity and index checks |
+| 120–157 | `_exprs_in_transformation(tr)` — collect all (expr, context) pairs from a transformation |
+| 160–192 | `_kahn_sort(graph)` — topological sort; raises `EtlCompilationError` on cycle |
+| 197–209 | `_collect_ancestors(relation_id, graph)` — BFS backwards from a relation id |
+| 213–237 | `_output_aliases_for(relation_id, model)` — infer output column aliases for ORDER BY validation |
+| 240–418 | `validate_model(model)` — Check 0: generate_series fields; Checks 1–14: structural and expression validation |
+| 423–596 | `compile_sql(model)` — Steps 0–8; generate_series source compiles to inline WITH RECURSIVE subquery |
 
 ## Decisions
+
+### Refactor Notes
+
+- **P1-001 (2026-05-14):** Expression-to-SQL cluster extracted to `engine/etl_compiler_expr.py`. All names re-exported here for backward compatibility. Next: extract `_kahn_sort` / `_collect_ancestors` into `engine/etl_compiler_graph.py` (P1-002), then `_validate_expr` / `validate_model` into `engine/etl_compiler_validate.py` (P1-003).
+
+### Architectural Notes
 
 - **`expr_to_sql` raises on unknown type — never falls back silently**: An unrecognized `type` means a programming error or a stale model. Silent fallback (returning `""` or `NULL`) would produce wrong SQL with no error signal. Hard raise is the only correct behavior.
 - **`column_ref` always double-quoted**: `"table"."column"` prevents reserved-word collisions and preserves case in all SQLite configurations. Unquoted identifiers are case-folded and can silently shadow keywords.
