@@ -5,6 +5,9 @@ from fastapi.responses import HTMLResponse
 
 from core.routes import router as core_router, fs_router
 from engine.routes import router as engine_router
+from engine.routes_flags import router as flags_router
+from engine.routes_etl import router as etl_router
+from engine.routes_export import router as export_router
 
 app = FastAPI(
     title="Instrument Manager",
@@ -17,6 +20,9 @@ templates = Jinja2Templates(directory="templates")
 
 app.include_router(core_router)
 app.include_router(fs_router)
+app.include_router(flags_router)
+app.include_router(etl_router)
+app.include_router(export_router)
 app.include_router(engine_router)
 
 

@@ -1,19 +1,315 @@
-We are going to move and replace somethings, always keep the same functionality
-New View sidebar, template like flag manager (list of components each with and eye icon to toggle Visibility) will replace:
-    -"Eliminati" button (rename to "Deleted rows")
-    -"Rev" button (rename to "Rev column")
+Whe creating a new tool, if the user selects a template, the name of the tool should load from the template, the user can change it in the textbox.
+When creating a new tool, if the user selects a template, after the user clicks "create" it should jump rirectly to the ETL of that tool with the template ready to "Preview" and "Apply" after that.
+Tools should never have the same name, if the same name is found an error message should appear warning the user and asking to change to a new one.
+Set canvas the default view when entering the ETL editor
+Delete tool option:
+    -Add a collasable trash section in the "side-section"
+    -Add a delete button on each tool
+    -When the user deletes a tool the program should check for dependecies. show the "etl-design" of that tool highlignting other tools that depends on it and ask to remove dependecy before deleting. (no tool can be deleted if another one depends on it) 
+    -When user deletes a tool it ends in the trash
+    -When a tool is in the trash its data should not be able to retrieve (hidden)
+    -When a tool is in the rtrash it can be restore: moves the tool back in the tool section
 
-View sidebar saves current state like the Flags sidebar.
-Add a view button after the Flags button to open this sidebar
-Revision is in the settings panel the Button "Cambia Rev" is not nescesary.
-Log sidebar must change with the current selection (a cell or a range)
-Instead of the "Info" button copy the tools sidebar toggle form and behavior
+New tool type ExternalStructuredSource:
+    A new type of tool that creates a table from External Structured Sources (CSV, Excel, AutoCADDXF, API):
+        -Load a DXF file (Can load many files), for each DXF file:
+            -Dwg gets added to a list, user can enter date (date default=today), design number, design name, Path
+            -Retreaves the blocks name and attributes.
+            -User selects block then attributes to be imported
+            -User can select more blocks and more attributes
+            -Each block is a source in the ETL editor
+            -User assing each attribute to the column in the ETL editor
+            -Table is created.
+            -User can refresh table
+                -On each refresh if the program can't find the specified file an error message is returned
+                -After a reshresh the program will do an Incremental Sync using the object ID as handle
+            -User can change the path of the file
 
-the butons Flags and View will toggle depending on with side bar is active.
-Dates are wrong, check local time
+        -Load a CSV, Excel file (Can load many files), for each CSV, Excel file:
+            -File gets added to a list, user can enter date (date default=today), design number, design name, Path
+            -Retreaves the Sheets name and table Columns.
+            -User selects Sheets then Columns to be imported
+            -User can select more Sheets and more Columns
+            -Each Sheet is a source in the ETL editor
+            -User assing each Sheet/Column to the destination column in the ETL editor
+            -Table is created.
+            -User can refresh table
+                -On each refresh if the program can't find the specified file an error message is returned
+                -After a reshresh the program will do an Incremental Sync using the TAG as handle
+            -User can change the path of the file.
 
----
-These have conflict with "Group G.1 — Refactor LOG → Audit System" in the CURRENT_STATE.md file Don't do these yet:
-line 5:         -"Log" button (rename to "Log column")
-line 14:    Add a new "Log" button (not the same as before) tha will open de log sidebar.
-lines 12:   ...butons Log, Flags...
+
+New tool type SemiStructuredDocumentSource:
+    A new type of tool that creates a table from Semi Structured Document Sources (PDF):
+        -Load a PDF file (Can load many files), for each PDF file:
+            -PDF gets added to a list, user can enter date (date default=today), design number, design name, Path
+            -Scan document (Extract Text Objects + Coordinates -> Spatial Grouping -> Pattern Recognition -> Context Association, Nearby texts become metadata)
+            -User selects row and column to import
+            -Each PDF is a source in the ETL editor
+            -Table is created.
+            -User can refresh table
+                -On each refresh if the program can't find the specified file an error message is returned
+                -After a reshresh the program will do an Incremental Sync using the TAG as handle
+            -User can change the path of the file
+
+
+New tool type Excel Template-driven document generation:
+    Design and architect a flexible Excel Template Export System for an engineering/instrumentation web platform.
+
+    The system must allow users to export ETL table data into arbitrary Excel structures/templates while keeping the user as free as possible to design the Excel layout manually.
+
+    IMPORTANT DESIGN PRINCIPLES:
+    - Excel owns presentation/layout only
+    - The application owns data binding and document generation logic
+    - Users should NOT need to write Excel macros/VBA
+    - Users should NOT need programming knowledge
+    - The export system must support highly variable engineering document structures
+    - The export system must scale beyond simple column mapping
+
+    ======================================================================
+    CORE CONCEPT
+    ======================================================================
+
+    The architecture should separate:
+
+    1. Excel Template
+       - Pure XLSX layout/design
+       - Formatting
+       - Logos
+       - Borders
+       - Print settings
+       - Formulas
+       - Merged cells
+       - Static labels/text
+
+    2. Export Definition
+       - Defines how ETL data binds into the template
+       - Defines repeating areas
+       - Defines grouping logic
+       - Defines sheet creation logic
+       - Defines pagination/overflow rules
+       - Defines filtering/grouping
+       - Defines dynamic region expansion
+
+    3. ETL Data Sources
+       - Data already exists as structured ETL tables
+       - Export system only consumes those tables
+
+    ======================================================================
+    EXAMPLES THAT MUST BE SUPPORTED
+    ======================================================================
+
+    ----------------------------------------------------------------------
+    EXAMPLE 1 — Instrument Datasheet
+    ----------------------------------------------------------------------
+
+    Structure:
+    - One Excel sheet describes one instrument
+    - Many fixed-position fields
+    - Each field contains a single value
+    - Example:
+      - Tag
+      - Service
+      - Range
+      - Unit
+      - Vendor
+      - Notes
+
+    Source:
+    - ETL table: Instrument_data_sheet
+
+    Requirements:
+    - Bind individual cells to ETL fields
+    - Example:
+      - Cell B4 -> Instrument_data_sheet.tag
+      - Cell D8 -> Instrument_data_sheet.service
+    - System generates one sheet/document per instrument
+    - Must support fixed-position forms
+
+    This should be modeled as:
+    - Single Value Binding
+
+    ----------------------------------------------------------------------
+    EXAMPLE 2 — Instrument List
+    ----------------------------------------------------------------------
+
+    Structure:
+    - Infinite/repeating table
+    - Each row = one instrument
+    - Each column = one field
+    - Dynamic row expansion
+
+    Source:
+    - ETL table: Instrument_list
+
+    Requirements:
+    - User selects a template row
+    - System repeats row dynamically for each record
+    - Example:
+      - A12 -> tag
+      - B12 -> service
+      - C12 -> unit
+    - Template row becomes a repeating row template
+    - Row insertion/expansion handled by export engine
+    - Formatting must propagate correctly
+
+    This should be modeled as:
+    - Repeating Table Binding
+
+    ----------------------------------------------------------------------
+    EXAMPLE 3 — Assembly Type Sheets
+    ----------------------------------------------------------------------
+
+    Structure:
+    - One sheet per assembly type
+    - Sheet contains:
+      1. Small materials table
+      2. List of instruments using that assembly type
+
+    Sources:
+    - Assembly_type_standard
+    - Instruments_Assembly_type
+
+    Requirements:
+    - Group data by assembly_type
+    - Create one sheet per assembly type
+    - Render repeating material table
+    - Render repeating instrument list
+    - Maximum number of instruments per sheet is limited by a defined Excel range
+    - If exceeded:
+      - Automatically create continuation sheet(s)
+
+    Must support:
+    - Grouping
+    - Sheet-per-group generation
+    - Multiple repeating regions in same sheet
+    - Overflow/pagination rules
+
+    ======================================================================
+    UI/UX REQUIREMENTS
+    ======================================================================
+
+    The system should NOT behave like a simple CSV mapper.
+
+    The UI should behave like a:
+    - Template Binding Designer
+    - Document Generation Designer
+
+    The AI should design an interface with these concepts:
+
+    ----------------------------------------------------------------------
+    1. Excel Template Visual Preview
+    ----------------------------------------------------------------------
+
+    - Render uploaded Excel template visually
+    - Allow clicking cells/regions
+    - Show sheet structure
+    - Allow selecting:
+      - single cells
+      - row templates
+      - rectangular regions
+
+    ----------------------------------------------------------------------
+    2. Data Source Browser
+    ----------------------------------------------------------------------
+
+    Side panel showing ETL sources:
+
+    Example:
+    Instrument_list
+     ├── tag
+     ├── service
+     ├── range
+     ├── unit
+
+    Users drag/drop or bind fields visually.
+
+    ----------------------------------------------------------------------
+    3. Binding Types
+    ----------------------------------------------------------------------
+
+    The interface must explicitly support multiple binding modes:
+
+    A. Single Value Binding
+    - Bind one field to one cell
+
+    B. Repeating Table Binding
+    - Bind row template to dataset
+    - Repeat dynamically
+
+    C. Grouped Section Binding
+    - Create grouped sheets/documents
+    - Multiple repeating regions per sheet
+
+    D. Overflow/Pagination Rules
+    - Create continuation sheets
+    - Define maximum rows per region
+    - Repeat headers automatically
+
+    ----------------------------------------------------------------------
+    4. Named Regions
+    ----------------------------------------------------------------------
+
+    The system should strongly consider named regions instead of relying only on coordinates.
+
+    Examples:
+    - MATERIAL_TABLE
+    - INSTRUMENT_TABLE
+    - HEADER_REGION
+
+    Regions should carry behaviors:
+    - repeating
+    - grouped
+    - paginated
+    - fixed
+
+    ======================================================================
+    ARCHITECTURAL REQUIREMENTS
+    ======================================================================
+
+    The AI should propose:
+
+    - Internal export definition schema
+    - Data binding model
+    - Runtime rendering engine
+    - Template parsing architecture
+    - Region abstraction system
+    - Dynamic row insertion strategy
+    - Pagination strategy
+    - Sheet cloning strategy
+    - Group-by rendering architecture
+    - Validation/error handling
+    - Mapping persistence
+    - Future extensibility
+
+    ======================================================================
+    IMPORTANT CONSTRAINTS
+    ======================================================================
+
+    - Users must remain free to design arbitrary Excel layouts
+    - Export engine must support engineering documents, not only flat reports
+    - Must support:
+      - merged cells
+      - print layouts
+      - formulas
+      - logos/images
+      - multi-sheet workbooks
+      - continuation sheets
+      - grouped documents
+    - The system must NOT depend on VBA/macros
+    - Logic belongs in the application, not inside Excel
+
+    ======================================================================
+    GOAL
+    ======================================================================
+
+    The final system should resemble a lightweight engineering-oriented document generation engine specialized for instrumentation and industrial documentation.
+
+    The AI should focus heavily on:
+    - abstraction design
+    - UX
+    - export architecture
+    - scaling complexity
+    - maintainability
+    - future extensibility
+    - avoiding tight coupling between templates and ETL sources

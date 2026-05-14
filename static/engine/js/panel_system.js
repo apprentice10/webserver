@@ -12,10 +12,6 @@ const PanelSystem = (() => {
     const SNAP_DIST   = 48;  // px proximity threshold for K-7
     const _registry   = {};
     let _state        = _loadState();
-    let _dragId       = null;
-    let _dragDropped  = false;
-    let _dropTarget   = null;  // 'right' | 'bottom' | null during float drag
-
     // ── State ─────────────────────────────────────────────────
 
     function _loadState() {
@@ -56,22 +52,12 @@ const PanelSystem = (() => {
     function _getBottomDock() { return document.getElementById('bottom-dock'); }
     function _getBottomBody() { return document.getElementById('bottom-dock-body'); }
 
-    function _getFloatLayer() {
-        let layer = document.getElementById('panel-float-layer');
-        if (!layer) {
-            layer = document.createElement('div');
-            layer.id = 'panel-float-layer';
-            document.body.appendChild(layer);
-        }
-        return layer;
-    }
-
     // ── Layout ────────────────────────────────────────────────
 
     function _applyLayout() {
         _applyRightDock();
         _applyBottomDock();
-        _renderFloats();
+        PanelFloats.render();
     }
 
     function _applyRightDock() {
@@ -81,7 +67,7 @@ const PanelSystem = (() => {
         const isOpen = open && tabs.length > 0;
         dock.classList.toggle('sidebar-closed', !isOpen);
         dock.style.setProperty('--sidebar-width', (width || 320) + 'px');
-        _renderTabBar(tabs, activeTab);
+        PanelTabBar.renderTabBar(tabs, activeTab);
         const titleEl = _getTitleEl();
         if (titleEl && activeTab && _registry[activeTab]) {
             titleEl.textContent = _registry[activeTab].title;
@@ -95,290 +81,13 @@ const PanelSystem = (() => {
         const isOpen = open && tabs.length > 0;
         dock.classList.toggle('bottom-dock-closed', !isOpen);
         dock.style.setProperty('--bottom-dock-height', (height || 200) + 'px');
-        _renderBottomTabBar(tabs, activeTab);
+        PanelTabBar.renderBottomTabBar(tabs, activeTab);
         const titleEl = document.getElementById('bottom-dock-title');
         if (titleEl && activeTab && _registry[activeTab]) {
             titleEl.textContent = _registry[activeTab].title;
         }
         const header = dock.querySelector('.bottom-dock-header');
         if (header) header.style.display = isOpen && tabs.length === 1 ? 'flex' : 'none';
-    }
-
-    // ── Tab bars ──────────────────────────────────────────────
-
-    function _tabsHtml(tabs, activeTab) {
-        return tabs.map(id => {
-            const p = _registry[id];
-            if (!p) return '';
-            const a = id === activeTab ? ' active' : '';
-            return `<button class="panel-tab${a}" data-id="${id}" draggable="true">` +
-                `<span class="panel-tab-icon">${p.icon || ''}</span>` +
-                `<span class="panel-tab-label">${p.title}</span>` +
-                `<span class="panel-tab-close" data-close="${id}">✕</span>` +
-                `</button>`;
-        }).join('');
-    }
-
-    function _renderTabBar(tabs, activeTab) {
-        const dock = _getDock();
-        if (!dock) return;
-        let bar = dock.querySelector('.panel-tab-bar');
-        if (!bar) {
-            bar = document.createElement('div');
-            bar.className = 'panel-tab-bar';
-            const body = _getBody();
-            if (body) dock.insertBefore(bar, body);
-        }
-        bar.style.display = tabs.length > 1 ? 'flex' : 'none';
-        bar.innerHTML = _tabsHtml(tabs, activeTab);
-        _initTabBarEvents(bar, 'right');
-    }
-
-    function _renderBottomTabBar(tabs, activeTab) {
-        const dock = _getBottomDock();
-        if (!dock) return;
-        let bar = dock.querySelector('.panel-tab-bar');
-        if (!bar) {
-            bar = document.createElement('div');
-            bar.className = 'panel-tab-bar';
-            const body = _getBottomBody();
-            if (body) dock.insertBefore(bar, body);
-            else dock.appendChild(bar);
-        }
-        bar.style.display = tabs.length > 1 ? 'flex' : 'none';
-        bar.innerHTML = _tabsHtml(tabs, activeTab);
-        _initTabBarEvents(bar, 'bottom');
-    }
-
-    function _initTabBarEvents(bar, dockName) {
-        bar.querySelectorAll('.panel-tab').forEach(btn => {
-            btn.addEventListener('click', e => {
-                if (e.target.closest('[data-close]')) return;
-                _activateTabIn(dockName, btn.dataset.id);
-            });
-            btn.addEventListener('dragstart', e => {
-                _dragId      = btn.dataset.id;
-                _dragDropped = false;
-                e.dataTransfer.setData('text/plain', _dragId);
-                e.dataTransfer.effectAllowed = 'move';
-                btn.classList.add('dragging');
-            });
-            btn.addEventListener('dragend', e => {
-                btn.classList.remove('dragging');
-                bar.querySelectorAll('.panel-tab').forEach(t => t.removeAttribute('data-drag-over'));
-                if (!_dragDropped && _dragId) {
-                    const x = Math.max(0, e.clientX - FLOAT_W / 2);
-                    const y = Math.max(0, e.clientY - 20);
-                    moveToFloat(_dragId, x, y);
-                }
-                _dragId = null;
-            });
-        });
-
-        bar.querySelectorAll('[data-close]').forEach(btn => {
-            btn.addEventListener('click', e => { e.stopPropagation(); hidePanel(btn.dataset.close); });
-        });
-
-        bar.addEventListener('dragover', e => {
-            if (!_dragId) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            const overTab = e.target.closest('.panel-tab');
-            bar.querySelectorAll('.panel-tab').forEach(t => t.removeAttribute('data-drag-over'));
-            if (overTab && overTab.dataset.id !== _dragId) overTab.setAttribute('data-drag-over', '');
-        });
-
-        bar.addEventListener('drop', e => {
-            e.preventDefault();
-            _dragDropped = true;
-            bar.querySelectorAll('.panel-tab').forEach(t => t.removeAttribute('data-drag-over'));
-            const overTab = e.target.closest('.panel-tab');
-            if (!overTab || !_dragId || overTab.dataset.id === _dragId) return;
-            _reorderTabIn(dockName, _dragId, overTab.dataset.id);
-        });
-    }
-
-    function _reorderTabIn(dockName, dragId, targetId) {
-        const d = dockName === 'bottom' ? _state.bottomDock : _state.rightDock;
-        const from = d.tabs.indexOf(dragId);
-        const to   = d.tabs.indexOf(targetId);
-        if (from === -1 || to === -1) return;
-        d.tabs.splice(from, 1);
-        d.tabs.splice(to, 0, dragId);
-        _saveState();
-        _applyLayout();
-    }
-
-    function _activateTabIn(dockName, id) {
-        const d = dockName === 'bottom' ? _state.bottomDock : _state.rightDock;
-        d.activeTab = id;
-        _saveState();
-        _applyLayout();
-        const panel = _registry[id];
-        const body  = dockName === 'bottom' ? _getBottomBody() : _getBody();
-        if (panel && panel.onActivate && body) panel.onActivate(body);
-    }
-
-    // ── Floats ────────────────────────────────────────────────
-
-    function _renderFloats() {
-        const layer  = _getFloatLayer();
-        const floats = _state.floats || [];
-
-        layer.querySelectorAll('.panel-float').forEach(el => {
-            if (!floats.find(f => f.id === el.dataset.panelId)) el.remove();
-        });
-
-        floats.forEach(f => {
-            let el = layer.querySelector(`.panel-float[data-panel-id="${f.id}"]`);
-            if (!el) {
-                el = _createFloatEl(f.id);
-                layer.appendChild(el);
-                const panel = _registry[f.id];
-                if (panel && panel.onActivate) panel.onActivate(el.querySelector('.panel-float-body'));
-            }
-            el.style.left   = f.x + 'px';
-            el.style.top    = f.y + 'px';
-            el.style.width  = f.w + 'px';
-            el.style.height = f.h + 'px';
-        });
-    }
-
-    function _createFloatEl(id) {
-        const panel = _registry[id] || { title: id, icon: '' };
-        const el    = document.createElement('div');
-        el.className       = 'panel-float';
-        el.dataset.panelId = id;
-        el.innerHTML =
-            `<div class="panel-float-titlebar">` +
-                `<span class="panel-float-icon">${panel.icon || ''}</span>` +
-                `<span class="panel-float-title">${panel.title}</span>` +
-                `<button class="panel-float-dock-bottom" title="Dock to bottom">⊟</button>` +
-                `<button class="panel-float-dock" title="Dock to right">⤵</button>` +
-                `<button class="panel-float-close">✕</button>` +
-            `</div>` +
-            `<div class="panel-float-body"></div>` +
-            `<div class="panel-float-resize"></div>`;
-        el.querySelector('.panel-float-dock-bottom').addEventListener('click', () => dockPanel(id, 'bottom'));
-        el.querySelector('.panel-float-dock').addEventListener('click',        () => dockPanel(id, 'right'));
-        el.querySelector('.panel-float-close').addEventListener('click',       () => hidePanel(id));
-        _initFloatDrag(el, id);
-        _initFloatResize(el, id);
-        return el;
-    }
-
-    // K-7: proximity detection wired into float drag
-    function _initFloatDrag(el, id) {
-        const titlebar = el.querySelector('.panel-float-titlebar');
-        titlebar.addEventListener('mousedown', e => {
-            if (e.target.tagName === 'BUTTON') return;
-            e.preventDefault();
-            const f = (_state.floats || []).find(f => f.id === id);
-            if (!f) return;
-            const ox = e.clientX - f.x;
-            const oy = e.clientY - f.y;
-            const onMove = ev => {
-                f.x = ev.clientX - ox;
-                f.y = ev.clientY - oy;
-                el.style.left = f.x + 'px';
-                el.style.top  = f.y + 'px';
-                _checkProximity(ev.clientX, ev.clientY);
-            };
-            const onUp = () => {
-                document.removeEventListener('mousemove', onMove);
-                document.removeEventListener('mouseup', onUp);
-                const target = _dropTarget;
-                _hideDropHighlight();
-                if (target) {
-                    dockPanel(id, target);
-                } else {
-                    _saveState();
-                }
-            };
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onUp);
-        });
-    }
-
-    function _initFloatResize(el, id) {
-        const handle = el.querySelector('.panel-float-resize');
-        handle.addEventListener('mousedown', e => {
-            e.preventDefault();
-            const f = (_state.floats || []).find(f => f.id === id);
-            if (!f) return;
-            const startX = e.clientX, startY = e.clientY;
-            const startW = f.w,       startH = f.h;
-            const onMove = ev => {
-                f.w = Math.max(200, startW + ev.clientX - startX);
-                f.h = Math.max(120, startH + ev.clientY - startY);
-                el.style.width  = f.w + 'px';
-                el.style.height = f.h + 'px';
-            };
-            const onUp = () => {
-                _saveState();
-                document.removeEventListener('mousemove', onMove);
-                document.removeEventListener('mouseup', onUp);
-            };
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onUp);
-        });
-    }
-
-    // ── Drop zone highlight (K-7) ─────────────────────────────
-
-    function _getDropHighlight() {
-        let el = document.getElementById('panel-drop-highlight');
-        if (!el) {
-            el = document.createElement('div');
-            el.id = 'panel-drop-highlight';
-            el.className = 'dock-drop-highlight';
-            document.body.appendChild(el);
-        }
-        return el;
-    }
-
-    function _checkProximity(cx, cy) {
-        let nearTarget = null;
-
-        const rd = _getDock();
-        if (rd && _state.rightDock.tabs.length > 0) {
-            const r = rd.getBoundingClientRect();
-            if (cx > r.left - SNAP_DIST && cx < r.right && cy > r.top && cy < r.bottom) {
-                nearTarget = 'right';
-            }
-        }
-
-        if (!nearTarget) {
-            const bd = _getBottomDock();
-            if (bd && _state.bottomDock.tabs.length > 0) {
-                const r = bd.getBoundingClientRect();
-                if (cy > r.top - SNAP_DIST && cy < r.bottom && cx > r.left && cx < r.right) {
-                    nearTarget = 'bottom';
-                }
-            }
-        }
-
-        if (nearTarget) _showDropHighlight(nearTarget);
-        else _hideDropHighlight();
-    }
-
-    function _showDropHighlight(dockName) {
-        const hl = _getDropHighlight();
-        const el = dockName === 'right' ? _getDock() : _getBottomDock();
-        if (!el) { _hideDropHighlight(); return; }
-        const r = el.getBoundingClientRect();
-        hl.style.left   = r.left   + 'px';
-        hl.style.top    = r.top    + 'px';
-        hl.style.width  = r.width  + 'px';
-        hl.style.height = r.height + 'px';
-        hl.classList.add('visible');
-        _dropTarget = dockName;
-    }
-
-    function _hideDropHighlight() {
-        const hl = document.getElementById('panel-drop-highlight');
-        if (hl) hl.classList.remove('visible');
-        _dropTarget = null;
     }
 
     // ── Resize handles ────────────────────────────────────────
@@ -588,10 +297,10 @@ const PanelSystem = (() => {
         const bd = _state.bottomDock;
         if (rd.tabs.includes(id)) {
             if (rd.activeTab === id) hidePanel(id);
-            else _activateTabIn('right', id);
+            else PanelTabBar.activateTabIn('right', id);
         } else if (bd.tabs.includes(id)) {
             if (bd.activeTab === id) hidePanel(id);
-            else _activateTabIn('bottom', id);
+            else PanelTabBar.activateTabIn('bottom', id);
         } else {
             showPanel(id);
         }
@@ -619,6 +328,19 @@ const PanelSystem = (() => {
     }
 
     function init() {
+        PanelFloats.configure({
+            state: _state, registry: _registry,
+            FLOAT_W, FLOAT_H, SNAP_DIST,
+            getDock: _getDock, getBottomDock: _getBottomDock,
+            dockPanel, hidePanel, saveState: _saveState,
+        });
+        PanelTabBar.configure({
+            state: _state, registry: _registry,
+            FLOAT_W,
+            getDock: _getDock, getBody: _getBody,
+            getBottomDock: _getBottomDock, getBottomBody: _getBottomBody,
+            hidePanel, moveToFloat, saveState: _saveState, applyLayout: _applyLayout,
+        });
         _applyLayout();
         const closeBtn = document.querySelector('#sidebar-panel .sidebar-header .btn-ghost');
         if (closeBtn) closeBtn.addEventListener('click', closeAll);

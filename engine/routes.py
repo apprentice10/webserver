@@ -4,164 +4,26 @@ engine/routes.py
 Endpoints HTTP del Table Engine — thin layer su service.py ed etl.py.
 """
 
-import io
 import json
 import logging
 import sqlite3
-from fastapi import APIRouter, Depends, Query
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from typing import Optional, Any
-from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional
 
 logger = logging.getLogger("engine.routes")
 
-from engine.project_db import get_project_conn
-from engine import service
+from engine.project_db import get_project_conn, audit
+from engine import service, service_columns, service_row_ops, service_templates
 from engine.catalog import TOOL_CATALOG
+from engine.schemas import (
+    ToolCreate, ToolSettingsUpdate, ToolResponse,
+    TemplateCreate, TemplateResponse,
+    ColumnCreate, ColumnUpdate, ColumnWidthUpdate, ColumnReorder, ColumnResponse,
+    RowCreate, CellUpdate, PasteData,
+    SqlQuery,
+)
 
 router = APIRouter(prefix="/api/tools", tags=["engine"])
-
-
-# ============================================================
-# SCHEMI PYDANTIC
-# ============================================================
-
-class ToolCreate(BaseModel):
-    name:            str
-    slug:            Optional[str] = None
-    tool_type:       Optional[str] = None
-    icon:            Optional[str] = "📄"
-    template_id:     Optional[int] = None
-    default_columns: Optional[list[dict]] = None
-    etl_sql:         Optional[str] = None
-
-
-class ToolSettingsUpdate(BaseModel):
-    name:         Optional[str] = None
-    rev:          Optional[str] = None
-    current_rev:  Optional[str] = None   # alias per compatibilità
-    note:         Optional[str] = None
-    query_config: Optional[Any] = None
-    icon:         Optional[str] = None
-
-
-class ToolResponse(BaseModel):
-    id:          int
-    name:        str
-    slug:        str
-    tool_type:   Optional[str]
-    current_rev: str
-    note:        Optional[str]
-    icon:        Optional[str]
-
-    class Config:
-        from_attributes = True
-
-
-class TemplateCreate(BaseModel):
-    type_slug:   str
-    name:        str
-    description: Optional[str] = None
-    etl_sql:     str
-    tool_id:     Optional[int] = None
-
-
-class TemplateResponse(BaseModel):
-    id:          int
-    type_slug:   str
-    name:        str
-    description: Optional[str]
-    etl_sql:     str
-    created_at:  Optional[datetime]
-    tool_id:     Optional[int] = None
-
-    class Config:
-        from_attributes = True
-
-
-class ColumnCreate(BaseModel):
-    name:     str
-    slug:     str
-    col_type: Optional[str] = "text"
-    width:    Optional[int] = 120
-    position: Optional[int] = None
-
-
-class ColumnUpdate(BaseModel):
-    name:     Optional[str] = None
-    width:    Optional[int] = None
-    position: Optional[int] = None
-    col_type: Optional[str] = None
-    formula:  Optional[str] = None
-
-
-class ColumnWidthUpdate(BaseModel):
-    width: int
-
-class ColumnReorder(BaseModel):
-    order: list[int]   # IDs colonne utente nel nuovo ordine
-
-
-class ColumnResponse(BaseModel):
-    id:        int
-    tool_id:   int
-    name:      str
-    slug:      str
-    col_type:  str
-    width:     int
-    position:  int
-    is_system: bool
-    formula:   Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
-
-class RowCreate(BaseModel):
-    cells: dict[str, Any]
-
-
-class CellUpdate(BaseModel):
-    slug:  str
-    value: Optional[str] = None
-
-
-class PasteData(BaseModel):
-    rows: list[dict[str, Any]]
-
-
-class SqlQuery(BaseModel):
-    sql: str
-
-
-class EtlModelBody(BaseModel):
-    model: dict
-    label: Optional[str] = None
-
-
-class EtlSqlImportBody(BaseModel):
-    sql: str
-
-
-class FlagCreate(BaseModel):
-    name:  str
-    color: str = "#888888"
-
-
-class FlagUpdate(BaseModel):
-    name:  Optional[str] = None
-    color: Optional[str] = None
-
-
-class CellFlagEntry(BaseModel):
-    row_tag:  str
-    col_slug: str = ""
-
-
-class CellFlagToggleRequest(BaseModel):
-    flag_id: int
-    cells:   list[CellFlagEntry]
 
 
 # ============================================================
@@ -202,7 +64,7 @@ def list_templates(
     type_slug: Optional[str] = Query(None),
     conn: sqlite3.Connection = Depends(get_project_conn),
 ):
-    return service.get_templates(conn, type_slug)
+    return service_templates.get_templates(conn, type_slug)
 
 
 @router.post("/templates", response_model=TemplateResponse)
@@ -210,7 +72,7 @@ def create_template(
     data: TemplateCreate,
     conn: sqlite3.Connection = Depends(get_project_conn),
 ):
-    return service.create_template(
+    return service_templates.create_template(
         conn,
         type_slug=data.type_slug,
         name=data.name,
@@ -224,134 +86,8 @@ def delete_template(
     template_id: int,
     conn: sqlite3.Connection = Depends(get_project_conn),
 ):
-    service.delete_template(conn, template_id)
+    service_templates.delete_template(conn, template_id)
     return {"ok": True}
-
-
-# ============================================================
-# FLAGS (project-level, must come before /{tool_id} routes)
-# ============================================================
-
-@router.get("/flags")
-def list_flags(conn: sqlite3.Connection = Depends(get_project_conn)):
-    rows = conn.execute(
-        "SELECT id, name, color, is_system FROM _flags ORDER BY is_system ASC, name ASC"
-    ).fetchall()
-    return [dict(r) for r in rows]
-
-
-@router.post("/flags", status_code=201)
-def create_flag(
-    data: FlagCreate,
-    conn: sqlite3.Connection = Depends(get_project_conn),
-):
-    from fastapi import HTTPException as _HTTP
-    try:
-        cur = conn.execute(
-            "INSERT INTO _flags (name, color, is_system) VALUES (?, ?, 0)",
-            (data.name.strip(), data.color),
-        )
-        conn.commit()
-        row = conn.execute(
-            "SELECT id, name, color, is_system FROM _flags WHERE id = ?", (cur.lastrowid,)
-        ).fetchone()
-        return dict(row)
-    except sqlite3.IntegrityError:
-        raise _HTTP(status_code=409, detail=f"Flag '{data.name}' already exists")
-
-
-@router.patch("/flags/{flag_id}")
-def update_flag(
-    flag_id: int,
-    data: FlagUpdate,
-    conn: sqlite3.Connection = Depends(get_project_conn),
-):
-    from fastapi import HTTPException as _HTTP
-    flag = conn.execute(
-        "SELECT id, name, color, is_system FROM _flags WHERE id = ?", (flag_id,)
-    ).fetchone()
-    if not flag:
-        raise _HTTP(status_code=404, detail="Flag not found")
-    if flag["is_system"] and data.name is not None:
-        raise _HTTP(status_code=400, detail="Cannot rename system flags")
-    new_name  = data.name.strip() if data.name  is not None else flag["name"]
-    new_color = data.color         if data.color is not None else flag["color"]
-    try:
-        conn.execute("UPDATE _flags SET name = ?, color = ? WHERE id = ?", (new_name, new_color, flag_id))
-        conn.commit()
-        row = conn.execute(
-            "SELECT id, name, color, is_system FROM _flags WHERE id = ?", (flag_id,)
-        ).fetchone()
-        return dict(row)
-    except sqlite3.IntegrityError:
-        raise _HTTP(status_code=409, detail=f"Flag name '{new_name}' already exists")
-
-
-@router.delete("/flags/{flag_id}", status_code=204)
-def delete_flag(
-    flag_id: int,
-    conn: sqlite3.Connection = Depends(get_project_conn),
-):
-    from fastapi import HTTPException as _HTTP
-    flag = conn.execute(
-        "SELECT id, is_system FROM _flags WHERE id = ?", (flag_id,)
-    ).fetchone()
-    if not flag:
-        raise _HTTP(status_code=404, detail="Flag not found")
-    if flag["is_system"]:
-        raise _HTTP(status_code=400, detail="Cannot delete system flags")
-    conn.execute("DELETE FROM _flags WHERE id = ?", (flag_id,))
-    conn.commit()
-
-
-@router.post("/{tool_id}/cell-flags/toggle", status_code=200)
-def toggle_cell_flags(
-    tool_id: int,
-    data:    CellFlagToggleRequest = ...,
-    conn:    sqlite3.Connection = Depends(get_project_conn),
-):
-    from fastapi import HTTPException as _HTTP
-    tool      = service.get_tool(conn, tool_id)
-    tool_slug = tool["slug"]
-
-    flag = conn.execute(
-        "SELECT id, is_system FROM _flags WHERE id = ?", (data.flag_id,)
-    ).fetchone()
-    if not flag:
-        raise _HTTP(status_code=404, detail="Flag not found")
-    if flag["is_system"]:
-        raise _HTTP(status_code=400, detail="Cannot assign system flags manually")
-
-    row_tags = [c.row_tag for c in data.cells]
-    placeholders = ",".join("?" * len(row_tags))
-    existing = conn.execute(
-        f"""SELECT row_tag, col_slug FROM _cell_flags
-            WHERE tool_slug = ? AND flag_id = ?
-            AND row_tag IN ({placeholders})""",
-        [tool_slug, data.flag_id] + row_tags,
-    ).fetchall()
-
-    existing_set = {(r["row_tag"], r["col_slug"]) for r in existing}
-    all_have = all((c.row_tag, c.col_slug) in existing_set for c in data.cells)
-
-    if all_have:
-        for c in data.cells:
-            conn.execute(
-                "DELETE FROM _cell_flags WHERE tool_slug=? AND row_tag=? AND col_slug=? AND flag_id=?",
-                (tool_slug, c.row_tag, c.col_slug, data.flag_id),
-            )
-        action = "removed"
-    else:
-        for c in data.cells:
-            if (c.row_tag, c.col_slug) not in existing_set:
-                conn.execute(
-                    "INSERT OR IGNORE INTO _cell_flags (tool_slug, row_tag, col_slug, flag_id) VALUES (?,?,?,?)",
-                    (tool_slug, c.row_tag, c.col_slug, data.flag_id),
-                )
-        action = "added"
-
-    conn.commit()
-    return {"action": action, "flag_id": data.flag_id, "cells_affected": len(data.cells)}
 
 
 # ============================================================
@@ -429,7 +165,7 @@ def add_column(
     data: ColumnCreate = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.add_column(
+    return service_columns.add_column(
         conn=conn,
         tool_id=tool_id,
         name=data.name,
@@ -446,7 +182,7 @@ def reorder_columns(
     data: ColumnReorder = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.reorder_columns(conn, tool_id, data.order)
+    return service_columns.reorder_columns(conn, tool_id, data.order)
 
 
 @router.patch("/{tool_id}/columns/{column_id}")
@@ -456,7 +192,7 @@ def update_column(
     data: ColumnUpdate = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.update_column(
+    return service_columns.update_column(
         conn, tool_id, column_id, data.model_dump(exclude_unset=True)
     )
 
@@ -467,7 +203,7 @@ def delete_column(
     column_id: int,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.delete_column(conn, tool_id, column_id)
+    return service_columns.delete_column(conn, tool_id, column_id)
 
 
 @router.patch("/{tool_id}/columns/{column_id}/width")
@@ -477,7 +213,7 @@ def update_column_width(
     data: ColumnWidthUpdate,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.update_column_width(conn, tool_id, column_id, data.width)
+    return service_columns.update_column_width(conn, tool_id, column_id, data.width)
 
 
 # ============================================================
@@ -508,7 +244,7 @@ def paste_rows(
     data: PasteData = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.paste_rows(conn, tool_id, None, data.rows)
+    return service_row_ops.paste_rows(conn, tool_id, None, data.rows)
 
 
 @router.patch("/{tool_id}/rows/{row_id}/cell")
@@ -527,7 +263,7 @@ def soft_delete_row(
     row_id: int,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.soft_delete_row(conn, tool_id, row_id, None)
+    return service_row_ops.soft_delete_row(conn, tool_id, row_id, None)
 
 
 @router.post("/{tool_id}/rows/{trash_id}/restore")
@@ -536,7 +272,7 @@ def restore_row(
     trash_id: int,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.restore_row(conn, tool_id, trash_id, None)
+    return service_row_ops.restore_row(conn, tool_id, trash_id, None)
 
 
 @router.delete("/{tool_id}/rows/{row_id}/override")
@@ -546,7 +282,7 @@ def remove_override(
     col: str = Query(...),
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.remove_override(conn, tool_id, row_id, col, None)
+    return service_row_ops.remove_override(conn, tool_id, row_id, col, None)
 
 
 @router.post("/{tool_id}/rows/{row_id}/keep")
@@ -555,13 +291,11 @@ def keep_row(
     row_id: int,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
-    from fastapi import HTTPException as _HTTP
-    from engine.project_db import audit
     tool = service.get_tool(conn, tool_id)
     slug = tool["slug"]
     row = conn.execute(f'SELECT tag FROM "{slug}" WHERE __id = ?', (row_id,)).fetchone()
     if not row:
-        raise _HTTP(status_code=404, detail="Row not found")
+        raise HTTPException(status_code=404, detail="Row not found")
     tag = row["tag"]
     flag = conn.execute("SELECT id FROM _flags WHERE name = 'ETL: Eliminated'").fetchone()
     if flag:
@@ -624,7 +358,7 @@ def rollback_cell(
     entry_id: int = Query(...),
     conn:     sqlite3.Connection = Depends(get_project_conn),
 ):
-    return service.rollback_cell(conn, tool_id, row_id, None, col, entry_id)
+    return service_row_ops.rollback_cell(conn, tool_id, row_id, None, col, entry_id)
 
 
 @router.post("/{tool_id}/rows/{row_id}/hard-delete")
@@ -633,7 +367,7 @@ def hard_delete_row(
     row_id:  int,
     conn:    sqlite3.Connection = Depends(get_project_conn)
 ):
-    return service.hard_delete_row(conn, tool_id, row_id, None)
+    return service_row_ops.hard_delete_row(conn, tool_id, row_id, None)
 
 
 # ============================================================
@@ -651,7 +385,6 @@ def run_sql(
     sql_lower = sql.lower()
     for keyword in forbidden:
         if keyword in sql_lower:
-            from fastapi import HTTPException
             raise HTTPException(
                 status_code=403,
                 detail=f"Operazione non permessa: '{keyword.strip()}'"
@@ -665,176 +398,5 @@ def run_sql(
         conn.commit()
         return {"rowcount": cur.rowcount}
     except Exception as e:
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail=str(e))
 
-
-# ============================================================
-# EXPORT
-# ============================================================
-
-@router.get("/{tool_id}/export/excel")
-def export_excel(
-    tool_id: int,
-    conn: sqlite3.Connection = Depends(get_project_conn)
-):
-    import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment
-
-    tool = service.get_tool(conn, tool_id)
-    tool_slug = tool["slug"]
-    tool_name = tool["name"]
-
-    # Colonne visibili: tutte tranne log e colonne interne __
-    columns = [
-        c for c in service.get_columns(conn, tool_id)
-        if c["slug"] != "log"
-    ]
-
-    # Righe attive (non cancellate — stanno nella tabella principale)
-    rows = conn.execute(
-        f'SELECT * FROM "{tool_slug}" ORDER BY __position ASC'
-    ).fetchall()
-    rows = [dict(r) for r in rows]
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = tool_name[:31]  # Excel limita a 31 caratteri
-
-    # Header
-    header_font = Font(bold=True, color="FFFFFF")
-    header_fill = PatternFill("solid", fgColor="2D6A9F")
-    header_align = Alignment(horizontal="center", vertical="center")
-
-    for col_idx, col in enumerate(columns, start=1):
-        cell = ws.cell(row=1, column=col_idx, value=col["name"])
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = header_align
-
-    ws.freeze_panes = "A2"
-
-    # Dati
-    for row_idx, row in enumerate(rows, start=2):
-        for col_idx, col in enumerate(columns, start=1):
-            ws.cell(row=row_idx, column=col_idx, value=row.get(col["slug"]))
-
-    # Larghezza colonne approssimata
-    for col_idx, col in enumerate(columns, start=1):
-        approx_width = max(len(col["name"]) + 2, 12)
-        ws.column_dimensions[
-            openpyxl.utils.get_column_letter(col_idx)
-        ].width = approx_width
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-
-    safe_name = "".join(c if c.isalnum() or c in "-_ " else "_" for c in tool_name)
-    filename = f"{safe_name}.xlsx"
-
-    return StreamingResponse(
-        buf,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-    )
-
-
-# ============================================================
-# ETL
-# ============================================================
-
-@router.post("/{tool_id}/etl/compile")
-def etl_compile(
-    tool_id: int,
-    data: EtlModelBody = ...,
-    conn: sqlite3.Connection = Depends(get_project_conn)
-):
-    from engine.etl_compiler import compile_sql, EtlValidationError, EtlCompilationError
-    from fastapi import HTTPException
-    try:
-        sql = compile_sql(data.model)
-    except (EtlValidationError, EtlCompilationError) as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    return {"sql": sql}
-
-
-@router.post("/{tool_id}/etl/preview")
-def etl_preview(
-    tool_id: int,
-    data: EtlModelBody = ...,
-    conn: sqlite3.Connection = Depends(get_project_conn)
-):
-    from engine.etl import etl_preview as _preview
-    return _preview(conn, tool_id, data.model)
-
-
-@router.post("/{tool_id}/etl/apply")
-def etl_apply(
-    tool_id: int,
-    data: EtlModelBody = ...,
-    conn: sqlite3.Connection = Depends(get_project_conn)
-):
-    from engine.etl import etl_apply as _apply
-    return _apply(conn, tool_id, data.model)
-
-
-@router.post("/{tool_id}/etl/run")
-def etl_run(
-    tool_id: int,
-    conn: sqlite3.Connection = Depends(get_project_conn)
-):
-    from engine.etl import etl_run_saved
-    return etl_run_saved(conn, tool_id)
-
-
-@router.post("/{tool_id}/etl/save")
-def etl_save(
-    tool_id: int,
-    data: EtlModelBody = ...,
-    conn: sqlite3.Connection = Depends(get_project_conn)
-):
-    from engine.etl import save_etl_version
-    return save_etl_version(conn, tool_id, data.model, data.label)
-
-
-@router.get("/{tool_id}/etl/config")
-def etl_config(
-    tool_id: int,
-    conn: sqlite3.Connection = Depends(get_project_conn)
-):
-    from engine.etl import get_etl_config
-    return get_etl_config(conn, tool_id)
-
-
-@router.patch("/{tool_id}/etl/config")
-def etl_save_draft(
-    tool_id: int,
-    data: EtlModelBody = ...,
-    conn: sqlite3.Connection = Depends(get_project_conn)
-):
-    from engine.etl import etl_save_draft as _save_draft
-    return _save_draft(conn, tool_id, data.model)
-
-
-@router.post("/{tool_id}/etl/sql_to_model")
-def etl_sql_to_model(
-    tool_id: int,
-    data: EtlSqlImportBody = ...,
-):
-    from engine.sql_to_model import sql_to_model
-    from fastapi import HTTPException
-    try:
-        model = sql_to_model(data.sql)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    return {"model": model}
-
-
-@router.get("/{tool_id}/etl/schema")
-def etl_schema(
-    tool_id: int,
-    conn: sqlite3.Connection = Depends(get_project_conn)
-):
-    from engine.etl import get_etl_schema
-    return get_etl_schema(conn, tool_id)

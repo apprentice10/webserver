@@ -202,9 +202,9 @@ Read this at the start of every session before touching any file.
 
 | File | Current LOC | Strategy |
 |------|-------------|----------|
-| `static/engine/js/grid.js` | 1670 → **515** | P4-H1–H6 (history) ✓, P4-G1 (selection) ✓, P4-G2 (keyboard) ✓, P4-G3 (context menu) ✓, P4-G4 (rendering) ✓, P4-G5 (row-ops) ✓, P4-G6 (clipboard) ✓ |
+| `static/engine/js/grid.js` | 1670 → **~465** | P4-H1–H6 (history) ✓, P4-G1 (selection) ✓, P4-G2 (keyboard) ✓, P4-G3 (context menu) ✓, P4-G4 (rendering) ✓, P4-G5 (row-ops) ✓, P4-G6 (clipboard) ✓, P4-G7 (cell-save) ✓ |
 | `static/engine/js/etl_editor.js` | 1174 → **480** | P4-E1–E4 complete ✓ |
-| `static/engine/js/panel_system.js` | 634 | Extract state store from rendering |
+| `static/engine/js/panel_system.js` | 634 → **356** | P4-P1 (floats) + P4-P2 (tab bar) extracted ✓ |
 
 ---
 
@@ -348,6 +348,15 @@ One commit per logical task. Each commit must:
 - `grid.js` reduced 559 → 515 LOC; 61/61 tests pass
 - Companion files: created `clipboard/clipboard-manager.js.md`, updated `grid.js.md`
 
+**P4-G7 — Extract cell save → `cell-save/cell-save.js`** ✓ 2026-05-14
+
+- Created `static/engine/js/cell-save/cell-save.js` (72 LOC): `configure({getRows, getFilteredRows})`, `doSaveCell`, `updateLogCell`
+- `configure()` injects `getRows` + `getFilteredRows` returning live array references — mutation by index propagates back to grid.js state (same pattern as `RowOps`)
+- `_doSaveCell` and `_updateLogCell` removed from grid.js; `CellSave.configure()` added to `init()`; `CellKeyboard.configure` now passes `CellSave.doSaveCell`; `refreshRowDOM` calls `CellSave.updateLogCell`
+- `<script>` added to `table.html` (after `clipboard-manager.js`, before `grid.js`)
+- `grid.js` reduced 515 → ~465 LOC
+- Companion files: created `cell-save/cell-save.js.md`, updated `grid.js.md`
+
 **P4-G5 — Extract row mutation ops → `row-ops/row-ops.js`** ✓ 2026-05-14
 
 - Created `static/engine/js/row-ops/row-ops.js` (139 LOC): `softDeleteRow`, `restoreRow`, `hardDeleteRow`, `keepRow`, `removeOverride`, `_doRemoveOverride`
@@ -395,6 +404,21 @@ One commit per logical task. Each commit must:
 - `<script>` added to `table.html` after `history-actions.js`, before `grid.js`
 - Verification: 61/61 tests pass
 - Companion files: created `selection/selection-manager.js.md`, updated `grid.js.md`
+
+**P4-P1 — Extract float subsystem → `panels/panel-floats.js`** ✓ 2026-05-14
+
+- Created `static/engine/js/panels/panel-floats.js` (192 LOC): `configure`, `render`, `_createFloatEl`, `_initFloatDrag`, `_initFloatResize`, `_checkProximity`, `_showDropHighlight`, `_hideDropHighlight`, `_getFloatLayer` (moved here from panel_system.js), `_dropTarget` state
+- `configure()` injects 9 deps: `state`, `registry`, `FLOAT_W/H/SNAP_DIST`, `getDock`, `getBottomDock`, `dockPanel`, `hidePanel`, `saveState`
+- `panel_system.js._applyLayout` delegates `PanelFloats.render()` instead of `_renderFloats()`
+- Companion files: created `panels/panel-floats.js.md`
+
+**P4-P2 — Extract tab bar → `panels/panel-tab-bar.js`** ✓ 2026-05-14
+
+- Created `static/engine/js/panels/panel-tab-bar.js` (145 LOC): `configure`, `renderTabBar`, `renderBottomTabBar`, `activateTabIn`, `_tabsHtml`, `_initTabBarEvents`, `_reorderTabIn`; `_dragId`/`_dragDropped` state moved here
+- `configure()` injects 10 deps: `state`, `registry`, `FLOAT_W`, `getDock/Body`, `getBottomDock/Body`, `hidePanel`, `moveToFloat`, `saveState`, `applyLayout`
+- `panel_system.js._applyRightDock/Bottom` delegate to `PanelTabBar.renderTabBar/Bottom`; `togglePanel` calls `PanelTabBar.activateTabIn`
+- `panel_system.js` 634→356 LOC; Phase 4 complete
+- Companion files: created `panels/panel-tab-bar.js.md`, updated `panel_system.js.md`
 
 *(none — history subsystem complete)*
 
@@ -497,3 +521,5 @@ No client-side undo/redo (Ctrl+Z) is introduced in Phase 4. The history subsyste
 | 2026-05-14 | S23 | P4-G4 complete — rendering cluster extracted to `rendering/grid-renderer.js` (128 LOC): `_flagBadgesHtml`, `_renderRow`, `_renderCell`, `_renderGhostRow`, `_formatLogPreview` moved; 5 call sites in `render`, `_doSaveCell`, `_updateLogCell`, `refreshRowDOM` updated to `GridRenderer.*`; `_escAttr` alias removed; `grid.js` 784→658 LOC; 61/61 tests pass | Next: cell-save or remaining grid.js cluster |
 | 2026-05-14 | S24 | P4-G5 complete — row mutation ops extracted to `row-ops/row-ops.js` (139 LOC): `softDeleteRow`, `restoreRow`, `hardDeleteRow`, `keepRow`, `removeOverride`, `_doRemoveOverride` moved; `configure()` injects 6 deps; `grid.js` 658→559 LOC; 61/61 tests pass | Next: clipboard or cell-save extraction (P4-G6) |
 | 2026-05-14 | S25 | P4-G6 complete — clipboard copy extracted to `clipboard/clipboard-manager.js` (63 LOC): `configure(deps)`, `init()`; `_initCopyToClipboard()` removed from grid.js; `grid.js` 559→515 LOC; 61/61 tests pass | Next: cell-save extraction (P4-G7) |
+| 2026-05-14 | S26 | P4-G7 complete — cell save extracted to `cell-save/cell-save.js` (72 LOC): `configure(deps)`, `doSaveCell`, `updateLogCell`; `_doSaveCell`/`_updateLogCell` removed from grid.js; `grid.js` 515→~465 LOC; `CellSave.configure()` added to `init()` | grid.js decomposition complete; next: panel_system.js |
+| 2026-05-14 | S27 | P4-P1+P4-P2 complete — float subsystem extracted to `panels/panel-floats.js` (192 LOC); tab bar extracted to `panels/panel-tab-bar.js` (145 LOC); `panel_system.js` 634→356 LOC; both configured via `configure(deps)` in `init()`; `<script>` tags added to `table.html` | panel_system.js decomposition complete; Phase 4 frontend decomposition done |

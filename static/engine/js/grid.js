@@ -9,7 +9,7 @@
  *   ~L58  : rendering  (render, _initVirtualScroll — row/cell HTML → GridRenderer)
  *   ~L250 : event listeners  (_attachListeners — wires CellKeyboard.* handlers)
  *   ~L275 : ghost row  (_createFromGhost)
- *   ~L320 : cell save  (_doSaveCell, _updateLogCell)
+ *   ~L320 : cell save  → CellSave (P4-G7)
  *   ~L370 : soft-delete / restore / hard-delete
  *   ~L430 : toggleDeleted / toggleLog / context menu
  *   ~L680 : search / filters / appendRows
@@ -47,11 +47,15 @@ const GridManager = (() => {
             render();
 
             SelectionManager.configure(() => _filteredRows.length);
+            CellSave.configure({
+                getRows:         () => _rows,
+                getFilteredRows: () => _filteredRows,
+            });
             CellKeyboard.configure({
                 getFilteredRows:  () => _filteredRows,
                 getRowHeight:     _getRowHeight,
                 normalizeCells:   _normalizeCellsFromInput,
-                doSaveCell:       _doSaveCell,
+                doSaveCell:       CellSave.doSaveCell,
                 createFromGhost:  _createFromGhost,
                 forceRender:      render,
             });
@@ -252,69 +256,7 @@ const GridManager = (() => {
         }
     }
 
-    // --------------------------------------------------------
-    // SALVATAGGIO CELLA
-    // --------------------------------------------------------
-
-    async function _doSaveCell(inputEl, cell, newValue) {
-        const row = _rows.find(r => r.tag === cell.row_tag);
-        if (!row) return;
-        const rowId = row.id;
-        const field = cell.col_slug;
-
-        inputEl.style.opacity = "0.5";
-
-        try {
-            const updatedRow = await ApiClient.updateCell(rowId, field, newValue);
-
-            // Aggiorna dati locali
-            const idx = _rows.findIndex(r => r.id === rowId);
-            if (idx !== -1) _rows[idx] = updatedRow;
-
-            const fidx = _filteredRows.findIndex(r => r.id === rowId);
-            if (fidx !== -1) _filteredRows[fidx] = updatedRow;
-
-            // Aggiorna solo la cella LOG senza re-render
-            _updateLogCell(rowId, updatedRow.row_log);
-
-            // Aggiorna override dot e attributo senza re-render completo
-            const td = inputEl.closest("td");
-            if (td) {
-                const isOverridden = updatedRow.overridden_cols != null && field in updatedRow.overridden_cols;
-                if (isOverridden) td.setAttribute("data-overridden", "true");
-                else              td.removeAttribute("data-overridden");
-                const etlVal  = isOverridden ? (updatedRow.overridden_cols[field] ?? "") : undefined;
-                const cfSlug  = updatedRow.cell_flags && updatedRow.cell_flags[field];
-                const badges  = GridRenderer.flagBadgesHtml(cfSlug, isOverridden ? etlVal : undefined);
-                const existing = td.querySelector(".cell-flag-badges");
-                if (existing) existing.remove();
-                if (badges) {
-                    td.insertAdjacentHTML("beforeend", badges);
-                    td.setAttribute("data-has-flags", "true");
-                } else {
-                    td.removeAttribute("data-has-flags");
-                }
-            }
-
-            inputEl.style.opacity = "1";
-            inputEl.dataset.originalValue = newValue;
-
-        } catch (err) {
-            inputEl.value = inputEl.dataset.originalValue ?? "";
-            inputEl.style.opacity = "1";
-            inputEl.style.outline = "2px solid var(--color-danger)";
-            setTimeout(() => inputEl.style.outline = "", 2000);
-            showToast(err.message, "error");
-        }
-    }
-
-    function _updateLogCell(rowId, rowLog) {
-        const rowEl = document.querySelector(`tr[data-row-id="${rowId}"]`);
-        if (!rowEl) return;
-        const logCell = rowEl.querySelector(".cell-log-preview");
-        if (logCell) logCell.innerHTML = GridRenderer.formatLogPreview(rowLog);
-    }
-
+    // _doSaveCell, _updateLogCell → CellSave (P4-G7)
 
     // softDeleteRow, restoreRow, hardDeleteRow, keepRow, removeOverride, _doRemoveOverride → RowOps (P4-G5)
 
@@ -467,7 +409,7 @@ const GridManager = (() => {
         if (idx !== -1) _rows[idx] = updatedRow;
         const fidx = _filteredRows.findIndex(r => r.id === rowId);
         if (fidx !== -1) _filteredRows[fidx] = updatedRow;
-        _updateLogCell(rowId, updatedRow.row_log);
+        CellSave.updateLogCell(rowId, updatedRow.row_log);
         const columns = ColumnsManager.getColumns();
         const rowEl   = document.querySelector(`tr[data-row-id="${rowId}"]`);
         if (rowEl) {

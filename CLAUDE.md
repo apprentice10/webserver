@@ -191,3 +191,11 @@ Apply at the start and end of every session:
 Vanilla JS — no framework, no build step. All modules are IIFEs under `static/engine/js/`.
 
 Module patterns, pitfalls, script load order, dependency map, and CSS module details → `_context/FRONTEND_PATTERNS.md`.
+---
+
+## Module Size Constraints
+
+Modules and files must remain small and focused.
+classes/services should have a single clear responsibility
+If a file starts accumulating unrelated responsibilities, deeply nested logic, or multiple architectural concerns, split it immediately into smaller modules.
+Favor many small composable modules over fewer large centralized files.

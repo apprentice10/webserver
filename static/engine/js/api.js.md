@@ -3,23 +3,25 @@
 
 **Descrizione:** Client HTTP universale del Table Engine — unico modulo autorizzato a fare `fetch` verso il backend. Tutti i metodi sono `async` e restituiscono dati già parsati.
 
-## Indice
+## Index (~283 lines)
 
-| Sezione | Metodi pubblici |
-|---------|----------------|
-| Utility interna | `request(url, options)` — wrapper fetch con error handling unificato |
+| Section | Public methods |
+|---------|---------------|
+| Internal utility | `request(url, options)` — unified fetch wrapper with error handling |
 | Tool | `loadTool`, `updateToolSettings` |
-| Colonne | `loadColumns`, `addColumn`, `updateColumn`, `deleteColumn`, `updateColumnWidth`, `reorderColumns` |
-| Righe | `loadRows`, `createRow`, `updateCell`, `softDeleteRow`, `restoreRow`, `hardDeleteRow`, `removeOverride`, `pasteRows` |
+| Columns | `loadColumns`, `addColumn`, `updateColumn`, `deleteColumn`, `updateColumnWidth`, `reorderColumns` |
+| Rows | `loadRows`, `createRow`, `updateCell`, `softDeleteRow`, `restoreRow`, `hardDeleteRow`, `removeOverride`, `keepRow`, `pasteRows` |
+| Audit / History | `getAudit({rowTag, rowTags, colSlug, colSlugs, limit})` — fetches `_audit` entries; supports single and multi row/col params; `rollbackCell(rowId, col, entryId)` — restores a cell to a previous audit value |
 | SQL Editor | `runSql` |
-| Export | `exportExcel` — usa `window.location.href` (non fetch, download diretto) |
+| Export | `exportExcel` — uses `window.location.href` (not fetch, direct download) |
 | ETL | `etlCompile`, `etlPreview`, `etlApply`, `etlSave`, `etlRunSaved`, `etlLoadConfig`, `etlLoadSchema`, `etlSaveDraft`, `etlSqlToModel` |
 | Flags | `listFlags`, `createFlag`, `updateFlag`, `deleteFlag`, `toggleCellFlags` |
 | Template | `saveTemplate`, `deleteTemplate` |
 
-## Decisioni
+## Decisions
 
-- **`PROJECT_ID` e `TOOL_ID` iniettati da Jinja2** nel template HTML — non passati come parametri ai metodi.
-- **Unico punto di fetch**: nessun altro modulo fa chiamate HTTP dirette. Centralizza error handling e URL construction.
-- **`exportExcel` usa `window.location.href`** anziché fetch per triggerare il download del file binario.
-- **HTTP 204 → `null`**: `request()` controlla `response.status === 204` e restituisce `null` senza tentare il parse JSON.
+- **`PROJECT_ID` and `TOOL_ID` injected by Jinja2** in the HTML template — not passed as method parameters.
+- **Single fetch point**: no other module makes direct HTTP calls. Centralises error handling and URL construction.
+- **`exportExcel` uses `window.location.href`** instead of fetch to trigger binary file download.
+- **HTTP 204 → `null`**: `request()` checks `response.status === 204` and returns `null` without attempting JSON parse.
+- **`getAudit` supports multi-row and multi-col queries**: accepts both `rowTag`/`colSlug` (single) and `rowTags`/`colSlugs` (comma-joined strings). The backend `GET /{tool_id}/audit` merges them into `IN (...)` clauses; the client never sends both single and multi params for the same dimension simultaneously.

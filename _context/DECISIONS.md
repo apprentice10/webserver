@@ -111,6 +111,24 @@
 
 ---
 
+## D13 — Explicit state passing for grid→history communication (Phase 4)
+
+**Decision:** History modules receive grid state as explicit parameters — `row` object, `ranges` array, `filteredRows` array, `columns` array — rather than reading grid closure variables directly.
+**Rationale:** History files live in a separate IIFE scope (`static/engine/js/history/`) and cannot access `grid.js` private variables. Explicit parameters make dependencies visible, keep history modules testable in isolation, and defer the need for a shared state abstraction (GridCore) until warranted.
+**Tradeoff:** Callers in `grid.js` must look up rows and pass current state before each call. Slightly more verbose at the callsite.
+**Rejected:** Callback injection (Option C) — weaker contract; GridCore accessor (Option B) — requires Phase 2 infrastructure that doesn't exist yet.
+
+---
+
+## D14 — DOM CustomEvent for history→grid communication (Phase 4)
+
+**Decision:** After a successful rollback, `RollbackService` dispatches `grid:rowUpdated` (`{ detail: { rowId, row } }`) on `document`. `grid.js` listens in `init()` and calls `refreshRowDOM(rowId, row)`. History modules have no reference to `GridManager` or any grid internals.
+**Rationale:** History files must not import or call grid internals — that recreates the monolith coupling. DOM CustomEvents provide complete subsystem isolation: history emits, grid reacts. The pattern is already present in this codebase (`grid:historyRendered` event).
+**Convention:** All cross-subsystem events are prefixed with the emitting subsystem name (`grid:`, `history:`, `selection:`) and documented in the subsystem's `README.md`.
+**Rejected:** Callback injection at init — tighter coupling and requires grid to expose an internal function reference; direct `GridManager.refreshRowDOM()` call — creates a history→grid dependency that violates the dependency direction rule.
+
+---
+
 ## D12 — Schema versioning via `PRAGMA user_version` (Group J)
 
 **Decision:** `PRAGMA user_version` stores the schema version integer. `SCHEMA_VERSION` constant in `engine/project_db.py` defines the version the running server produces. Migrations run in `_run_migrations()`, one transaction per version step. Legacy DBs (pre-versioning) have `user_version = 0` and are migrated to v1 on first open.

@@ -1,20 +1,19 @@
 ---
 # static/engine/js/grid.js
 
-**Description:** Main grid orchestration: virtual scroll render, cell save, toggle LOG/REV, context menu wrapper, filters, ghost row. Row/cell HTML delegated to `GridRenderer` (P4-G4). Range selection delegated to `SelectionManager` (P4-G1). Keyboard nav + edit mode delegated to `CellKeyboard` (P4-G2). Context menu + flag submenu delegated to `ContextMenu` (P4-G3). Row mutation ops delegated to `RowOps` (P4-G5). Clipboard copy delegated to `ClipboardManager` (P4-G6).
+**Description:** Main grid orchestration: virtual scroll render, toggle LOG/REV, context menu wrapper, filters, ghost row. Row/cell HTML delegated to `GridRenderer` (P4-G4). Range selection delegated to `SelectionManager` (P4-G1). Keyboard nav + edit mode delegated to `CellKeyboard` (P4-G2). Context menu + flag submenu delegated to `ContextMenu` (P4-G3). Row mutation ops delegated to `RowOps` (P4-G5). Clipboard copy delegated to `ClipboardManager` (P4-G6). Cell save delegated to `CellSave` (P4-G7).
 
-## Index (~515 lines)
+## Index (~465 lines)
 
 | Lines    | Section |
 |----------|---------|
-| 1–97     | State variables + `init()` — includes `RowOps.configure()`, `SelectionManager.configure()`, `CellKeyboard.configure()`, `ContextMenu.configure()`, `ClipboardManager.configure()+init()`, `grid:rowUpdated` listener |
-| 97–165   | Rendering: `OVERSCAN`, `_getRowHeight`, `render` (virtual scroll), `_initVirtualScroll` — HTML generation delegated to `GridRenderer.*` |
-| 165–215  | Event listeners (`_attachListeners`), search shortcut (`_initSearchShortcut`) |
-| 215–255  | Ghost row (`_createFromGhost`) |
-| 255–315  | Cell save (`_doSaveCell`, `_updateLogCell`) |
-| 315–340  | Toggle deleted/LOG/REV, context menu wrapper (`openContextMenu` → `ContextMenu.open`) |
-| 340–410  | Search (`search`), filters (`_applyFilters`), `appendRows` |
-| 410–515  | Utility (`_showError`, `_normalizeCellsFromInput`, `updateRowData`, `getRowById`, `getRowByTag`, `refreshRowDOM`), public API |
+| 1–105    | State variables + `init()` — includes `CellSave.configure()`, `RowOps.configure()`, `SelectionManager.configure()`, `CellKeyboard.configure()`, `ContextMenu.configure()`, `ClipboardManager.configure()+init()`, `grid:rowUpdated` listener |
+| 105–170  | Rendering: `OVERSCAN`, `_getRowHeight`, `render` (virtual scroll), `_initVirtualScroll` — HTML generation delegated to `GridRenderer.*` |
+| 170–220  | Event listeners (`_attachListeners`), search shortcut (`_initSearchShortcut`) |
+| 220–260  | Ghost row (`_createFromGhost`) |
+| 260–290  | Toggle deleted/LOG/REV, context menu wrapper (`openContextMenu` → `ContextMenu.open`) |
+| 290–365  | Search (`search`), filters (`_applyFilters`), `appendRows` |
+| 365–465  | Utility (`_showError`, `_normalizeCellsFromInput`, `updateRowData`, `getRowById`, `getRowByTag`, `refreshRowDOM`), public API |
 
 ## State variables
 
@@ -31,6 +30,7 @@
 | `_rafPending`    | `boolean`     | Virtual scroll: true while a `requestAnimationFrame` render is already queued; prevents RAF stacking on fast scroll |
 
 > `_logSidebarCtx` removed in P4-H6 → moved to `HistoryPanel`.
+> `_doSaveCell`, `_updateLogCell` removed in P4-G7 → moved to `CellSave`.
 > `_ranges`, `_activeDragIdx`, `_isDragging`, `_isAdditive` removed in P4-G1 → moved to `SelectionManager`.
 > `_editingInput` removed in P4-G2 → moved to `CellKeyboard`.
 > `_ctxRowId`, `_ctxColSlug`, `_ctxColSlugLog`, `_ctxFlagsCache` removed in P4-G3 → moved to `ContextMenu`.
@@ -51,7 +51,8 @@ _applyFilters()            → _filteredRows
 _initVirtualScroll()       → attaches scroll listener + MutationObserver
 render()
 SelectionManager.configure(() => _filteredRows.length)
-CellKeyboard.configure({...})  ← injects getFilteredRows, doSaveCell, createFromGhost, forceRender
+CellSave.configure({getRows, getFilteredRows})
+CellKeyboard.configure({...})  ← injects getFilteredRows, doSaveCell (→ CellSave.doSaveCell), createFromGhost, forceRender
 PasteManager.init()
 _initContextMenu()
 SelectionManager.initGlobal()  ← registers mouseup, range readout chip, column header click
@@ -104,7 +105,7 @@ Operation layer (private, accept `cells[]`):
 
 | Function | Description |
 |----------|-------------|
-| `_doSaveCell(inputEl, cell, newValue)` | Save one cell's value via API; `cell = {row_tag, col_slug}`. |
+| `CellSave.doSaveCell(inputEl, cell, newValue)` | Save one cell's value via API; `cell = {row_tag, col_slug}`. Delegated to `CellSave` (P4-G7). |
 | `_doRemoveOverride(cells)` | Remove ETL override from all supplied cells in a loop. |
 
 Legacy compat wrappers (keep old `(rowId, colSlug)` signature for internal context menu calls):
