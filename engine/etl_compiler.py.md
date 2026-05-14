@@ -4,24 +4,23 @@
 
 **Expression-to-SQL primitives** (exceptions, constants, `expr_to_sql`) live in `engine/etl_compiler_expr.py`.
 **Graph utilities** (`_kahn_sort`, `_collect_ancestors`, `_output_aliases_for`) live in `engine/etl_compiler_graph.py`.
-Both are imported directly — no re-exports from this module.
+**Validation** (`_validate_expr`, `_exprs_in_transformation`, `validate_model`) lives in `engine/etl_compiler_validate.py`.
+All are imported directly — no re-exports from this module except `validate_model` (public API used by tests).
 
 ## Index
 
 | Lines / Symbol | Description |
 |----------------|-------------|
-| 5–18 | Imports — `etl_model`, `etl_compiler_expr`, `etl_compiler_graph` |
-| 21–117 | `_validate_expr(expr, errors, context)` — recursive expression validator; includes SPLIT_PART arity and index checks |
-| 120–157 | `_exprs_in_transformation(tr)` — collect all (expr, context) pairs from a transformation |
-| 160–388 | `validate_model(model)` — Check 0: generate_series fields; Checks 1–14: structural and expression validation |
-| 393–566 | `compile_sql(model)` — Steps 0–8; generate_series source compiles to inline WITH RECURSIVE subquery |
+| 1–15 | Imports — `etl_model`, `etl_compiler_expr`, `etl_compiler_graph`, `etl_compiler_validate` |
+| 18–193 | `compile_sql(model)` — Steps 0–8; generate_series source compiles to inline WITH RECURSIVE subquery |
 
 ## Decisions
 
 ### Refactor Notes
 
 - **P1-001 (2026-05-14):** Expression-to-SQL cluster extracted to `engine/etl_compiler_expr.py`.
-- **P1-002 (2026-05-14):** Graph utilities (`_kahn_sort`, `_collect_ancestors`, `_output_aliases_for`) extracted to `engine/etl_compiler_graph.py`. Next: extract `_validate_expr` / `validate_model` into `engine/etl_compiler_validate.py` (P1-003).
+- **P1-002 (2026-05-14):** Graph utilities (`_kahn_sort`, `_collect_ancestors`, `_output_aliases_for`) extracted to `engine/etl_compiler_graph.py`.
+- **P1-003 (2026-05-14):** Validation helpers (`_validate_expr`, `_exprs_in_transformation`, `validate_model`) extracted to `engine/etl_compiler_validate.py`. `etl_compiler.py` is now orchestration-only.
 
 ### Architectural Notes
 
