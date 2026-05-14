@@ -51,18 +51,19 @@ Do not restructure request lifecycle code here until Phase 2 produces observatio
 - Verification: 32/32 tests pass
 - Companion files: created `engine/etl_compiler_expr.py.md`, updated `engine/etl_compiler.py.md`
 
+**P1-002 — Extract graph utilities from `etl_compiler.py`** ✓ 2026-05-14
+
+- Created `engine/etl_compiler_graph.py` (87 LOC): `_kahn_sort`, `_collect_ancestors`, `_output_aliases_for`
+- `_output_aliases_for` moved here (not to validate) — it is graph traversal, not semantic validation
+- `etl_compiler.py` reduced from ~596 → ~480 LOC (active lines); `deque` import removed
+- Verification: 32/32 tests pass
+- Companion files: created `engine/etl_compiler_graph.py.md`, updated `engine/etl_compiler.py.md`
+
 ### ACTIVE
 
-*(none — commit P1-001, then start P1-002)*
+*(none — commit P1-002, then start P1-003)*
 
 ### PENDING
-
-**P1-002 — Extract graph utilities from `etl_compiler.py`**
-
-- Target: `engine/etl_compiler_graph.py`
-- Extract: `_kahn_sort`, `_collect_ancestors`
-- Depends on: P1-001 complete
-- Note: `_output_aliases_for` depends on `EtlModel` — evaluate whether it moves too
 
 **P1-003 — Extract validation helpers from `etl_compiler.py`**
 
@@ -144,3 +145,4 @@ One commit per logical task. Each commit must:
 | Date | Session | Work Done | Next Step |
 |------|---------|-----------|-----------|
 | 2026-05-14 | S01 | Grilling complete; decisions locked; REFACTOR_TRACKER created; P1-001 complete | Commit P1-001, then start P1-002 (graph utilities) |
+| 2026-05-14 | S02 | P1-002 complete — graph utilities extracted to `etl_compiler_graph.py` | Commit P1-002, then start P1-003 (validation helpers) |

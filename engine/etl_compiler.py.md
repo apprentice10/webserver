@@ -2,26 +2,26 @@
 
 **Description:** Model-first SQL compiler. Accepts an `EtlModel` (or plain dict), validates it, builds a relation DAG, topologically sorts it, and compiles each relation into a SQL fragment. The final relation's SQL is assembled with ORDER BY and WITH clauses and returned. SQL is never parsed or inspected at any point.
 
-**Expression-to-SQL primitives** (exceptions, constants, `expr_to_sql`) live in `engine/etl_compiler_expr.py` and are re-exported from this module for backward compatibility.
+**Expression-to-SQL primitives** (exceptions, constants, `expr_to_sql`) live in `engine/etl_compiler_expr.py`.
+**Graph utilities** (`_kahn_sort`, `_collect_ancestors`, `_output_aliases_for`) live in `engine/etl_compiler_graph.py`.
+Both are imported directly — no re-exports from this module.
 
 ## Index
 
 | Lines / Symbol | Description |
 |----------------|-------------|
-| 7–14 | Imports — re-exports `EtlValidationError`, `EtlCompilationError`, `expr_to_sql` from `etl_compiler_expr` |
+| 5–18 | Imports — `etl_model`, `etl_compiler_expr`, `etl_compiler_graph` |
 | 21–117 | `_validate_expr(expr, errors, context)` — recursive expression validator; includes SPLIT_PART arity and index checks |
 | 120–157 | `_exprs_in_transformation(tr)` — collect all (expr, context) pairs from a transformation |
-| 160–192 | `_kahn_sort(graph)` — topological sort; raises `EtlCompilationError` on cycle |
-| 197–209 | `_collect_ancestors(relation_id, graph)` — BFS backwards from a relation id |
-| 213–237 | `_output_aliases_for(relation_id, model)` — infer output column aliases for ORDER BY validation |
-| 240–418 | `validate_model(model)` — Check 0: generate_series fields; Checks 1–14: structural and expression validation |
-| 423–596 | `compile_sql(model)` — Steps 0–8; generate_series source compiles to inline WITH RECURSIVE subquery |
+| 160–388 | `validate_model(model)` — Check 0: generate_series fields; Checks 1–14: structural and expression validation |
+| 393–566 | `compile_sql(model)` — Steps 0–8; generate_series source compiles to inline WITH RECURSIVE subquery |
 
 ## Decisions
 
 ### Refactor Notes
 
-- **P1-001 (2026-05-14):** Expression-to-SQL cluster extracted to `engine/etl_compiler_expr.py`. All names re-exported here for backward compatibility. Next: extract `_kahn_sort` / `_collect_ancestors` into `engine/etl_compiler_graph.py` (P1-002), then `_validate_expr` / `validate_model` into `engine/etl_compiler_validate.py` (P1-003).
+- **P1-001 (2026-05-14):** Expression-to-SQL cluster extracted to `engine/etl_compiler_expr.py`.
+- **P1-002 (2026-05-14):** Graph utilities (`_kahn_sort`, `_collect_ancestors`, `_output_aliases_for`) extracted to `engine/etl_compiler_graph.py`. Next: extract `_validate_expr` / `validate_model` into `engine/etl_compiler_validate.py` (P1-003).
 
 ### Architectural Notes
 
