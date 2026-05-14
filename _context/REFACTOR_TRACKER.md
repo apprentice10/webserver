@@ -203,7 +203,7 @@ Read this at the start of every session before touching any file.
 | File | Current LOC | Strategy |
 |------|-------------|----------|
 | `static/engine/js/grid.js` | 1670 | Extract history subsystem first (P4-H1–H6), then selection, keyboard |
-| `static/engine/js/etl_editor.js` | 1174 → **949** | P4-E1 done; P4-E2/E3/E4 pending (target ~510 LOC) |
+| `static/engine/js/etl_editor.js` | 1174 → **689** | P4-E1+E2 done; P4-E3/E4 pending (target ~510 LOC) |
 | `static/engine/js/panel_system.js` | 634 | Extract state store from rendering |
 
 ---
@@ -308,14 +308,15 @@ One commit per logical task. Each commit must:
 
 ### PENDING
 
-**P4-E2 — Create `etl-editor/etl-model-renderer.js`**
+**P4-E2 — Create `etl-editor/etl-model-renderer.js`** ✓ 2026-05-14
 
-- New IIFE `EtlModelRenderer`
-- Extract: `_renderSources(model)`, `_renderTransformations(model)`, `_renderTransformation(t)`, `_renderSelectBody(t)`, `_renderFilterBody(t)`, `_renderJoinBody(t)`, `_renderAggregateBody(t)`, `_renderComputeBody(t)`, `_renderFinalRelation(model)`, `_renderOrderBy(model)`, `_renderHistory(history)`, `_renderTemplatesList(templates)`, `_renderSchema(schema, container)`
-- All functions take explicit model/data params — no closure access to `EtlEditor` state
-- Inline HTML event handlers still reference `EtlEditor.*` (global name — unchanged)
-- Uses `EtlExpr.exprToText(...)` for expression display
-- Load order: before `etl_editor.js`, after `etl-expr.js`
+- Created `static/engine/js/etl-editor/etl-model-renderer.js` (307 LOC): 7 public render functions + 5 private body renderers
+- `_renderFinalRelation` mutation removed — `_renderModel()` in `etl_editor.js` normalizes `final_relation_id` before delegating
+- `_renderHistory` and `_renderTemplatesList` moved here; `_ea`/`_formatTs` removed from `etl_editor.js` (now local to renderer)
+- `etl_editor.js` reduced 949 → 689 LOC; 6 direct render-function call sites updated to `EtlModelRenderer.*`
+- `<script>` added to `etl.html` between `etl-expr.js` and `etl_editor.js`
+- Verification: 61/61 tests pass
+- Companion files: created `etl-model-renderer.js.md`, updated `etl_editor.js.md`
 
 **P4-E3 — Create `etl-editor/etl-preview-renderer.js`**
 
@@ -425,3 +426,4 @@ No client-side undo/redo (Ctrl+Z) is introduced in Phase 4. The history subsyste
 | 2026-05-14 | S14 | P4-H5 complete — `history-actions.js` created (19 LOC): `openRowHistory`, `openCellHistory`, `openRangeHistory`; facade resolves row before delegating to HistoryPanel; `<script>` added to `table.html` | Start P4-H6: wire history subsystem into grid.js |
 | 2026-05-14 | S15 | P4-H6 complete — history subsystem fully wired: `grid:rowUpdated` listener added, 3 callsites replaced, extracted functions removed from grid.js (including `_logSidebarCtx`), `getAllRows()` added to public API, `history-panel.js` fixed to call `HistoryRenderer.exportLog()`; 61/61 tests pass | History subsystem complete; next: etl_editor.js or panel_system.js decomposition |
 | 2026-05-14 | S16 | P4-E1 complete — expression DSL extracted to `etl-editor/etl-expr.js` (235 LOC): `tokenize`, `parseExpr`, `exprToText`; `etl_editor.js` 1174→949 LOC; 8 call sites updated; 61/61 tests pass. P4-E2/E3/E4 plan written to tracker | Start P4-E2: create `etl-editor/etl-model-renderer.js` |
+| 2026-05-14 | S17 | P4-E2 complete — model renderers extracted to `etl-editor/etl-model-renderer.js` (307 LOC); `etl_editor.js` 949→689 LOC; `_ea`/`_formatTs` removed from main; `final_relation_id` normalization moved to `_renderModel()`; 61/61 tests pass | Start P4-E3: create `etl-editor/etl-preview-renderer.js` |
