@@ -59,22 +59,48 @@ Do not restructure request lifecycle code here until Phase 2 produces observatio
 - Verification: 32/32 tests pass
 - Companion files: created `engine/etl_compiler_graph.py.md`, updated `engine/etl_compiler.py.md`
 
+**P1-004a — Write unit tests for `sql_to_model.py` internals** ✓ 2026-05-14
+
+- Added 29 unit tests: 8 for `_tokenize_expr`, 17 for `_parse_expr`, 4 for `_try_rewrite_split_part`
+- Total test count: 32 → 61
+- All pass; P1-004b (expression extraction) is now unblocked
+
+**P1-004 — Assess `sql_to_model.py` (895 LOC) for extraction targets** ✓ 2026-05-14
+
+- Only 5 integration-level tests (all call `sql_to_model()` end-to-end); no unit tests for internals
+- Key cross-dependency: `_extract_ctes` calls `_parse_expr` → expression subsystem must be extracted first
+- Two clean extractions identified: expr subsystem (004b, ~385 LOC) + SQL lexer (004c, ~150 LOC)
+- `_extract_ctes` stays in main to avoid cross-module imports for 42 LOC
+- Next: P1-004a (unit tests as prerequisite)
+
+**P1-003 — Extract validation helpers from `etl_compiler.py`** ✓ 2026-05-14
+
+- Created `engine/etl_compiler_validate.py` (~230 LOC): `_validate_expr`, `_exprs_in_transformation`, `validate_model`
+- `etl_compiler.py` reduced from ~480 → ~20 LOC (imports + `compile_sql` only) — orchestration-only
+- Unused imports (`EtlModel`, `_ALLOWED_BINARY_OPS`, `_FIXED_ARITY_FUNCTIONS`, `_SPLIT_PART_MAX_INDEX`) removed from `etl_compiler.py`
+- Verification: 32/32 tests pass
+- Companion files: created `engine/etl_compiler_validate.py.md`, updated `engine/etl_compiler.py.md`
+
 ### ACTIVE
 
-*(none — commit P1-002, then start P1-003)*
+*(none — commit P1-004a, then start P1-004b)*
 
 ### PENDING
 
-**P1-003 — Extract validation helpers from `etl_compiler.py`**
+**P1-004b — Extract expression subsystem → `sql_to_model_expr.py`** (~385 LOC)
 
-- Target: `engine/etl_compiler_validate.py`
-- Extract: `_validate_expr`, `_exprs_in_transformation`, `validate_model`
-- Depends on: P1-001, P1-002 complete
+- Contents: `_EXPR_KEYWORDS`, `_tokenize_expr`, `_ExprParser`, `_try_rewrite_split_part`, `_parse_expr`
+- Zero internal dependencies — fully isolated extraction
+- Reduces `sql_to_model.py` from 895 → ~510 LOC
+- Blocked until P1-004a complete
 
-**P1-004 — Assess `sql_to_model.py` (895 LOC) for extraction targets**
+**P1-004c — Extract SQL lexer utilities → `sql_to_model_lexer.py`** (~150 LOC)
 
-- No existing test coverage → new tests required before splitting
-- Do not start until P1-001–003 establish the extraction pattern
+- Contents: `_mask_strings`, `_unmask`, `_comma_split`, `_CLAUSE_PATTERNS`, `_find_clauses`
+- Zero internal dependencies
+- `_extract_ctes` stays in main (depends on `_parse_expr` from 004b — not worth cross-importing for 42 LOC)
+- Reduces `sql_to_model.py` from ~510 → ~360 LOC (orchestration + CTEs + identifier helpers + converter)
+- Blocked until P1-004b complete
 
 ---
 
@@ -85,7 +111,7 @@ Do not restructure request lifecycle code here until Phase 2 produces observatio
 | File | Current LOC | Target | Strategy |
 |------|-------------|--------|----------|
 | `engine/etl_compiler.py` | 727 | ~300 (orchestration only) | Extract expr, graph, validate |
-| `engine/sql_to_model.py` | 895 | TBD | Assess after P1-001 |
+| `engine/sql_to_model.py` | 895 | ~360 | Extract expr (004b) + lexer (004c) |
 | `engine/service.py` | 914 | Phase 3 | Blocked — unstable zone |
 | `engine/routes.py` | 832 | Phase 3 | Blocked — unstable zone |
 | `engine/etl_compiler.py` | 727 | ~300 | Phase 1 active |
@@ -146,3 +172,5 @@ One commit per logical task. Each commit must:
 |------|---------|-----------|-----------|
 | 2026-05-14 | S01 | Grilling complete; decisions locked; REFACTOR_TRACKER created; P1-001 complete | Commit P1-001, then start P1-002 (graph utilities) |
 | 2026-05-14 | S02 | P1-002 complete — graph utilities extracted to `etl_compiler_graph.py` | Commit P1-002, then start P1-003 (validation helpers) |
+| 2026-05-14 | S03 | P1-003 complete — validation helpers extracted to `etl_compiler_validate.py`; `etl_compiler.py` is now orchestration-only | Commit P1-003, then assess P1-004 (`sql_to_model.py`) |
+| 2026-05-14 | S04 | P1-003 committed; P1-004 assessment complete; P1-004a complete — 29 unit tests added (61 total); tracker updated | Commit P1-004a, then start P1-004b (expression extraction) |

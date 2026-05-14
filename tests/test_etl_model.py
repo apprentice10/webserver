@@ -1,6 +1,6 @@
 from engine.etl_compiler import compile_sql, validate_model, EtlValidationError
 from engine.etl_model import model_from_dict
-from engine.sql_to_model import sql_to_model
+from engine.sql_to_model import sql_to_model, _tokenize_expr, _parse_expr, _try_rewrite_split_part
 import pytest
 
 
@@ -861,3 +861,238 @@ def test_sql_to_model_split_part_substr_instr_rewrite():
     assert expr["name"] == "SPLIT_PART"
     assert expr["args"][1] == {"type": "literal", "value": "|"}
     assert expr["args"][2] == {"type": "literal", "value": 1}
+
+
+# ---------------------------------------------------------------------------
+# _tokenize_expr — unit tests
+# ---------------------------------------------------------------------------
+
+def test_tokenize_plain_identifier():
+    toks = _tokenize_expr("tag", {})
+    assert toks[0] == {"t": "IDENT", "v": "tag"}
+    assert toks[1]["t"] == "EOF"
+
+
+def test_tokenize_integer_and_float():
+    toks = _tokenize_expr("42 3.14", {})
+    assert toks[0] == {"t": "NUM", "v": 42}
+    assert toks[1] == {"t": "NUM", "v": 3.14}
+
+
+def test_tokenize_keywords():
+    toks = _tokenize_expr("AND OR NOT NULL IS CASE WHEN THEN ELSE END", {})
+    types = [t["t"] for t in toks if t["t"] != "EOF"]
+    assert types == ["AND", "OR", "NOT", "NULL", "IS", "CASE", "WHEN", "THEN", "ELSE", "END"]
+
+
+def test_tokenize_two_char_operators():
+    toks = _tokenize_expr("!= >= <=", {})
+    ops = [t["v"] for t in toks if t["t"] == "OP"]
+    assert ops == ["!=", ">=", "<="]
+
+
+def test_tokenize_concat_operator():
+    toks = _tokenize_expr("a || b", {})
+    assert toks[1]["t"] == "CONCAT"
+
+
+def test_tokenize_double_quoted_identifier():
+    toks = _tokenize_expr('"my col"', {})
+    assert toks[0] == {"t": "IDENT", "v": "my col"}
+
+
+def test_tokenize_masked_string():
+    # Simulate what _mask_strings produces: \x00S0$ placeholder
+    key = "\x00S0$"
+    str_tbl = {key: "'hello'"}
+    toks = _tokenize_expr(key, str_tbl)
+    assert toks[0] == {"t": "STR", "v": "hello"}
+
+
+def test_tokenize_dotted_ref():
+    toks = _tokenize_expr("a.col", {})
+    types = [t["t"] for t in toks if t["t"] != "EOF"]
+    assert types == ["IDENT", "DOT", "IDENT"]
+
+
+# ---------------------------------------------------------------------------
+# _parse_expr — unit tests
+# ---------------------------------------------------------------------------
+
+def test_parse_simple_column_ref():
+    assert _parse_expr("tag", {}) == {"type": "column_ref", "table_alias": "", "column_name": "tag"}
+
+
+def test_parse_qualified_column_ref():
+    assert _parse_expr("a.tag", {}) == {"type": "column_ref", "table_alias": "a", "column_name": "tag"}
+
+
+def test_parse_integer_literal():
+    assert _parse_expr("42", {}) == {"type": "literal", "value": 42}
+
+
+def test_parse_float_literal():
+    assert _parse_expr("3.14", {}) == {"type": "literal", "value": 3.14}
+
+
+def test_parse_null_literal():
+    assert _parse_expr("NULL", {}) == {"type": "literal", "value": None}
+
+
+def test_parse_boolean_literals():
+    assert _parse_expr("TRUE", {}) == {"type": "literal", "value": True}
+    assert _parse_expr("FALSE", {}) == {"type": "literal", "value": False}
+
+
+def test_parse_is_null():
+    result = _parse_expr("x IS NULL", {})
+    assert result == {"type": "is_null", "expr": {"type": "column_ref", "table_alias": "", "column_name": "x"}}
+
+
+def test_parse_is_not_null():
+    result = _parse_expr("x IS NOT NULL", {})
+    assert result == {"type": "is_not_null", "expr": {"type": "column_ref", "table_alias": "", "column_name": "x"}}
+
+
+def test_parse_eq_null_auto_fix():
+    """x = NULL must be rewritten to is_null, not binary_op."""
+    result = _parse_expr("x = NULL", {})
+    assert result["type"] == "is_null"
+    assert result["expr"]["column_name"] == "x"
+
+
+def test_parse_binary_op():
+    result = _parse_expr("a + b", {})
+    assert result == {
+        "type": "binary_op", "op": "+",
+        "left": {"type": "column_ref", "table_alias": "", "column_name": "a"},
+        "right": {"type": "column_ref", "table_alias": "", "column_name": "b"},
+    }
+
+
+def test_parse_logical_and():
+    result = _parse_expr("a = 1 AND b = 2", {})
+    assert result["type"] == "logical"
+    assert result["op"] == "and"
+    assert len(result["args"]) == 2
+
+
+def test_parse_logical_or():
+    result = _parse_expr("a = 1 OR b = 2", {})
+    assert result["type"] == "logical"
+    assert result["op"] == "or"
+
+
+def test_parse_not():
+    result = _parse_expr("NOT x IS NULL", {})
+    assert result["type"] == "unary_op"
+    assert result["op"] == "not"
+    assert result["expr"]["type"] == "is_null"
+
+
+def test_parse_function_call():
+    result = _parse_expr("UPPER(tag)", {})
+    assert result == {
+        "type": "function", "name": "UPPER",
+        "args": [{"type": "column_ref", "table_alias": "", "column_name": "tag"}],
+    }
+
+
+def test_parse_case_expression():
+    result = _parse_expr("CASE WHEN x > 1 THEN x ELSE 0 END", {})
+    assert result["type"] == "case"
+    assert len(result["when_clauses"]) == 1
+    assert result["when_clauses"][0]["when"]["type"] == "binary_op"
+    assert result["else"] == {"type": "literal", "value": 0}
+
+
+def test_parse_concat_with_separator():
+    """a || ' ' || b with uniform separator → CONCAT_WS(' ', a, b)."""
+    from engine.sql_to_model import _mask_strings
+    masked, str_tbl = _mask_strings("a || ' ' || b")
+    result = _parse_expr(masked, str_tbl)
+    assert result["type"] == "function"
+    assert result["name"] == "CONCAT_WS"
+    assert result["args"][0] == {"type": "literal", "value": " "}
+    assert len(result["args"]) == 3  # sep + a + b
+
+
+def test_parse_empty_string_returns_empty_dict():
+    assert _parse_expr("", {}) == {}
+
+
+# ---------------------------------------------------------------------------
+# _try_rewrite_split_part — unit tests
+# ---------------------------------------------------------------------------
+
+def test_rewrite_split_part_passthrough():
+    """Already-SPLIT_PART node is returned unchanged (name normalised to uppercase)."""
+    node = {
+        "type": "function", "name": "split_part",
+        "args": [
+            {"type": "column_ref", "table_alias": "", "column_name": "cables"},
+            {"type": "literal", "value": "|"},
+            {"type": "literal", "value": 1},
+        ],
+    }
+    result = _try_rewrite_split_part(node)
+    assert result["name"] == "SPLIT_PART"
+    assert result["args"] == node["args"]
+
+
+def test_rewrite_substr_instr_to_split_part():
+    """SUBSTR(s, 1, INSTR(s, d) - 1) → SPLIT_PART(s, d, 1)."""
+    s = {"type": "column_ref", "table_alias": "", "column_name": "cables"}
+    d = {"type": "literal", "value": "|"}
+    node = {
+        "type": "function", "name": "SUBSTR",
+        "args": [
+            s,
+            {"type": "literal", "value": 1},
+            {
+                "type": "binary_op", "op": "-",
+                "left": {"type": "function", "name": "INSTR", "args": [s, d]},
+                "right": {"type": "literal", "value": 1},
+            },
+        ],
+    }
+    result = _try_rewrite_split_part(node)
+    assert result["type"] == "function"
+    assert result["name"] == "SPLIT_PART"
+    assert result["args"][1] == d
+    assert result["args"][2] == {"type": "literal", "value": 1}
+
+
+def test_rewrite_non_matching_substr_unchanged():
+    """SUBSTR with different arg structure is not rewritten."""
+    node = {
+        "type": "function", "name": "SUBSTR",
+        "args": [
+            {"type": "column_ref", "table_alias": "", "column_name": "s"},
+            {"type": "literal", "value": 3},
+            {"type": "literal", "value": 5},
+        ],
+    }
+    result = _try_rewrite_split_part(node)
+    assert result["name"] == "SUBSTR"
+
+
+def test_rewrite_applies_recursively():
+    """Rewrite fires on a nested SUBSTR+INSTR inside a binary_op."""
+    s = {"type": "column_ref", "table_alias": "", "column_name": "cables"}
+    d = {"type": "literal", "value": "|"}
+    substr_node = {
+        "type": "function", "name": "SUBSTR",
+        "args": [
+            s,
+            {"type": "literal", "value": 1},
+            {
+                "type": "binary_op", "op": "-",
+                "left": {"type": "function", "name": "INSTR", "args": [s, d]},
+                "right": {"type": "literal", "value": 1},
+            },
+        ],
+    }
+    wrapper = {"type": "binary_op", "op": "+", "left": substr_node, "right": {"type": "literal", "value": 0}}
+    result = _try_rewrite_split_part(wrapper)
+    assert result["left"]["name"] == "SPLIT_PART"
