@@ -1,6 +1,6 @@
 # static/engine/js/app_shell.js
 
-**Description:** Global app-shell manager. Handles theme/accent/density, the settings modal, and the topbar inline-edit popovers (tool name/icon and REV chip). Loaded globally via `base.html`; auto-inits on `DOMContentLoaded`.
+**Description:** Global app-shell manager. Handles theme/accent/density, the settings modal, and the tool-name/icon popover. REV chip is owned by `revision-picker.js`. Loaded globally via `base.html`; auto-inits on `DOMContentLoaded`.
 
 ## Index
 
@@ -13,10 +13,7 @@
 | 196–205 | `_initToolPill` | Wires click on `#topbar-tool-pill` → `_openToolPopover` |
 | 207–277 | `_openToolPopover` | Floating popover with name input + 18-emoji icon grid; body-appended with `position:fixed` to avoid overflow clipping; saves via `ApiClient.updateToolSettings` |
 | 279–281 | `_closeToolPopover` | Removes `#popover-tool` from DOM |
-| 284–295 | `_initRevChip` | Wires click on `#chip-rev-btn` → `_openRevPopover` |
-| 297–356 | `_openRevPopover` | Floating popover with large REV input + A/B/C/D quick-chips; body-appended `position:fixed`; saves via `ApiClient.updateToolSettings({ rev })` |
-| 344–346 | `_closeRevPopover` | Removes `#popover-rev` from DOM |
-| 349–385 | `init` | Applies persisted prefs to `<html>`; syncs density buttons; wires `#btn-settings`; calls `_initToolPill` + `_initRevChip` |
+| 284–302 | `init` | Applies persisted prefs to `<html>`; syncs density buttons; calls `_initToolPill` |
 | 387 | auto-init | `document.addEventListener('DOMContentLoaded', () => AppShell.init())` |
 
 ## Decisions

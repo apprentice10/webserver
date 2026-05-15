@@ -320,88 +320,6 @@ const AppShell = (() => {
         document.getElementById('popover-tool')?.remove();
     }
 
-    // ── REV chip popover ─────────────────────────────────────────
-    function _initRevChip() {
-        const chip = document.getElementById('chip-rev-btn');
-        if (!chip) return;
-
-        chip.addEventListener('click', e => {
-            e.stopPropagation();
-            if (document.getElementById('popover-rev')) { _closeRevPopover(); return; }
-            _openRevPopover(chip);
-        });
-    }
-
-    function _openRevPopover(anchor) {
-        const currentRev = anchor.textContent.replace('REV', '').trim();
-        const t = I18n.t.bind(I18n);
-
-        const pop = document.createElement('div');
-        pop.id = 'popover-rev';
-        pop.className = 'popover popover-rev';
-        pop.style.cssText = 'position:fixed;z-index:500';
-        pop.innerHTML = `
-          <div class="popover-head">${t('rev.edit.title')}</div>
-          <p class="popover-sub">${t('rev.edit.sub')}</p>
-          <div class="rev-row">
-            <span class="rev-prefix">REV</span>
-            <input class="rev-input" id="popover-rev-input" value="${Utils.escAttr(currentRev)}" maxlength="3" autocomplete="off">
-          </div>
-          <div class="rev-quick">
-            ${['A','B','C','D'].map(r => `<button class="rev-chip${currentRev === r ? ' selected' : ''}" data-rev="${r}">${r}</button>`).join('')}
-          </div>
-          <div class="popover-foot">
-            <button class="btn btn-primary btn-sm" id="popover-rev-save">${t('settings.save')}</button>
-          </div>`;
-
-        document.body.appendChild(pop);
-
-        const rect = anchor.getBoundingClientRect();
-        pop.style.top  = (rect.bottom + 6) + 'px';
-        pop.style.left = rect.left + 'px';
-        requestAnimationFrame(() => {
-            const pr = pop.getBoundingClientRect();
-            if (pr.right > window.innerWidth - 8)
-                pop.style.left = (window.innerWidth - pr.width - 8) + 'px';
-        });
-
-        const input = pop.querySelector('#popover-rev-input');
-        input.focus();
-        input.select();
-
-        pop.querySelectorAll('.rev-chip').forEach(chip => {
-            chip.addEventListener('click', () => {
-                input.value = chip.dataset.rev;
-                pop.querySelectorAll('.rev-chip').forEach(c => c.classList.remove('selected'));
-                chip.classList.add('selected');
-            });
-        });
-
-        const doSave = async () => {
-            const val = (input.value.toUpperCase().trim() || 'A').slice(0, 3);
-            anchor.textContent = 'REV ' + val;
-            try { await ApiClient.updateToolSettings({ rev: val }); } catch (_) { /* non-critical */ }
-            _closeRevPopover();
-        };
-
-        pop.querySelector('#popover-rev-save').addEventListener('click', doSave);
-        input.addEventListener('keydown', e => { if (e.key === 'Enter') doSave(); });
-
-        setTimeout(() => {
-            const dismiss = e => {
-                if (!pop.contains(e.target) && !anchor.contains(e.target)) {
-                    _closeRevPopover();
-                    document.removeEventListener('mousedown', dismiss);
-                }
-            };
-            document.addEventListener('mousedown', dismiss);
-        }, 0);
-    }
-
-    function _closeRevPopover() {
-        document.getElementById('popover-rev')?.remove();
-    }
-
     // ── Public init ──────────────────────────────────────────────
     function init() {
         const prefs = _loadPrefs();
@@ -420,7 +338,6 @@ const AppShell = (() => {
         // Settings trigger in side-bottom bar calls openSettings directly
 
         _initToolPill();
-        _initRevChip();
         I18n.applyLocale();
     }
 
