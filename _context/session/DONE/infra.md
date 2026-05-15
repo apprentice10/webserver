@@ -1,0 +1,15 @@
+# session/DONE/infra.md
+
+*Completed infrastructure / refactoring tasks — append one bullet per closed task.*
+
+---
+
+* **Phase 3 — service.py / routes.py decomposition** (2026-05-14): 7 tasks. `schemas.py` (147 LOC), `service_templates.py` (51 LOC), `service_columns.py` (249 LOC), `service_row_ops.py` (310 LOC), `routes_flags.py` (133 LOC), `routes_etl.py` (107 LOC), `routes_export.py` (77 LOC). Final: `service.py` 914→345 LOC, `routes.py` 840→402 LOC. 61/61 tests pass.
+* **Phase 4 — history subsystem extraction from grid.js** (2026-05-14): 6 tasks (P4-H1–H6). `history/history-api.js` (13 LOC), `history/history-renderer.js` (51 LOC), `history/history-panel.js` (150 LOC), `rollback-service.js` (27 LOC), `history-actions.js` (19 LOC). Grid.js: `grid:rowUpdated` listener added, history functions removed (~270 LOC). 61/61 tests pass. Feature-subdirectory convention (P4-D3) established.
+* **Phase 4 — etl_editor.js decomposition** (2026-05-14): 4 tasks (P4-E1–E4). `etl-expr.js` (235 LOC), `etl-model-renderer.js` (307 LOC), `etl-preview-renderer.js` (56 LOC), `etl-persistence.js` (200 LOC). `etl_editor.js` reduced 1174→480 LOC. 61/61 tests pass.
+* **Phase 4 — grid.js decomposition** (2026-05-14): 7 tasks (P4-G1–G7). `selection/selection-manager.js` (282 LOC), `keyboard/cell-keyboard.js` (226 LOC), `context-menu/context-menu.js` (286 LOC), `rendering/grid-renderer.js` (128 LOC), `row-ops/row-ops.js` (139 LOC), `clipboard/clipboard-manager.js` (63 LOC), `cell-save/cell-save.js` (72 LOC). `grid.js` reduced 1670→~465 LOC. 61/61 tests pass.
+* **Phase 4 — panel_system.js decomposition** (2026-05-14): 2 tasks (P4-P1+P4-P2). `panels/panel-floats.js` (192 LOC), `panels/panel-tab-bar.js` (145 LOC). `panel_system.js` reduced 634→356 LOC. Phase 4 complete.
+* **Architecture audit + cleanup** (2026-05-08): deleted orphaned `static/js/main (1).js`; fixed `etl_canvas.js:349` (`_projectId` undefined after D-S1); removed dead `showToast` alias from `etl.html`; removed unused `project_id` from Pydantic models; renamed `row_id` → `trash_id` in `restore_row`; updated `etl_canvas_editor.js.md`.
+* **Phase 1 — ETL compiler decomposition** (2026-05-14): `etl_compiler_expr.py` (124 LOC), `etl_compiler_graph.py` (87 LOC), `etl_compiler_validate.py` (230 LOC). `etl_compiler.py` reduced 727→~20 LOC (orchestration only). `sql_to_model_expr.py` (295 LOC), `sql_to_model_lexer.py` (123 LOC). `sql_to_model.py` reduced 895→388 LOC. 61/61 tests pass.
+* **Phase 2 — Bug isolation** (2026-05-14): diagnostic logging added to `project_db.py` + `routes.py`; root cause of intermittent 500 (missing `__position` index) identified and fixed by Item 43; Phase 2 closed without repro.
+* **_context restructure** (2026-05-15): migrated flat `_context/` to categorized subfolders (`etl/`, `grid/`, `project/`, `infra/`, `session/DONE/`); RISKS.md eliminated (risks live in plan files); CURRENT_STATE.md rewritten as pure index; CLAUDE.md rewritten as behavioral-rules-only; MODULE_LAYOUT.md created in `infra/`; all completed plan files deleted.
