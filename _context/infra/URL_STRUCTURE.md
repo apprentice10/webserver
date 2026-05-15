@@ -51,6 +51,16 @@ Tutti richiedono `?project_id=N` per ownership validation.
 | `PATCH /api/tools/flags/{flag_id}?project_id=` | Aggiorna colore (tutti) o nome (non-system) |
 | `DELETE /api/tools/flags/{flag_id}?project_id=` | Elimina flag (solo non-system) |
 
+### Revision endpoints (`/api/project/…?db=…`)
+
+| Metodo + Path | Descrizione |
+|---------------|-------------|
+| `GET /api/project/revisions?db=` | Lista tutte le revisioni + current number |
+| `POST /api/project/revision?db=` | Crea nuova revisione (snapshot stato corrente → inserisce N+1) |
+| `DELETE /api/project/revision/{number}?db=` | Elimina revisione più recente (merge in precedente) |
+| `POST /api/project/revision/{number}/revert?db=` | Ripristina dati live da snapshot (operazione distruttiva, crea backup) |
+| `GET /api/project/revision/{number}/tool/{tool_slug}?db=` | Legge snapshot frozen: `{ columns, rows }` — stesso shape degli endpoint live |
+
 ## Convenzione project_id
 
 `get_project_conn` in `engine/project_db.py` legge `project_id` da:

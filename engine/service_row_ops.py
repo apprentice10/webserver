@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from engine.project_db import (
     audit,
     serialize_active_row, serialize_trash_row,
-    get_row_overrides,
+    get_row_overrides, get_current_revision,
 )
 from engine.utils import format_log_entry as _format_log_entry, append_log as _append_log
 from engine.staleness import mark_tool_stale, mark_dependents_stale
@@ -46,6 +46,7 @@ def remove_override(
         raise HTTPException(status_code=404, detail="No override found for this cell")
 
     etl_value = override["etl_value"]
+    rev = get_current_revision(conn)
     conn.execute(
         f'UPDATE "{slug}" SET "{col_slug}" = ? WHERE __id = ?',
         (etl_value, row_id)
@@ -56,7 +57,7 @@ def remove_override(
     )
     audit(conn, slug, "RESTORE", row_tag=tag_val, col_slug=col_slug,
           old_val=row.get(col_slug), new_val=etl_value,
-          change_type="restore", revision=tool["rev"])
+          change_type="restore", revision=rev)
     conn.commit()
 
     updated = conn.execute(
@@ -75,7 +76,7 @@ def soft_delete_row(
     from engine.service import get_tool
     tool = get_tool(conn, tool_id)
     slug = tool["slug"]
-    rev  = tool["rev"]
+    rev  = get_current_revision(conn)
 
     row = conn.execute(
         f'SELECT * FROM "{slug}" WHERE __id = ?', (row_id,)
@@ -119,7 +120,7 @@ def restore_row(
     from engine.service import get_tool, _validate_tag_unique
     tool = get_tool(conn, tool_id)
     slug = tool["slug"]
-    rev  = tool["rev"]
+    rev  = get_current_revision(conn)
 
     trash = conn.execute(
         "SELECT * FROM _trash WHERE id = ? AND tool_slug = ?", (trash_id, slug)
@@ -146,6 +147,7 @@ def restore_row(
 
     safe_data = {k: v for k, v in row_data.items()
                  if not k.startswith("__") and k != "log"}
+    safe_data["rev"] = rev
     safe_data["__position"] = next_pos
     safe_data["__log"] = new_log
 
@@ -197,7 +199,7 @@ def paste_rows(
     from engine.service import get_tool, get_columns
     tool = get_tool(conn, tool_id)
     slug = tool["slug"]
-    rev  = tool["rev"]
+    rev  = get_current_revision(conn)
 
     valid_cols = {c["slug"] for c in get_columns(conn, tool_id)
                   if c["slug"] not in ("log",)}
@@ -262,7 +264,7 @@ def rollback_cell(
     from engine.service import get_tool
     tool = get_tool(conn, tool_id)
     tool_slug = tool["slug"]
-    rev = tool["rev"]
+    rev = get_current_revision(conn)
 
     if col_slug in ("rev", "log"):
         raise HTTPException(status_code=400, detail="Cannot rollback system column")
@@ -286,8 +288,8 @@ def rollback_cell(
     current_value = row.get(col_slug)
 
     conn.execute(
-        f'UPDATE "{tool_slug}" SET "{col_slug}" = ? WHERE __id = ?',
-        (restore_value, row_id)
+        f'UPDATE "{tool_slug}" SET "{col_slug}" = ?, rev = ? WHERE __id = ?',
+        (restore_value, rev, row_id)
     )
 
     log_entry = _format_log_entry(rev, col_slug, current_value, restore_value)

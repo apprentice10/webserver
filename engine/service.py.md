@@ -19,3 +19,4 @@
 - **`_validate_tag_unique` stays here**: called by `create_row` (here) and `restore_row` (in service_row_ops.py). service_row_ops.py imports it via a deferred `from engine.service import _validate_tag_unique` — one-way dep, no circular.
 - **Staleness helpers**: `mark_tool_stale` and `mark_dependents_stale` imported from `engine/staleness.py`.
 - **Column and row mutation ops split out in Phase 3**: see `engine/service_columns.py`, `engine/service_row_ops.py`, `engine/service_templates.py`.
+- **Row `rev` set from `_revisions` (Q2)**: `create_row` and `update_cell` use `get_current_revision(conn)` — not `tool["rev"]` (that is the tool-level document rev string 'A/B/…', unrelated). `update_cell` stamps `rev` on the row in the same UPDATE as the cell value.

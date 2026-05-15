@@ -24,3 +24,4 @@
 - **`_tool` locale**: mantiene lo stato del tool corrente in memoria; aggiornato ad ogni PATCH settings o run ETL.
 - **`btn-stale` CSS class**: il bottone ETL riceve la classe se `_tool.is_stale === true`; rimossa dopo run riuscito senza re-render completo.
 - **`TOOL_ICONS`**: lista emoji disponibili nell'icon picker — definita qui come costante globale.
+- **chip-rev owned by RevisionPicker (Q4)**: `_updateToolUI()` no longer sets `#chip-rev-btn` text. `RevisionPicker.init()` owns that element and updates it from `GET /api/project/revisions`.

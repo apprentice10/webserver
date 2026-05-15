@@ -21,7 +21,7 @@ def slugify(text: str) -> str:
     return text.strip("_") or "tool"
 
 
-def format_log_entry(rev: str, field: str, old_val, new_val) -> str:
+def format_log_entry(rev: int, field: str, old_val, new_val) -> str:
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
     old = f"'{old_val}'" if old_val else "—"
     new = f"'{new_val}'" if new_val else "—"

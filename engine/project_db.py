@@ -23,7 +23,7 @@ BACKUPS_DIR = DATA_DIR / "backups"
 
 # Bump this whenever DDL_SYSTEM_TABLES or any system table structure changes.
 # See engine/project_db.py.md for the full rule.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SYSTEM_COLUMNS = {"tag", "rev", "log"}
 INTERNAL_PREFIX = "__"
@@ -121,11 +121,27 @@ CREATE TABLE IF NOT EXISTS _cell_flags (
     flag_id   INTEGER NOT NULL REFERENCES _flags(id) ON DELETE CASCADE,
     PRIMARY KEY (tool_slug, row_tag, col_slug, flag_id)
 );
+
+CREATE TABLE IF NOT EXISTS _revisions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    number      INTEGER NOT NULL UNIQUE,
+    created_at  TEXT NOT NULL,
+    description TEXT,
+    author      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS _revision_snapshots (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    revision_id  INTEGER NOT NULL REFERENCES _revisions(id),
+    tool_slug    TEXT NOT NULL,
+    columns_json TEXT NOT NULL,
+    rows_json    TEXT NOT NULL
+);
 """
 
 SYSTEM_COLUMN_DEFS = [
     {"slug": "tag", "name": "TAG", "col_type": "text", "width": 110, "position": 0,   "is_system": 1},
-    {"slug": "rev", "name": "REV", "col_type": "text", "width": 60,  "position": 1,   "is_system": 1},
+    {"slug": "rev", "name": "REV", "col_type": "integer", "width": 60,  "position": 1,   "is_system": 1},
     {"slug": "log", "name": "LOG", "col_type": "log",  "width": 260, "position": 999, "is_system": 1},
 ]
 
@@ -135,11 +151,16 @@ SYSTEM_COLUMN_DEFS = [
 # ============================================================
 
 def create_project_db(db_path: Path) -> None:
+    from engine.utils import now_str
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path))
     conn.executescript(DDL_SYSTEM_TABLES)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    conn.execute(
+        "INSERT OR IGNORE INTO _revisions (number, created_at, description, author) VALUES (?, ?, ?, ?)",
+        (0, now_str(), "First issue", "")
+    )
     conn.commit()
     conn.close()
 
@@ -212,7 +233,46 @@ def _migrate_to_v1(conn: sqlite3.Connection) -> None:
             conn.execute(f'CREATE INDEX IF NOT EXISTS "idx_{tbl}_pos" ON "{tbl}" (__position)')
 
 
-_MIGRATIONS: dict = {1: _migrate_to_v1}
+def _migrate_to_v2(conn: sqlite3.Connection) -> None:
+    """Add revision tables; seed rev-0; cast existing rev column values to 0."""
+    existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+    if "_revisions" not in existing:
+        conn.execute("""CREATE TABLE _revisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            number INTEGER NOT NULL UNIQUE,
+            created_at TEXT NOT NULL,
+            description TEXT,
+            author TEXT)""")
+
+    if "_revision_snapshots" not in existing:
+        conn.execute("""CREATE TABLE _revision_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            revision_id INTEGER NOT NULL REFERENCES _revisions(id),
+            tool_slug TEXT NOT NULL,
+            columns_json TEXT NOT NULL,
+            rows_json TEXT NOT NULL)""")
+
+    # Seed revision 0 if table is empty
+    if conn.execute("SELECT COUNT(*) FROM _revisions").fetchone()[0] == 0:
+        from engine.utils import now_str
+        conn.execute(
+            "INSERT INTO _revisions (number, created_at, description, author) VALUES (?, ?, ?, ?)",
+            (0, now_str(), "First issue", "")
+        )
+
+    # Cast rev column values to 0 for all tool tables where rev was TEXT
+    for (tbl,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall():
+        if tbl.startswith("_"):
+            continue
+        col_types = {r[1]: r[2] for r in conn.execute(f'PRAGMA table_info("{tbl}")')}
+        if col_types.get("rev", "").upper() == "TEXT":
+            conn.execute(f'UPDATE "{tbl}" SET rev = 0')
+
+    conn.execute("UPDATE _audit SET revision = '0' WHERE revision IS NULL OR revision = ''")
+
+
+_MIGRATIONS: dict = {1: _migrate_to_v1, 2: _migrate_to_v2}
 
 
 def _run_migrations(conn: sqlite3.Connection, db_path: Path) -> None:
@@ -300,7 +360,7 @@ def create_tool_table(conn: sqlite3.Connection, slug: str) -> None:
             __log        TEXT,
             __created_at TEXT DEFAULT (datetime('now')),
             tag          TEXT NOT NULL UNIQUE,
-            rev          TEXT DEFAULT 'A'
+            rev          INTEGER DEFAULT 0
         )
     """)
     conn.execute(f'CREATE INDEX IF NOT EXISTS "idx_{slug}_pos" ON "{slug}" (__position)')
@@ -314,6 +374,11 @@ def add_column_to_table(conn: sqlite3.Connection, slug: str, col_slug: str) -> N
 # AUDIT
 # ============================================================
 
+def get_current_revision(conn: sqlite3.Connection) -> int:
+    row = conn.execute("SELECT MAX(number) FROM _revisions").fetchone()
+    return row[0] if row and row[0] is not None else 0
+
+
 def audit(
     conn: sqlite3.Connection,
     tool_slug: str,
@@ -323,7 +388,7 @@ def audit(
     old_val: str = None,
     new_val: str = None,
     change_type: str = None,
-    revision: str = None,
+    revision: int = None,
     changed_by: str = None,
     col_slug: str = None,
 ) -> None:

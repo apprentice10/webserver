@@ -252,12 +252,41 @@ const ApiClient = (() => {
         });
     }
 
-    async function getAudit({ rowTag, rowTags, colSlug, colSlugs, limit = 200 } = {}) {
+    // ── Revisions ─────────────────────────────────────────────
+
+    async function getRevisions() {
+        return request(`/api/project/revisions?db=${_db()}`);
+    }
+
+    async function createRevision(description, author) {
+        return request(`/api/project/revision?db=${_db()}`, {
+            method: "POST",
+            body: JSON.stringify({ description, author })
+        });
+    }
+
+    async function deleteRevision(number) {
+        return request(`/api/project/revision/${number}?db=${_db()}`, { method: "DELETE" });
+    }
+
+    async function getRevisionSnapshot(number, toolSlug) {
+        return request(`/api/project/revision/${number}/tool/${encodeURIComponent(toolSlug)}?db=${_db()}`);
+    }
+
+    async function revertRevision(number) {
+        return request(`/api/project/revision/${number}/revert?db=${_db()}`, { method: "POST" });
+    }
+
+
+    // ── Audit ─────────────────────────────────────────────────
+
+    async function getAudit({ rowTag, rowTags, colSlug, colSlugs, limit = 200, revision } = {}) {
         const p = new URLSearchParams({ db: DB_PATH, limit });
-        if (rowTag)   p.set("row_tag",  rowTag);
-        if (rowTags)  p.set("row_tags", rowTags);
-        if (colSlug)  p.set("col_slug", colSlug);
-        if (colSlugs) p.set("col_slugs", colSlugs);
+        if (rowTag)        p.set("row_tag",  rowTag);
+        if (rowTags)       p.set("row_tags", rowTags);
+        if (colSlug)       p.set("col_slug", colSlug);
+        if (colSlugs)      p.set("col_slugs", colSlugs);
+        if (revision != null) p.set("revision", revision);
         return request(`/api/tools/${TOOL_ID}/audit?${p}`);
     }
 
@@ -277,6 +306,8 @@ const ApiClient = (() => {
         etlCompile, etlPreview, etlApply, etlRunSaved, etlSave,
         etlLoadConfig, etlLoadSchema, listProjectTools,
         saveTemplate, deleteTemplate, etlSaveDraft, etlSqlToModel,
+        getRevisions, createRevision, deleteRevision,
+        getRevisionSnapshot, revertRevision,
         getAudit, rollbackCell,
     };
 

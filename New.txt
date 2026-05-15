@@ -1,3 +1,24 @@
+I've been trying to explain this for a long time but I guess I don't get it right. I'm going to explain it as a user that doesn't know how to program but interacts with the webserver we are making:
+-The dashboard for me is the base, the struccture that keeps everything linked with the data base
+-The tools are like features that I can add to the dashboard, right know we only have one tool type "instrument list" (witch I want to change the name to a more generic name like "tables")
+Use this example as a real life interacction with the project:
+    -First time user installs the webserver (the tools/ folder is empty)
+    -if user opens an already made database it will list all the tools and it's version that he needs to load the database: let's say "tables V1", "typical assembly V2.3"
+    -The user then ask for these tools, copies the "tables V1" and "typical assembly V2.3" folders in the tools/ folder. (the version is for compatibility between the tool and the database we are going to have to adress that also)
+    -Reopens the database and loads everything as spected.
+
+-Inside "tables V1" contains all the files for that particular tool
+-Inside "typical assembly V2.3" contains all the files for that particular tool
+-The only thing that both folders won't have and depend on is the style (color, text, ect) witch resides in the dashboard and will maintain the looks of the hole site the same.
+
+-Now is where I find a problem and I need you to help me with: there are going to be some features (for example the ETL) that the tools uses I want also want this to behave the same as the tool
+    -Right now we have 2 types of ETL the "</> code" and the "canvas", we have to split them into 2 separate tools
+    -so when the user opens the ETL it will show only what's inside the /tools folder. if the user has 2 that basically does the same, he can switch between them like it does now.
+
+
+
+
+
 Whe creating a new tool, if the user selects a template, the name of the tool should load from the template, the user can change it in the textbox.
 When creating a new tool, if the user selects a template, after the user clicks "create" it should jump rirectly to the ETL of that tool with the template ready to "Preview" and "Apply" after that.
 Tools should never have the same name, if the same name is found an error message should appear warning the user and asking to change to a new one.

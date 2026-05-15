@@ -34,6 +34,15 @@
 {% block content %}
 <div class="tool-container" id="tool-container">
 
+    <!-- READ-ONLY BANNER -->
+    <div id="readonly-banner" class="readonly-banner" style="display:none">
+        <span id="readonly-banner-msg"></span>
+        <div class="readonly-banner-actions">
+            <button class="btn btn-ghost btn-sm" onclick="RevisionPicker.backToCurrent()">← Back to current</button>
+            <button class="btn btn-sm btn-danger" id="btn-revert-revision" onclick="RevisionPicker.revertCurrent()">⚠ Revert to this revision</button>
+        </div>
+    </div>
+
     <!-- SECONDARY TOOLBAR -->
     <div class="tool-toolbar">
         <div class="tool-toolbar-left">
@@ -215,6 +224,7 @@
 <script src="/static/engine/js/cell-save/cell-save.js"></script>
 <script src="/static/engine/js/grid.js"></script>
 <script src="/static/engine/js/toolbar.js"></script>
+<script src="/static/engine/js/revision-picker/revision-picker.js"></script>
 <script src="/static/engine/js/panels/panel-floats.js"></script>
 <script src="/static/engine/js/panels/panel-tab-bar.js"></script>
 <script src="/static/engine/js/panel_system.js"></script>
@@ -365,7 +375,7 @@
 
             container.innerHTML = staticHtml + '<p class="panel-placeholder" style="font-size:12px">Loading…</p>';
             try {
-                const entries = await ApiClient.getAudit({ rowTag: row.tag, limit: 50 });
+                const entries = await ApiClient.getAudit({ rowTag: row.tag, limit: 50, revision: RevisionPicker.getViewingRevision() });
                 container.innerHTML = staticHtml + _renderTimeline(entries);
             } catch (err) {
                 container.innerHTML = staticHtml + `<p class="panel-placeholder" style="font-size:12px;color:var(--danger)">${Utils.escHtml(err.message)}</p>`;
@@ -471,7 +481,7 @@
             container.innerHTML = '<p class="panel-placeholder">Loading…</p>';
             try {
                 if (sel.type === 'cell') {
-                    const entries = await ApiClient.getAudit({ rowTag: sel.rowTag, colSlug: sel.colSlug, limit: 200 });
+                    const entries = await ApiClient.getAudit({ rowTag: sel.rowTag, colSlug: sel.colSlug, limit: 200, revision: RevisionPicker.getViewingRevision() });
                     if (!entries || !entries.length) {
                         container.innerHTML = '<p class="panel-placeholder">No history for this cell.</p>';
                         return;
@@ -482,7 +492,8 @@
                     const entries = await ApiClient.getAudit({
                         rowTags: sel.rowTags.join(','),
                         colSlugs: sel.colSlugs.join(','),
-                        limit: 1000
+                        limit: 1000,
+                        revision: RevisionPicker.getViewingRevision(),
                     });
                     if (!entries || !entries.length) {
                         container.innerHTML = '<p class="panel-placeholder">No history for this selection.</p>';
@@ -569,6 +580,7 @@
 
         // Old-path history (showCellLog/showRowLog) resets cache so _refreshLog re-fetches on next interaction
         document.addEventListener('grid:historyRendered', () => { _logLastKey = null; });
+        document.addEventListener('revision:switched',   () => { _logLastKey = null; });
 
         // ── Panel registrations ───────────────────────────────────────
 
@@ -608,6 +620,7 @@
 
         PanelSystem.init();
         await ToolbarManager.init();
+        await RevisionPicker.init();
         await GridManager.init();
     });
 </script>

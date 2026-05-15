@@ -11,12 +11,13 @@
 | Tool | `loadTool`, `updateToolSettings` |
 | Columns | `loadColumns`, `addColumn`, `updateColumn`, `deleteColumn`, `updateColumnWidth`, `reorderColumns` |
 | Rows | `loadRows`, `createRow`, `updateCell`, `softDeleteRow`, `restoreRow`, `hardDeleteRow`, `removeOverride`, `keepRow`, `pasteRows` |
-| Audit / History | `getAudit({rowTag, rowTags, colSlug, colSlugs, limit})` — fetches `_audit` entries; supports single and multi row/col params; `rollbackCell(rowId, col, entryId)` — restores a cell to a previous audit value |
+| Audit / History | `getAudit({rowTag, rowTags, colSlug, colSlugs, limit, revision})` — fetches `_audit` entries; optional `revision` filters to entries from that revision number; `rollbackCell(rowId, col, entryId)` — restores a cell to a previous audit value |
 | SQL Editor | `runSql` |
 | Export | `exportExcel` — uses `window.location.href` (not fetch, direct download) |
 | ETL | `etlCompile`, `etlPreview`, `etlApply`, `etlSave`, `etlRunSaved`, `etlLoadConfig`, `etlLoadSchema`, `etlSaveDraft`, `etlSqlToModel` |
 | Flags | `listFlags`, `createFlag`, `updateFlag`, `deleteFlag`, `toggleCellFlags` |
 | Template | `saveTemplate`, `deleteTemplate` |
+| Revisions | `getRevisions()` — `GET /api/project/revisions`; `createRevision(description, author)` — `POST /api/project/revision`; `deleteRevision(number)` — `DELETE /api/project/revision/{number}`; `getRevisionSnapshot(number, toolSlug)` — `GET /api/project/revision/{N}/tool/{slug}`; `revertRevision(number)` — `POST /api/project/revision/{N}/revert` |
 
 ## Decisions
 

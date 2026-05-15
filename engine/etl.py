@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException
 
-from engine.project_db import add_column_to_table, audit, SYSTEM_COLUMN_DEFS
+from engine.project_db import add_column_to_table, audit, SYSTEM_COLUMN_DEFS, get_current_revision
 from engine.service import get_tool, get_columns
 from engine.etl_compiler import (
     compile_sql,
@@ -141,7 +141,7 @@ def etl_preview(conn: sqlite3.Connection, tool_id: int, model: dict) -> dict:
 def etl_apply(conn: sqlite3.Connection, tool_id: int, model: dict) -> dict:
     tool    = get_tool(conn, tool_id)
     slug    = tool["slug"]
-    rev     = tool["rev"]
+    rev     = get_current_revision(conn)
 
     # Compile SQL once — used for execution and persistence
     sql     = _compile(model)
@@ -231,12 +231,12 @@ def etl_apply(conn: sqlite3.Connection, tool_id: int, model: dict) -> dict:
                     old_val = cur_row.get(col_slug)
                     if str(old_val or "") != str(str_val or ""):
                         conn.execute(
-                            f'UPDATE "{slug}" SET "{col_slug}"=? WHERE __id=?',
-                            (str_val, row_id)
+                            f'UPDATE "{slug}" SET "{col_slug}"=?, rev=? WHERE __id=?',
+                            (str_val, rev, row_id)
                         )
                         audit(conn, slug, "UPDATE", row_tag=tag_val,
                               col_slug=col_slug, old_val=old_val,
-                              new_val=str_val, change_type="etl_update")
+                              new_val=str_val, change_type="etl_update", revision=rev)
                 updated += 1
 
             else:
@@ -253,7 +253,7 @@ def etl_apply(conn: sqlite3.Connection, tool_id: int, model: dict) -> dict:
                     list(insert_data.values())
                 )
                 audit(conn, slug, "ETL_INSERT", row_tag=tag_val,
-                      new_val=tag_val, change_type="etl_insert")
+                      new_val=tag_val, change_type="etl_insert", revision=rev)
                 next_pos += 1
                 created  += 1
 
@@ -282,7 +282,7 @@ def etl_apply(conn: sqlite3.Connection, tool_id: int, model: dict) -> dict:
                 (slug, tag, "", flag_id)
             )
             audit(conn, slug, "ETL_ELIMINATED", row_tag=tag,
-                  change_type="etl_eliminated")
+                  change_type="etl_eliminated", revision=rev)
             orphaned += 1
 
         if etl_tags:

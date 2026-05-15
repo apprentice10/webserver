@@ -8,9 +8,7 @@
 
 ## Active plans
 
-| Task | Plan | Status |
-|------|------|--------|
-| Group Q — Revision system | [project/PLAN_REVISION_SYSTEM.md](../project/PLAN_REVISION_SYSTEM.md) | Planning (Q0 next) |
+*(none)*
 
 ---
 

@@ -18,3 +18,4 @@
 
 - **Deferred imports from `engine.service`**: all functions use `from engine.service import get_tool` (and `_validate_tag_unique` / `get_columns` where needed) inside the function body. This avoids a circular import — `service.py` does not import from `service_row_ops.py`.
 - **`_validate_tag_unique` stays in `service.py`**: called by both `create_row` (in service.py) and `restore_row` here. Keeping it in service.py and importing it here (one-way dep) is the cleanest solution without a third utility module.
+- **Row `rev` set from `_revisions` (Q2)**: all mutation functions call `get_current_revision(conn)` instead of `tool["rev"]`. `restore_row` overrides the archived `rev` in `safe_data` with the current revision so the restored row is tagged to the active revision. `rollback_cell` stamps `rev` on the row in the same UPDATE as the cell value.

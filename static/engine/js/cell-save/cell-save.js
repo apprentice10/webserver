@@ -10,6 +10,7 @@ const CellSave = (() => {
     }
 
     async function doSaveCell(inputEl, cell, newValue) {
+        if (RevisionPicker.getViewingRevision() !== null) return;
         const rows = _cfg.getRows();
         const row  = rows.find(r => r.tag === cell.row_tag);
         if (!row) return;

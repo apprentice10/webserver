@@ -121,3 +121,186 @@
     background: var(--border, var(--color-border));
     margin: 3px 6px;
 }
+
+/* ── Revision Picker popover ─────────────────────────────── */
+
+.rev-picker {
+    position: fixed;
+    z-index: 500;
+    background: var(--surface-2, var(--color-surface));
+    border: 1px solid var(--border, var(--color-border));
+    border-radius: var(--radius, 6px);
+    box-shadow: var(--shadow-md, 0 4px 16px rgba(0,0,0,.4));
+    min-width: 220px;
+    max-width: 300px;
+    padding: 4px;
+}
+
+.rev-picker-title {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--ink-muted, var(--color-text-muted));
+    padding: 6px 10px 4px;
+}
+
+.rev-new-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 7px 10px;
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm, 4px);
+    font-size: 12px;
+    color: var(--accent);
+    cursor: pointer;
+    font-family: var(--font-ui, var(--font-main));
+    transition: background 100ms;
+}
+.rev-new-btn:hover { background: var(--surface-3, var(--color-bg)); }
+
+.rev-create-form {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border, var(--color-border));
+    margin-bottom: 4px;
+}
+
+.rev-create-input {
+    background: var(--color-bg, var(--surface-1));
+    border: 1px solid var(--border, var(--color-border));
+    border-radius: var(--radius-sm, 4px);
+    color: var(--ink, var(--color-text));
+    font-family: var(--font-main);
+    font-size: 12px;
+    padding: 4px 8px;
+}
+.rev-create-input:focus { outline: none; border-color: var(--accent); }
+
+.rev-create-btns {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.rev-list {
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.rev-item {
+    padding: 7px 10px;
+    border-radius: var(--radius-sm, 4px);
+    cursor: default;
+}
+.rev-item:hover    { background: var(--surface-3, var(--color-bg)); }
+.rev-item-active   { background: var(--surface-3, var(--color-bg)); }
+
+.rev-item-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.rev-item-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink, var(--color-text));
+}
+
+.rev-item-badge {
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+
+.rev-item-del {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--ink-muted, var(--color-text-muted));
+    cursor: pointer;
+    font-size: 11px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    opacity: 0;
+    transition: opacity 100ms, background 100ms, color 100ms;
+}
+.rev-item:hover .rev-item-del             { opacity: 1; }
+.rev-item-del:hover                        { background: rgba(220,50,50,.1); color: var(--danger); }
+
+.rev-item-meta {
+    font-size: 11px;
+    color: var(--ink-muted, var(--color-text-muted));
+    margin-top: 2px;
+}
+
+.rev-item-desc {
+    font-size: 11px;
+    color: var(--ink, var(--color-text));
+    margin-top: 2px;
+    opacity: 0.75;
+}
+
+.rev-empty {
+    padding: 12px 10px;
+    font-size: 12px;
+    color: var(--ink-muted, var(--color-text-muted));
+    text-align: center;
+}
+
+.rev-item-badge-viewing {
+    background: #c07a10;
+}
+
+.rev-item-clickable { cursor: pointer; }
+
+/* ── Read-only banner ────────────────────────────────── */
+
+.readonly-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    background: #7a5500;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    flex-shrink: 0;
+    gap: 12px;
+}
+
+.readonly-banner-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.btn-danger {
+    background: var(--danger, #c0392b);
+    color: #fff;
+    border: 1px solid transparent;
+}
+.btn-danger:hover {
+    background: #a93226;
+}
+
+/* ── Grid read-only visual state ─────────────────────── */
+
+[data-readonly] #grid-wrapper {
+    opacity: 0.88;
+}
+
+[data-readonly] tr[data-ghost] {
+    display: none !important;
+}

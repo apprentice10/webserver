@@ -28,6 +28,10 @@ const ColumnsManager = (() => {
         return _columns;
     }
 
+    function loadFromData(cols) {
+        _columns = cols;
+    }
+
 
     // --------------------------------------------------------
     // RENDERING INTESTAZIONI
@@ -366,6 +370,7 @@ const ColumnsManager = (() => {
     return {
         getColumns,
         loadColumns,
+        loadFromData,
         renderHeader,
         openAddColumnModal,
         submitAddColumn,

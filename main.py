@@ -8,6 +8,7 @@ from engine.routes import router as engine_router
 from engine.routes_flags import router as flags_router
 from engine.routes_etl import router as etl_router
 from engine.routes_export import router as export_router
+from engine.routes_revisions import router as revisions_router
 
 app = FastAPI(
     title="Instrument Manager",
@@ -23,6 +24,7 @@ app.include_router(fs_router)
 app.include_router(flags_router)
 app.include_router(etl_router)
 app.include_router(export_router)
+app.include_router(revisions_router)
 app.include_router(engine_router)
 
 

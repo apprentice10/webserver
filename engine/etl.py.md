@@ -23,5 +23,6 @@
 - **Import differito `from engine.service import mark_dependents_stale`** nel corpo di `etl_run_saved` (non a module top-level) per evitare circular import. Vedi RISKS.md R06 e DECISIONS.md D05.
 - **`etl_deps` estratti a save-time** (in `save_etl_version` e `etl_save_draft`), non a run-time. Il campo può essere stale se il SQL è stato modificato nell'editor ma non salvato. Vedi RISKS.md R04.
 - **ETL Templates** (`_templates`) sono dentro il DB per-progetto, scoped per `type_slug`. Gestiti in `engine/service.py`, non qui.
-- **`SYSTEM_SLUGS`** = `{"tag", "rev", "log"}` e **`INTERNAL_COLS`** = `{"__id", "__position", "__log", "__created_at"}` — mai scritti dall'ETL, sempre saltati nel merge.
+- **`SYSTEM_SLUGS`** = `{"tag", "rev", "log"}` e **`INTERNAL_COLS`** = `{"__id", "__position", "__log", "__created_at"}` — mai scritti dall'ETL come output columns, always skipped in merge. Exception: `rev` is explicitly set by `etl_apply` itself to stamp the current revision (Q2).
+- **Row `rev` stamped by `etl_apply` (Q2)**: on both INSERT and UPDATE, `rev` is set to `get_current_revision(conn)` — not from `tool["rev"]`. All `audit()` calls pass `revision=rev` (integer).
 - **Lineage**: `etl_apply` chiama `sql_parser` per estrarre `col_lineage` e aggiorna `lineage_info` in `_columns` per ogni colonna ETL. Permette tracciabilità sorgente → destinazione.

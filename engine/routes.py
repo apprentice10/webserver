@@ -316,6 +316,7 @@ def get_audit_log(
     col_slug:  Optional[str] = Query(None),
     col_slugs: Optional[str] = Query(None),
     limit:     int = Query(200),
+    revision:  Optional[int] = Query(None),
     conn:      sqlite3.Connection = Depends(get_project_conn),
 ):
     tool      = service.get_tool(conn, tool_id)
@@ -338,6 +339,10 @@ def get_audit_log(
         ph = ",".join("?" * len(all_cols))
         conds.append(f"(col_slug IN ({ph}) OR field IN ({ph}))")
         params.extend(all_cols * 2)
+
+    if revision is not None:
+        conds.append("revision = ?")
+        params.append(str(revision))
 
     where = " AND ".join(conds)
     params.append(limit)

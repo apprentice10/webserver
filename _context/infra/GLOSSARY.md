@@ -36,6 +36,12 @@
 
 **ETL Run Saved (`etl_run_saved`)** — Orchestrates topological execution, calls `etl_apply`, then resets `is_stale=0` and propagates staleness downstream.
 
+**Revision** — A named snapshot of a project at a point in time, identified by an auto-incrementing integer (Rev 0, Rev 1, …). Stored in `_revisions`. Only the latest revision is editable; older revisions are read-only snapshots. REV on each row tracks which revision last modified that row.
+
+**Snapshot** — Full copy of a tool's rows + column definitions at the moment a new revision was created, stored as JSON in `_revision_snapshots`. Used to serve old revision data without touching live tables.
+
+**viewingRevision** — Frontend state in `RevisionPicker`. `null` = viewing live data; integer = viewing snapshot of that revision number. Used as the gating flag for all read-only enforcement (CellSave, ContextMenu, ghost row, ETL).
+
 **Registry DB** — `data/registry.db`. SQLAlchemy. Stores `projects` metadata and `tool_templates`.
 
 **Per-project DB** — `data/{client}_{project}.db`. Raw sqlite3. Stores all tool data, columns, audit log, trash, overrides.

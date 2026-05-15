@@ -60,10 +60,6 @@ const ToolbarManager = (() => {
         if (pillName) pillName.textContent = _tool.name;
         if (pillIcon) pillIcon.textContent  = _tool.icon || '📄';
 
-        // REV chip
-        const revChip = document.getElementById('chip-rev-btn');
-        if (revChip) revChip.textContent = `REV ${_tool.current_rev}`;
-
         // Sidebar active item (new class names)
         const activeItem = document.querySelector(`.side-item[data-tool-id="${TOOL_ID}"]`);
         if (activeItem) {
@@ -262,9 +258,8 @@ const ToolbarManager = (() => {
     // API PUBBLICA
     // --------------------------------------------------------
 
-    function getToolType() {
-        return _tool?.tool_type || null;
-    }
+    function getToolType() { return _tool?.tool_type || null; }
+    function getToolSlug() { return _tool?.slug || null; }
 
     return {
         init,
@@ -276,6 +271,7 @@ const ToolbarManager = (() => {
         exportExcel,
         selectIcon,
         getToolType,
+        getToolSlug,
         runEtl
     };
 

@@ -17,7 +17,7 @@ from engine.project_db import (
     SYSTEM_COLUMN_DEFS,
     create_tool_table, add_column_to_table, audit,
     serialize_active_row, serialize_trash_row,
-    get_row_overrides, get_tool_overrides,
+    get_row_overrides, get_tool_overrides, get_current_revision,
 )
 from engine.utils import slugify as _slugify, format_log_entry as _format_log_entry, append_log as _append_log
 from engine.staleness import mark_tool_stale, mark_dependents_stale
@@ -196,7 +196,7 @@ def create_row(
 ) -> dict:
     tool = get_tool(conn, tool_id)
     slug = tool["slug"]
-    rev  = tool["rev"]
+    rev  = get_current_revision(conn)
 
     tag_value = (cell_data.get("tag") or "").strip()
     if not tag_value:
@@ -246,7 +246,7 @@ def update_cell(
 ) -> dict:
     tool = get_tool(conn, tool_id)
     tool_slug = tool["slug"]
-    rev = tool["rev"]
+    rev = get_current_revision(conn)
 
     if slug in ("rev", "log"):
         raise HTTPException(status_code=400,
@@ -278,10 +278,10 @@ def update_cell(
             raise HTTPException(status_code=422, detail="Il TAG non può essere vuoto")
         _validate_tag_unique(conn, tool_slug, new_value, exclude_id=row_id)
 
-    # Aggiorna valore
+    # Aggiorna valore e marca la riga con la revisione corrente
     conn.execute(
-        f'UPDATE "{tool_slug}" SET "{slug}" = ? WHERE __id = ?',
-        (new_value, row_id)
+        f'UPDATE "{tool_slug}" SET "{slug}" = ?, rev = ? WHERE __id = ?',
+        (new_value, rev, row_id)
     )
 
     # Override — etl_value salvato solo al primo insert (OR IGNORE preserva il valore originale)

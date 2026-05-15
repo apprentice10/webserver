@@ -226,6 +226,7 @@ const GridManager = (() => {
     // --------------------------------------------------------
 
     async function _createFromGhost(tag) {
+        if (RevisionPicker.getViewingRevision() !== null) return;
         try {
             const newRow = await ApiClient.createRow({ tag });
 
@@ -259,6 +260,34 @@ const GridManager = (() => {
     // _doSaveCell, _updateLogCell → CellSave (P4-G7)
 
     // softDeleteRow, restoreRow, hardDeleteRow, keepRow, removeOverride, _doRemoveOverride → RowOps (P4-G5)
+
+    // --------------------------------------------------------
+    // SNAPSHOT / READ-ONLY
+    // --------------------------------------------------------
+
+    function loadSnapshotData(columns, rows) {
+        ColumnsManager.loadFromData(columns);
+        ColumnsManager.renderHeader();
+        _rows = rows;
+        _searchQuery = "";
+        _applyFilters();
+        render();
+    }
+
+    async function reloadData() {
+        await ColumnsManager.loadColumns();
+        ColumnsManager.renderHeader();
+        _rows = await ApiClient.loadRows(true);
+        _searchQuery = "";
+        _applyFilters();
+        render();
+    }
+
+    function setReadOnly(isReadOnly) {
+        const container = document.getElementById('tool-container');
+        if (container) container.toggleAttribute('data-readonly', isReadOnly);
+    }
+
 
     // --------------------------------------------------------
     // TOGGLE ELIMINATI
@@ -448,7 +477,10 @@ const GridManager = (() => {
         clearRange:          SelectionManager.clearRange,
         selectColumn:        SelectionManager.selectColumn,
         selectRow:           SelectionManager.selectRow,
-        getSelectionForPaste: () => SelectionManager.getSelectionForPaste(_filteredRows)
+        getSelectionForPaste: () => SelectionManager.getSelectionForPaste(_filteredRows),
+        loadSnapshotData,
+        reloadData,
+        setReadOnly,
     };
 
 })();

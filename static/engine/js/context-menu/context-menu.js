@@ -214,6 +214,15 @@ const ContextMenu = (() => {
         }
         _ctxFlagsCache = null;
 
+        if (RevisionPicker.getViewingRevision() !== null) {
+            ['delete', 'restore', 'hard-delete', 'keep-row', 'remove-override', 'flags-trigger'].forEach(a => {
+                menu.querySelector(`[data-action="${a}"]`).style.display = "none";
+            });
+            menu.querySelector('.ctx-sep-keep-row').style.display = "none";
+            menu.querySelector('.ctx-sep-override').style.display = "none";
+            menu.querySelector('.ctx-sep-flags').style.display    = "none";
+        }
+
         const x = Math.min(e.clientX, window.innerWidth  - 210);
         const y = Math.min(e.clientY, window.innerHeight - 140);
         menu.style.left = x + "px";
