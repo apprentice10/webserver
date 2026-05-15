@@ -46,12 +46,23 @@ const RowOps = (() => {
     // ── Restore ───────────────────────────────────────────────
 
     async function restoreRow(rowId) {
+        const selected = SelectionManager.getSelectedRowIds(_getFilteredRows()).filter(id => {
+            const r = _getRows().find(x => x.id === id);
+            return r && r.is_deleted;
+        });
+        const rowIds = selected.length > 0 ? selected : [rowId];
+
         try {
-            const updated = await ApiClient.restoreRow(rowId);
-            _updateRow(rowId, updated);
+            for (const id of rowIds) {
+                const updated = await ApiClient.restoreRow(id);
+                _updateRow(id, updated);
+            }
             _applyFilters();
             _render();
-            Utils.showToast("Row restored.", "success");
+            Utils.showToast(
+                rowIds.length === 1 ? "Row restored." : `${rowIds.length} rows restored.`,
+                "success"
+            );
         } catch (err) {
             Utils.showToast(err.message, "error");
         }
@@ -91,15 +102,29 @@ const RowOps = (() => {
     // ── Keep row (remove ETL: Eliminated flag) ────────────────
 
     async function keepRow(rowId) {
+        const selected = SelectionManager.getSelectedRowIds(_getFilteredRows()).filter(id => {
+            const r = _getRows().find(x => x.id === id);
+            return r && r.cell_flags && r.cell_flags[""] &&
+                   r.cell_flags[""].some(f => f.name === "ETL: Eliminated");
+        });
+        const rowIds = selected.length > 0 ? selected : [rowId];
+
         try {
-            await ApiClient.keepRow(rowId);
-            const row = _getRows().find(r => r.id === rowId);
-            if (row && row.cell_flags && row.cell_flags[""]) {
-                row.cell_flags[""] = row.cell_flags[""].filter(f => f.name !== "ETL: Eliminated");
+            for (const id of rowIds) {
+                await ApiClient.keepRow(id);
+                const row = _getRows().find(r => r.id === id);
+                if (row && row.cell_flags && row.cell_flags[""]) {
+                    row.cell_flags[""] = row.cell_flags[""].filter(f => f.name !== "ETL: Eliminated");
+                }
             }
             _applyFilters();
             _render();
-            Utils.showToast("Row kept — ETL: Eliminated flag removed.", "success");
+            Utils.showToast(
+                rowIds.length === 1
+                    ? "Row kept — ETL: Eliminated flag removed."
+                    : `${rowIds.length} rows kept — ETL: Eliminated flag removed.`,
+                "success"
+            );
         } catch (err) {
             Utils.showToast(err.message, "error");
         }
@@ -127,11 +152,15 @@ const RowOps = (() => {
         }
     }
 
-    // Compatibility wrapper — context menu single-cell path
     async function removeOverride(rowId, colSlug) {
-        const row = _getRows().find(r => r.id === rowId);
-        if (!row || !colSlug) return;
-        await _doRemoveOverride([{ row_tag: row.tag, col_slug: colSlug }]);
+        const selCells = SelectionManager.getSelectedCells(_getFilteredRows(), ColumnsManager.getColumns());
+        if (selCells && selCells.length > 0) {
+            await _doRemoveOverride(selCells);
+        } else {
+            const row = _getRows().find(r => r.id === rowId);
+            if (!row || !colSlug) return;
+            await _doRemoveOverride([{ row_tag: row.tag, col_slug: colSlug }]);
+        }
     }
 
     return { configure, softDeleteRow, restoreRow, hardDeleteRow, keepRow, removeOverride };

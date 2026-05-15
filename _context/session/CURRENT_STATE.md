@@ -8,7 +8,8 @@
 
 ## Active plans
 
-*(none)*
+| Task | Plan |
+|------|------|
 
 ---
 
@@ -16,9 +17,9 @@
 
 | Task | Notes |
 |------|-------|
-| Group O — Selection / keyboard UX clarity | Needs /grill-me to spec exact behavior per context |
 | Group P — Dark theme legibility + mid-ground theme | Needs /grill-me |
 | Cable List tool | New type_slug, custom system columns |
 | I/O List tool | New type_slug |
 | DuckDB compatibility study | Document in `infra/` |
 | Bug — Intermittent 500 on columns endpoint | No consistent repro; diagnostic logging in place |
+| AI assistant — cross-engine access | AI with access to all engines, database, and engine ai_prompt field for context; needs /grill-me |

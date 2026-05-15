@@ -8,15 +8,17 @@
 |-------|--------|-------------|
 | 1–18 | `configure(deps)` | Injects 6 dependencies from grid.js: `getRows`, `getFilteredRows`, `updateRow`, `removeRows`, `applyFilters`, `render` |
 | 20–44 | `softDeleteRow(rowId)` | Deletes selected or specified rows (reversible); confirms first |
-| 46–56 | `restoreRow(rowId)` | Restores a soft-deleted row |
-| 58–84 | `hardDeleteRow(rowId)` | Permanently deletes selected or specified rows; confirms first |
-| 86–98 | `keepRow(rowId)` | Removes the ETL: Eliminated cell flag from a row |
-| 100–118 | `_doRemoveOverride(cells)` | Removes manual overrides from one or more cells (private batch impl) |
-| 120–124 | `removeOverride(rowId, colSlug)` | Single-cell wrapper over `_doRemoveOverride` (context menu path) |
+| 46–69 | `restoreRow(rowId)` | Restores selected deleted rows or the clicked row; batched toast |
+| 71–100 | `hardDeleteRow(rowId)` | Permanently deletes selected or specified rows; confirms first |
+| 102–131 | `keepRow(rowId)` | Removes ETL: Eliminated flag from selected qualifying rows or clicked row; batched toast |
+| 133–153 | `_doRemoveOverride(cells)` | Removes manual overrides from one or more cells (private batch impl) |
+| 155–164 | `removeOverride(rowId, colSlug)` | Range-aware: uses selection if non-empty, else falls back to single-cell path |
 
 ## Decisions
 
 - **configure() pattern**: Dependencies injected via `configure()` rather than closure access, consistent with CellKeyboard, ContextMenu, SelectionManager. `updateRow(id, data)` updates `_rows` only; `_applyFilters()` rebuilds `_filteredRows`. `removeRows(idSet)` filters both arrays (used by hardDelete which skips _applyFilters).
 - **Utils.showToast instead of global alias**: The `showToast` global alias is defined at the bottom of grid.js; this module uses `Utils.showToast` directly to avoid the dependency.
-- **SelectionManager accessed globally**: `SelectionManager.getSelectedRowIds()` called directly — it is a global IIFE loaded before this module (same pattern as CellKeyboard).
+- **SelectionManager accessed globally**: `SelectionManager.getSelectedRowIds()` and `SelectionManager.getSelectedCells()` called directly — global IIFE loaded before this module (same pattern as CellKeyboard).
 - **keepRow mutates in-place**: The row object in `_rows` is mutated directly (cell_flags array filtered) rather than waiting for a server response, because the `keepRow` API returns no updated row data. Acceptable since the server is the source of truth on next load.
+- **Range-aware operations (Group O)**: `restoreRow`, `keepRow`, and `removeOverride` now read the active selection and filter to qualifying rows/cells only. If no qualifying selection, they fall back to the right-clicked row/cell — same pattern as `softDeleteRow`/`hardDeleteRow`. `removeOverride` uses `getSelectedCells` (not `getSelectedRowIds`) because it needs col_slug per cell.
+- **ColumnsManager accessed globally**: `removeOverride` calls `ColumnsManager.getColumns()` directly, consistent with how context-menu.js already uses it for the same purpose.
