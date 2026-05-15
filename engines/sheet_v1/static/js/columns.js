@@ -1,29 +1,34 @@
 /**
  * columns.js — Engine
  * --------------------
- * Gestisce le colonne dinamiche del tool:
- * - Rendering intestazioni con azioni
- * - Aggiunta, modifica, eliminazione colonne
- * - Auto-slug da nome colonna
+ * Manages dynamic columns: header rendering, drag reorder, add/rename/delete,
+ * hide/show per-column (localStorage), system column drag (frontend-only order).
  */
 
 const ColumnsManager = (() => {
 
     // --------------------------------------------------------
-    // STATO INTERNO
+    // STATE
     // --------------------------------------------------------
 
-    let _columns = [];  // Colonne correnti ordinate per position
+    let _columns       = [];        // All columns in display order
+    let _hiddenColumns = new Set(); // Slugs of hidden columns
+    let _dragSrcId     = null;
+
+    let _ctxColId   = null;
+    let _ctxColName = "";
 
 
     // --------------------------------------------------------
-    // GETTER — usato da GridManager
+    // GETTER
     // --------------------------------------------------------
 
-    function getColumns() { return _columns; }
+    function getColumns()        { return _columns; }
+    function getVisibleColumns() { return _columns.filter(c => !_hiddenColumns.has(c.slug)); }
 
     async function loadColumns() {
         _columns = await ApiClient.loadColumns();
+        _loadColumnState();
         _initColContextMenu();
         return _columns;
     }
@@ -34,19 +39,55 @@ const ColumnsManager = (() => {
 
 
     // --------------------------------------------------------
-    // RENDERING INTESTAZIONI
+    // COLUMN STATE — localStorage via PanelSystem.extra
     // --------------------------------------------------------
 
-    /**
-     * Renderizza la riga <tr> dell'intestazione.
-     * Chiamato da GridManager dopo il caricamento colonne.
-     */
-    // Stato drag-and-drop colonne
-    let _dragSrcId = null;
+    function _loadColumnState() {
+        const hidden = PanelSystem.getExtra('hiddenColumns');
+        const order  = PanelSystem.getExtra('columnOrder');
+        if (hidden) _hiddenColumns = new Set(hidden);
+        if (order && order.length) _applyColumnOrder(order);
+        _applyHiddenColumnsCSS();
+    }
 
-    // Stato context menu colonne
-    let _ctxColId   = null;
-    let _ctxColName = "";
+    function _applyColumnOrder(order) {
+        const slugToCol = new Map(_columns.map(c => [c.slug, c]));
+        const ordered   = order.map(s => slugToCol.get(s)).filter(Boolean);
+        _columns.forEach(c => { if (!ordered.includes(c)) ordered.push(c); });
+        _columns = ordered;
+    }
+
+    function _applyHiddenColumnsCSS() {
+        let style = document.getElementById('col-visibility-style');
+        if (!style) {
+            style = document.createElement('style');
+            style.id = 'col-visibility-style';
+            document.head.appendChild(style);
+        }
+        if (!_hiddenColumns.size) { style.textContent = ''; return; }
+        const ids = _columns.filter(c => _hiddenColumns.has(c.slug)).map(c => c.id);
+        if (!ids.length) { style.textContent = ''; return; }
+        style.textContent = ids.map(id => `[data-column-id="${id}"]`).join(',') + ' { display: none !important; }';
+    }
+
+    function hideColumn(slug) {
+        _hiddenColumns.add(slug);
+        PanelSystem.setExtra('hiddenColumns', [..._hiddenColumns]);
+        _applyHiddenColumnsCSS();
+    }
+
+    function showColumn(slug) {
+        _hiddenColumns.delete(slug);
+        PanelSystem.setExtra('hiddenColumns', [..._hiddenColumns]);
+        _applyHiddenColumnsCSS();
+    }
+
+    function getHiddenColumns() { return _hiddenColumns; }
+
+
+    // --------------------------------------------------------
+    // HEADER RENDERING
+    // --------------------------------------------------------
 
     function renderHeader() {
         const headerRow = document.getElementById("grid-header-row");
@@ -54,9 +95,6 @@ const ColumnsManager = (() => {
         let html = `<th class="col-gutter"></th>`;
 
         _columns.forEach(col => {
-            const draggable = col.is_system ? "" : 'draggable="true"';
-            const dragClass = col.is_system ? "" : " th-draggable";
-
             let lineageTitle = "";
             if (col.lineage_info) {
                 try {
@@ -76,9 +114,9 @@ const ColumnsManager = (() => {
                     data-column-id="${col.id}"
                     data-slug="${col.slug}"
                     data-is-system="${col.is_system ? 1 : 0}"
-                    ${draggable}
+                    draggable="true"
                     ${lineageTitle}>
-                    <div class="th-content${dragClass}">
+                    <div class="th-content th-draggable">
                         <span class="th-label">${_escHtml(col.name)}</span>
                         ${lineageTitle ? '<span class="th-lineage-dot" aria-hidden="true">⬡</span>' : ""}
                     </div>
@@ -114,7 +152,7 @@ const ColumnsManager = (() => {
             th.addEventListener("dragover", e => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
-                if (parseInt(th.dataset.columnId) !== _dragSrcId && th.dataset.isSystem !== "1") {
+                if (parseInt(th.dataset.columnId) !== _dragSrcId) {
                     document.querySelectorAll("th").forEach(t => t.classList.remove("col-dragover"));
                     th.classList.add("col-dragover");
                 }
@@ -127,34 +165,30 @@ const ColumnsManager = (() => {
             th.addEventListener("drop", async e => {
                 e.preventDefault();
                 const targetId = parseInt(th.dataset.columnId);
-                if (targetId === _dragSrcId || th.dataset.isSystem === "1") return;
+                if (targetId === _dragSrcId) return;
 
-                // Riordina l'array locale (solo colonne utente)
-                const userCols  = _columns.filter(c => !c.is_system);
-                const srcIdx    = userCols.findIndex(c => c.id === _dragSrcId);
-                const tgtIdx    = userCols.findIndex(c => c.id === targetId);
+                const srcIdx = _columns.findIndex(c => c.id === _dragSrcId);
+                const tgtIdx = _columns.findIndex(c => c.id === targetId);
                 if (srcIdx === -1 || tgtIdx === -1) return;
 
-                const [moved] = userCols.splice(srcIdx, 1);
-                userCols.splice(tgtIdx, 0, moved);
-
-                // Assegna posizioni in base al nuovo ordine di userCols
-                userCols.forEach((col, i) => { col.position = 2 + i; });
-
-                _columns.sort((a, b) => {
-                    if (a.slug === "log") return 1;
-                    if (b.slug === "log") return -1;
-                    return a.position - b.position;
-                });
+                const [moved] = _columns.splice(srcIdx, 1);
+                _columns.splice(tgtIdx, 0, moved);
 
                 renderHeader();
                 GridManager.render();
 
-                // Salva nel backend
-                try {
-                    await ApiClient.reorderColumns(userCols.map(c => c.id));
-                } catch (err) {
-                    showToast("Errore salvataggio ordine: " + err.message, "error");
+                // Save frontend display order
+                PanelSystem.setExtra('columnOrder', _columns.map(c => c.slug));
+
+                // Call backend API only for user (non-system) column reorder
+                if (!moved.is_system) {
+                    const userCols = _columns.filter(c => !c.is_system);
+                    userCols.forEach((col, i) => { col.position = 2 + i; });
+                    try {
+                        await ApiClient.reorderColumns(userCols.map(c => c.id));
+                    } catch (err) {
+                        showToast("Errore salvataggio ordine: " + err.message, "error");
+                    }
                 }
             });
 
@@ -162,13 +196,14 @@ const ColumnsManager = (() => {
                 e.preventDefault();
                 _ctxColId   = parseInt(th.dataset.columnId);
                 _ctxColName = th.querySelector(".th-label")?.textContent ?? "";
-                _openColContextMenu(e.clientX, e.clientY);
+                _openColContextMenu(e.clientX, e.clientY, th);
             });
         });
     }
 
+
     // --------------------------------------------------------
-    // AGGIUNTA COLONNA
+    // ADD COLUMN
     // --------------------------------------------------------
 
     function openAddColumnModal() {
@@ -177,7 +212,6 @@ const ColumnsManager = (() => {
         document.getElementById("col-type").value = "text";
         openModal("modal-add-column");
 
-        // Auto-genera slug dal nome
         document.getElementById("col-name").oninput = function () {
             document.getElementById("col-slug").value = _toSlug(this.value);
         };
@@ -204,7 +238,6 @@ const ColumnsManager = (() => {
             _columns.sort((a, b) => a.position - b.position);
             closeModal("modal-add-column");
 
-            // Re-renderizza header e griglia
             renderHeader();
             GridManager.render();
 
@@ -216,7 +249,7 @@ const ColumnsManager = (() => {
 
 
     // --------------------------------------------------------
-    // RINOMINA COLONNA
+    // RENAME COLUMN
     // --------------------------------------------------------
 
     async function renameColumn(columnId, currentName) {
@@ -252,7 +285,7 @@ const ColumnsManager = (() => {
 
 
     // --------------------------------------------------------
-    // ELIMINAZIONE COLONNA
+    // DELETE COLUMN
     // --------------------------------------------------------
 
     async function deleteColumn(columnId, columnName) {
@@ -288,7 +321,7 @@ const ColumnsManager = (() => {
 
 
     // --------------------------------------------------------
-    // AGGIORNAMENTO LARGHEZZA (chiamato da ResizeManager)
+    // UPDATE WIDTH (called by ResizeManager)
     // --------------------------------------------------------
 
     function updateLocalWidth(columnId, width) {
@@ -323,9 +356,22 @@ const ColumnsManager = (() => {
     // COLUMN HEADER CONTEXT MENU
     // --------------------------------------------------------
 
-    function _openColContextMenu(x, y) {
+    function _openColContextMenu(x, y, thEl) {
         const menu = document.getElementById("col-context-menu");
         if (!menu) return;
+
+        const hasHidden = _hiddenColumns.size > 0;
+        const sep       = menu.querySelector('.ctx-sep-show-hidden');
+        const trigger   = menu.querySelector('[data-action="show-hidden-trigger"]');
+        if (sep)     sep.style.display     = hasHidden ? '' : 'none';
+        if (trigger) {
+            trigger.style.display = hasHidden ? '' : 'none';
+            if (hasHidden) {
+                const menuLeft = Math.min(x, window.innerWidth - 210);
+                trigger.classList.toggle('submenu-left', menuLeft + 195 + 190 > window.innerWidth);
+            }
+        }
+
         menu.style.left = x + "px";
         menu.style.top  = y + "px";
         menu.classList.add("visible");
@@ -339,17 +385,33 @@ const ColumnsManager = (() => {
 
     function _initColContextMenu() {
         const menu = document.getElementById("col-context-menu");
-        if (!menu) return;
+        if (!menu || menu.dataset.cmInit) return;
+        menu.dataset.cmInit = '1';
 
         menu.addEventListener("click", e => {
             const item = e.target.closest("[data-action]");
-            if (!item || _ctxColId === null) return;
+            if (!item) return;
+            const action = item.dataset.action;
+
+            if (action === "show-hidden-trigger") return;
+
+            if (action === "show-col") {
+                showColumn(item.dataset.slug);
+                _closeColContextMenu();
+                return;
+            }
+
+            if (_ctxColId === null) return;
             const id   = _ctxColId;
             const name = _ctxColName;
             _closeColContextMenu();
 
-            if (item.dataset.action === "rename") renameColumn(id, name);
-            if (item.dataset.action === "delete") deleteColumn(id, name);
+            if (action === "rename")   renameColumn(id, name);
+            if (action === "delete")   deleteColumn(id, name);
+            if (action === "hide-col") {
+                const col = _columns.find(c => c.id === id);
+                if (col) hideColumn(col.slug);
+            }
         });
 
         document.addEventListener("click", e => {
@@ -360,15 +422,31 @@ const ColumnsManager = (() => {
         document.addEventListener("keydown", e => {
             if (e.key === "Escape") _closeColContextMenu();
         });
+
+        const showHiddenTrigger = menu.querySelector('[data-action="show-hidden-trigger"]');
+        if (showHiddenTrigger) {
+            showHiddenTrigger.addEventListener("mouseenter", () => {
+                const list = document.getElementById("ctx-hidden-cols-list");
+                if (!list) return;
+                list.innerHTML = [..._hiddenColumns].map(slug => {
+                    const col   = _columns.find(c => c.slug === slug);
+                    const label = col ? _escHtml(col.name) : _escHtml(slug);
+                    return `<div class="ctx-item" data-action="show-col" data-slug="${_escAttr(slug)}">` +
+                           `<span class="ctx-icon">◉</span><span>${label}</span><span></span></div>`;
+                }).join('');
+            });
+        }
     }
 
 
     // --------------------------------------------------------
-    // API PUBBLICA
+    // PUBLIC API
     // --------------------------------------------------------
 
     return {
         getColumns,
+        getVisibleColumns,
+        getHiddenColumns,
         loadColumns,
         loadFromData,
         renderHeader,
@@ -376,7 +454,9 @@ const ColumnsManager = (() => {
         submitAddColumn,
         renameColumn,
         deleteColumn,
-        updateLocalWidth
+        updateLocalWidth,
+        hideColumn,
+        showColumn,
     };
 
 })();

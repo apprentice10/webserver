@@ -136,3 +136,53 @@
 **Newer-DB-than-server:** `get_project_conn` returns HTTP 403 on non-GET requests; `GET /api/project` returns a `schema_warning` string so the frontend can show a banner.
 **Safety:** A file copy is made to `data/backups/<stem>_pre_migration_v<N>.db` before any migration. If the copy fails, migration is aborted. If the migration fails mid-step, the transaction is rolled back; the DB stays at the previous version.
 **Rejected:** Per-table version columns in `_project`; `_schema_version` table. Both add schema overhead without benefit over the built-in pragma.
+
+
+---
+
+## D16 — Engine ordering, grouping, and trash (Engine Management UX)
+
+**D-EM01** File format for "load file" template: same ETL JSON format used by the existing saved-templates system.
+**D-EM02** Jump to ETL editor (`/etl`) after create only when a template (dropdown or file) is active. Blank engine goes to `/tool`.
+**D-EM03** Name uniqueness check is real-time, client-side, case-insensitive; compares against `_currentTools` cached at project open.
+**D-EM04** Canvas tab (`"canvas-etl"`) is the localStorage default in the ETL editor, replacing `"code-etl"`.
+**D-EM05** `_tools.position` (INTEGER DEFAULT 0) stores display order per-project. Seeded from `id` order in migration v5.
+**D-EM06** `PATCH /{tool_id}/position` normalises all positions atomically — it reindexes the full ordered list, not just the moved item.
+**D-EM07** `_tool_groups` table (migration v6): `id, name, icon, position, is_collapsed`. `_tools.group_id` is nullable FK.
+**D-EM08** Deleting a group sets `group_id = NULL` on all member engines — no engine is ever lost.
+**D-EM09** Soft-delete sets `is_trashed = 1, trashed_at, group_id = NULL` (migration v7). All engine-list queries filter `is_trashed = 0`.
+**D-EM10** Dependency check before deletion uses `extract_table_refs` from `dashboard/sql_parser.py` on `etl_sql` in each active engine's `query_config`. Blocking dialog lists dependent names; no canvas opened.
+**D-EM11** Restored engines always go to top-level ungrouped (`group_id = NULL`). Hard delete: drop tool table + delete `_columns`, `_templates` rows.
+
+---
+
+## D15 — Self-contained engine plugin layout (Group R6)
+
+**Decision:** All files for a specific engine (Python backend, JS/CSS frontend, HTML template, manifest) live under `engines/<slug>/`. The `dashboard/` package contains only shared infrastructure (project DB, ETL, catalog, shared schemas, utils). Engine static files are served at `/engines/<slug>/static/` via `app.mount()`. The `engines/<slug>/backend/routes.py` module-level `router` attribute is the loader contract.
+**Rationale:** Clean separation allows an engine to be zipped and redistributed. New engines require zero changes to `main.py` — just dropping a folder triggers auto-discovery. Keeps `dashboard/` focused on platform services, not document-type logic.
+**Rejected:** Keeping Sheet routes in `dashboard/` — conflates platform and plugin; putting shared infrastructure in `engines/` — inverts the dependency direction.
+
+---
+
+## D17 — Column state (hide/order) stored in PanelSystem.extra (Group R)
+
+**Decision:** `hiddenColumns: string[]` (slugs) and `columnOrder: string[]` (slugs) are stored under the existing `im_panels_${hash(DB_PATH)}` localStorage key via `PanelSystem.getExtra/setExtra(key, value)`. `_state.extra` is an optional sub-object in the panel layout state.
+**Rationale:** Reusing the same key avoids a second hash computation and keeps all per-tool view state in one place. The `extra` field is additive — it does not affect the migration chain since readers use `|| {}`.
+**Rejected:** Separate localStorage key in ColumnsManager — would require duplicating the `djb2`-style hash function.
+
+---
+
+## D18 — Column hiding via CSS `<style>` injection, not DOM filtering (Group R)
+
+**Decision:** Hiding a column injects `[data-column-id="N"] { display: none !important; }` into a `<style id="col-visibility-style">` element. All `<td>` cells were updated to carry `data-column-id` so the same rule hides both header and data cells.
+**Rationale:** Avoids changing `data-col-idx` values and all downstream consumers (SelectionManager, CellKeyboard, ClipboardManager). Cells remain in the DOM at correct indices.
+**Tradeoff:** Keyboard Tab navigation may still land on hidden-column cells (display:none prevents mouse interaction but not programmatic focus in some edge cases). Clipboard copy including a hidden column in a drag range will include hidden data. Both are acceptable for a "visual hide" feature.
+**Rejected:** Filtering via `getVisibleColumns()` — would require updating every getColumns() callsite: SelectionManager, CellKeyboard, ClipboardManager, paste.js, context-menu.js, table.html listeners.
+
+---
+
+## D19 — Density stored as integer 9–16px (Group R)
+
+**Decision:** `im.prefs.density` is now an integer (9–16). `setDensity(px)` looks up `_DENSITY_TABLE` and sets `--row-h`, `--cell-pad-y`, `--cell-pad-x` CSS vars directly on the root element. Legacy string values `'dense'`/`'comfortable'` are migrated to 12/14 on read. The `[data-density="comfortable"]` CSS block is deleted.
+**Rationale:** A slider gives fine-grained control; the old two-button segmented control was too coarse. CSS vars are already used by the grid for row height and cell padding.
+**Rejected:** Keeping the CSS `[data-density]` attribute approach — would need N attribute values instead of a JS lookup table; also prevents fractional intermediate sizes.

@@ -16,6 +16,17 @@ const AppShell = (() => {
     }
 
     // ── Theme / Accent / Density ─────────────────────────────────
+    const _DENSITY_TABLE = {
+        9:  { rowH: '21px', padY: '3px', padX: '5px' },
+        10: { rowH: '23px', padY: '4px', padX: '6px' },
+        11: { rowH: '25px', padY: '4px', padX: '6px' },
+        12: { rowH: '27px', padY: '4px', padX: '7px' },
+        13: { rowH: '30px', padY: '5px', padX: '7px' },
+        14: { rowH: '32px', padY: '5px', padX: '8px' },
+        15: { rowH: '34px', padY: '5px', padX: '9px' },
+        16: { rowH: '37px', padY: '6px', padX: '9px' },
+    };
+
     function setTheme(theme) {
         document.documentElement.dataset.theme = theme;
         _savePrefs({ theme });
@@ -26,13 +37,19 @@ const AppShell = (() => {
         _savePrefs({ accent });
     }
 
-    function setDensity(density) {
-        document.documentElement.dataset.density = density;
-        _savePrefs({ density });
-        // Keep density segmented control in toolbar in sync
-        document.querySelectorAll('.segmented-density button').forEach(btn => {
-            btn.setAttribute('aria-pressed', btn.dataset.value === density ? 'true' : 'false');
-        });
+    function setDensity(px) {
+        const n     = parseInt(px, 10) || 12;
+        const entry = _DENSITY_TABLE[n] || _DENSITY_TABLE[12];
+        const root  = document.documentElement;
+        root.style.setProperty('--row-h',       entry.rowH);
+        root.style.setProperty('--cell-pad-y',  entry.padY);
+        root.style.setProperty('--cell-pad-x',  entry.padX);
+        root.style.fontSize = n + 'px';
+        _savePrefs({ density: n });
+        const slider = document.getElementById('density-slider');
+        if (slider) { slider.value = n; }
+        const label = document.getElementById('density-label');
+        if (label)  { label.textContent = n + 'px'; }
     }
 
     // ── Settings modal ────────────────────────────────────────────
@@ -55,8 +72,11 @@ const AppShell = (() => {
         const prefs = _loadPrefs();
         const theme   = prefs.theme   || 'dark';
         const accent  = prefs.accent  || 'crimson';
-        const density = prefs.density || 'dense';
         const lang    = I18n.getLang();
+        let densityNum = prefs.density || 12;
+        if (densityNum === 'dense')       densityNum = 12;
+        if (densityNum === 'comfortable') densityNum = 14;
+        densityNum = parseInt(densityNum, 10) || 12;
 
         const ACCENTS = [
             { id: 'cobalt',  name: t('accent.cobalt'),  color: 'oklch(60% 0.14 250)' },
@@ -105,9 +125,10 @@ const AppShell = (() => {
         </div>
         <div class="form-group">
           <label>${t('settings.density')}</label>
-          <div class="segmented" style="align-self:flex-start">
-            <button data-action="density" data-value="dense" aria-pressed="${density === 'dense'}">${t('toolbar.dense')}</button>
-            <button data-action="density" data-value="comfortable" aria-pressed="${density === 'comfortable'}">${t('toolbar.comfortable')}</button>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="range" id="density-slider" min="9" max="16" step="1" value="${densityNum}"
+                   style="width:140px" oninput="AppShell.setDensity(this.value)">
+            <span id="density-label" style="font-size:12px;min-width:28px">${densityNum}px</span>
           </div>
         </div>
       </div>
@@ -201,10 +222,6 @@ const AppShell = (() => {
                 setAccent(value);
                 overlay.querySelectorAll('[data-action="accent"]').forEach(b =>
                     b.classList.toggle('selected', b.dataset.value === value));
-            } else if (action === 'density') {
-                setDensity(value);
-                overlay.querySelectorAll('[data-action="density"]').forEach(b =>
-                    b.setAttribute('aria-pressed', b.dataset.value === value ? 'true' : 'false'));
             } else if (action === 'lang') {
                 I18n.setLang(value);
                 overlay.querySelectorAll('[data-action="lang"]').forEach(b =>
@@ -234,7 +251,7 @@ const AppShell = (() => {
 
     // ── Tool pill popover (topbar inline edit) ───────────────────
     function _initToolPill() {
-        const pill = document.getElementById('topbar-tool-pill');
+        const pill = document.getElementById('topbar-engine-pill');
         if (!pill) return;
 
         pill.addEventListener('click', e => {
@@ -244,9 +261,10 @@ const AppShell = (() => {
         });
     }
 
-    function _openToolPopover(anchor) {
-        const name = anchor.querySelector('.pill-name')?.textContent || '';
-        const icon = anchor.querySelector('.tool-icon')?.textContent || '';
+    // opts: { name, icon } override initial values (used when called from sidebar)
+    function _openToolPopover(anchor, opts = {}) {
+        const name = opts.name !== undefined ? opts.name : (anchor.querySelector('.pill-name')?.textContent || '');
+        const icon = opts.icon !== undefined ? opts.icon : (anchor.querySelector('.tool-icon')?.textContent || '');
         const ICONS = ['📋','🔌','🔁','🔄','⚙','📊','🧪','💧','🔥','⚡','📐','🔧','🛠','🧯','📈','🗂','📁','📂'];
         const t = I18n.t.bind(I18n);
 
@@ -294,10 +312,19 @@ const AppShell = (() => {
             const selected = pop.querySelector('.icon-cell.selected');
             const newIcon = selected ? selected.dataset.icon : icon;
             if (newName) {
-                anchor.querySelector('.pill-name').textContent = newName;
-                anchor.querySelector('.tool-icon').textContent = newIcon;
+                // Update topbar pill if present
+                const pill = document.getElementById('topbar-engine-pill');
+                if (pill) {
+                    const pillName = pill.querySelector('.pill-name');
+                    const pillIcon = pill.querySelector('.tool-icon');
+                    if (pillName) pillName.textContent = newName;
+                    if (pillIcon) pillIcon.textContent = newIcon;
+                }
+                // Update active sidebar item
                 const activeLabel = document.querySelector('.side-item.active .si-label');
                 if (activeLabel) activeLabel.textContent = newName;
+                const activeIcon = document.querySelector('.side-item.active .si-icon');
+                if (activeIcon) activeIcon.textContent = newIcon;
                 try {
                     await ApiClient.updateToolSettings({ name: newName, icon: newIcon });
                 } catch (_) { /* non-critical */ }
@@ -324,24 +351,20 @@ const AppShell = (() => {
     function init() {
         const prefs = _loadPrefs();
 
-        // Apply persisted preferences to <html>
         if (prefs.theme)  document.documentElement.dataset.theme  = prefs.theme;
         if (prefs.accent) document.documentElement.dataset.accent = prefs.accent;
 
-        // setDensity syncs the segmented-density buttons as well as the html attribute
-        const density = prefs.density || 'dense';
-        document.documentElement.dataset.density = density;
-        document.querySelectorAll('.segmented-density button').forEach(btn => {
-            btn.setAttribute('aria-pressed', btn.dataset.value === density ? 'true' : 'false');
-        });
-
-        // Settings trigger in side-bottom bar calls openSettings directly
+        // Migrate legacy string density values; apply numeric px density
+        let density = prefs.density || 12;
+        if (density === 'dense')       density = 12;
+        if (density === 'comfortable') density = 14;
+        setDensity(density);
 
         _initToolPill();
         I18n.applyLocale();
     }
 
-    return { init, openSettings, setTheme, setAccent, setDensity };
+    return { init, openSettings, setTheme, setAccent, setDensity, openToolPopover: _openToolPopover };
 })();
 
 document.addEventListener('DOMContentLoaded', () => AppShell.init());

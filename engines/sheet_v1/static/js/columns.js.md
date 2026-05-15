@@ -1,42 +1,41 @@
 # columns.js — Engine
 
-**Scopo:** Gestisce le colonne dinamiche del Table Engine: rendering header, aggiunta, rinomina, eliminazione, drag-and-drop reorder, larghezza locale.
+**Description:** Manages dynamic columns: header rendering, drag reorder (all columns including system), add/rename/delete, hide/show per column with CSS injection, localStorage persistence via PanelSystem.extra.
 
 ---
 
-## Indice sezioni
+## Section Index
 
-| Sezione | Righe | Note |
-|---------|-------|------|
-| Stato interno | 16–20 | `_columns[]`, `_dragSrcId`, `_ctxColId`, `_ctxColName` |
-| Getter / loadColumns | 25–29 | `getColumns()`, `loadColumns()` via ApiClient; calls `_initColContextMenu()` |
-| renderHeader | 44–87 | Genera `<th>` con dataset, draggable, lineage tooltip |
-| _attachDragListeners | 89–164 | Drag & drop + contextmenu listener per th non-system |
-| openAddColumnModal | 170–180 | Apre modale, auto-genera slug da nome |
-| submitAddColumn | 182–211 | Valida e chiama ApiClient.addColumn |
-| renameColumn | 218–246 | prompt() + confirm (ETL columns) + ApiClient.updateColumn + toast ETL update |
-| deleteColumn | 242–271 | confirm() + ApiClient.deleteColumn |
-| updateLocalWidth | 278–281 | Chiamato da ResizeManager dopo drag o dblclick |
-| Utility | 288–303 | `_toSlug`, `_escHtml`, `_escAttr` |
-| Column header context menu | 310–355 | `_openColContextMenu`, `_closeColContextMenu`, `_initColContextMenu` |
+| Section | Lines | Notes |
+|---------|-------|-------|
+| State | 13–16 | `_columns[]`, `_hiddenColumns` (Set of slugs), `_dragSrcId`, ctx vars |
+| Getters | 24–29 | `getColumns()`, `getVisibleColumns()`, `loadColumns()`, `loadFromData()` |
+| Column state — localStorage | 42–85 | `_loadColumnState`, `_applyColumnOrder`, `_applyHiddenColumnsCSS`, `hideColumn`, `showColumn` |
+| renderHeader | 90–128 | All columns draggable; CSS hides hidden ones; lineage tooltip |
+| _attachDragListeners | 130–199 | Drag/drop + contextmenu; API call skipped for system column source |
+| openAddColumnModal / submitAddColumn | 205–250 | Add column modal with auto-slug |
+| renameColumn | 255–285 | prompt + confirm for ETL cols |
+| deleteColumn | 290–320 | confirm + ETL warning |
+| updateLocalWidth | 325–328 | Called by ResizeManager |
+| Utility | 333–345 | `_toSlug`, `_escHtml`, `_escAttr` |
+| Column header context menu | 350–450 | Hide/Show hidden submenu; rename; delete |
 
 ---
 
-## Decisioni
+## Decisions
 
-### D1 — Reorder: mutazione diretta + sort (non map)
+### D1 — System column drag: frontend order only, no API call
 
-Nel drop handler, le nuove posizioni si assegnano con:
-```js
-userCols.forEach((col, i) => { col.position = 2 + i; });
-_columns.sort(...);
-```
-**Non** con `_columns.map(...)`. Motivazione: `filter` restituisce array con *stessi riferimenti* agli oggetti; `forEach` su `userCols` muta le posizioni in-place anche in `_columns`. Un `map` che itera `_columns` in ordine originale assegnerebbe `pos++` nell'ordine sbagliato, rendendo il sort successivo un no-op. Bug introdotto e rimosso in sessione 2026-04-25.
+System columns (tag, rev, log) are draggable but the reorder API is NOT called when `moved.is_system === true`. Only frontend display order (`_columns` array and `PanelSystem.extra.columnOrder`) is updated.
 
-### D2 — `dataset.isSystem` è stringa "0"/"1"
+### D2 — CSS hiding via injected `<style id="col-visibility-style">`
 
-La guard nel dragover/drop confronta `th.dataset.isSystem !== "1"` (stringa), non booleano. Cambiare in `parseInt(...)` o `=== true` romperebbe il check.
+Hidden columns are hidden via `[data-column-id="N"] { display: none !important; }`. This avoids changing `data-col-idx` values and requires no changes to SelectionManager or CellKeyboard. Both `<th>` and `<td>` carry `data-column-id` so one CSS rule hides both.
 
-### D3 — Posizioni colonne utente partono da 2
+### D3 — Column state stored in PanelSystem.extra (same localStorage key)
 
-La colonna di sistema TAG occupa position 1. Le colonne utente iniziano da 2. LOG (system) viene messa in fondo dal sort (`if (a.slug === "log") return 1`).
+`hiddenColumns: string[]` (slugs) and `columnOrder: string[]` (slugs) are stored under the existing `im_panels_${hash}` key via `PanelSystem.getExtra/setExtra`. No separate key, no second hash computation.
+
+### D4 — User column positions start at 2
+
+System column TAG occupies position 1. User columns start at 2. When user columns are reordered, their `position` values are recomputed from the current `_columns` order (user-only slice).

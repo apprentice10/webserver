@@ -8,8 +8,8 @@
 |-------|--------|-------------|
 | 5 | `PREFS_KEY` | `localStorage` key `'im.prefs'` for persisted appearance prefs |
 | 9–16 | `_loadPrefs / _savePrefs` | Read/merge/write prefs object |
-| 19–36 | `setTheme / setAccent / setDensity` | Apply token to `<html>` `data-*` attribute + persist; `setDensity` also syncs `.segmented-density` button `aria-pressed` states |
-| 39–193 | `openSettings / closeSettings / _renderSettingsModal` | Dynamic settings modal (Appearance + Language tabs); live preview on control change |
+| 19–56 | `_DENSITY_TABLE / setTheme / setAccent / setDensity` | `setDensity(px: number)` looks up 9–16px in `_DENSITY_TABLE` and sets `--row-h`, `--cell-pad-y`, `--cell-pad-x` CSS vars + root font-size; `setTheme/setAccent` write `data-*` attributes |
+| 58–240 | `openSettings / closeSettings / _renderSettingsModal` | Dynamic settings modal (Appearance + Language + Backup tabs); Appearance tab shows density as a range slider (9–16px) |
 | 196–205 | `_initToolPill` | Wires click on `#topbar-tool-pill` → `_openToolPopover` |
 | 207–277 | `_openToolPopover` | Floating popover with name input + 18-emoji icon grid; body-appended with `position:fixed` to avoid overflow clipping; saves via `ApiClient.updateToolSettings` |
 | 279–281 | `_closeToolPopover` | Removes `#popover-tool` from DOM |
@@ -22,4 +22,5 @@
 - **`ApiClient` calls wrapped in `try/catch`**: both save paths silently swallow errors. On pages without `ApiClient` (index), the reference error is caught without UI disruption.
 - **Settings modal is dynamic (not in HTML)**: only one settings modal exists globally regardless of how many pages load. `_settingsOpen` guard prevents double-open.
 - **Language change requires page reload**: `I18n.setLang()` changes the in-memory locale and persists it, but existing DOM strings are not patched. The settings hint string explains this.
-- **`setDensity` syncs `.segmented-density` buttons**: `init()` also syncs density button states inline (same logic as `setDensity`) to avoid double-save on first load.
+- **Density stored as integer (9–16)**: replaces legacy `'dense'`/`'comfortable'` strings. `init()` and `_renderSettingsModal` both migrate legacy values on read (`dense→12`, `comfortable→14`). The `[data-density="comfortable"]` CSS block is deleted; all sizing is driven by JS-set CSS vars.
+- **Density slider**: settings modal Appearance tab shows a `<input type="range" id="density-slider">` that calls `AppShell.setDensity(this.value)` oninput; toolbar segmented-density buttons removed.

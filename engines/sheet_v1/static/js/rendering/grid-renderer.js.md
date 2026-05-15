@@ -18,4 +18,5 @@
 - **Explicit params only**: all five functions receive their inputs as parameters — no closure access to `_rows`, `_filteredRows`, or any grid.js state. This makes them independently testable and reusable.
 - **`FlagsManager` reference in `flagBadgesHtml`**: guarded by `typeof FlagsManager !== "undefined"` so the function degrades gracefully when `flags.js` is absent (e.g., unit test contexts).
 - **`GridManager.getAllRows()` in `renderCell` template string**: this is a string literal embedded in an `onclick` attribute — the call happens at click time, not at render time. No runtime coupling to `GridManager` is introduced.
+- **`data-column-id` on every `<td>`**: added to enable CSS-based column hiding by ColumnsManager (`[data-column-id="N"] { display: none !important; }`). Both `<th>` (already present) and `<td>` now carry this attribute.
 - **`_escHtml`/`_escAttr` aliases dropped**: `Utils.escHtml` / `Utils.escAttr` used directly — no aliases needed.

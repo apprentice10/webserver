@@ -156,11 +156,12 @@ const PanelSystem = (() => {
 
     function register(config) { _registry[config.id] = config; }
 
-    // opts.silent=true: open/activate without calling onActivate (legacy setContent pattern).
-    // opts.dock='bottom': open in bottom dock instead of right.
-    function showPanel(id, opts) {
-        const dockName = opts && opts.dock === 'bottom' ? 'bottom' : 'right';
+    function getExtra(key)        { return (_state.extra || {})[key]; }
+    function setExtra(key, value) { if (!_state.extra) _state.extra = {}; _state.extra[key] = value; _saveState(); }
 
+    // opts.silent=true: open/activate without calling onActivate (legacy setContent pattern).
+    // opts.dock='bottom': open in bottom dock instead of right (only used if panel has no current location).
+    function showPanel(id, opts) {
         // Already floating — just refresh content (skip onActivate if silent)
         const floatEntry = (_state.floats || []).find(f => f.id === id);
         if (floatEntry) {
@@ -171,14 +172,32 @@ const PanelSystem = (() => {
             return;
         }
 
+        // Panel already in a dock — activate it there regardless of caller's hint
+        for (const [dockName, d] of [['right', _state.rightDock], ['bottom', _state.bottomDock]]) {
+            if (d.tabs.includes(id)) {
+                const wasActive = d.activeTab === id && d.open;
+                d.open      = true;
+                d.activeTab = id;
+                _saveState();
+                _applyLayout();
+                if (!(opts && opts.silent) && !wasActive) {
+                    const panel = _registry[id];
+                    const body  = dockName === 'bottom' ? _getBottomBody() : _getBody();
+                    if (panel && panel.onActivate && body) panel.onActivate(body);
+                }
+                return;
+            }
+        }
+
+        // Panel not currently anywhere — use caller's hint
+        const dockName = opts && opts.dock === 'bottom' ? 'bottom' : 'right';
         const d = dockName === 'bottom' ? _state.bottomDock : _state.rightDock;
-        const wasActive = d.activeTab === id && d.tabs.includes(id) && d.open;
-        if (!d.tabs.includes(id)) d.tabs.push(id);
+        d.tabs.push(id);
         d.open      = true;
         d.activeTab = id;
         _saveState();
         _applyLayout();
-        if (!(opts && opts.silent) && !wasActive) {
+        if (!(opts && opts.silent)) {
             const panel = _registry[id];
             const body  = dockName === 'bottom' ? _getBottomBody() : _getBody();
             if (panel && panel.onActivate && body) panel.onActivate(body);
@@ -351,6 +370,6 @@ const PanelSystem = (() => {
     return {
         register, showPanel, hidePanel, moveToFloat, dockPanel,
         closeAll, closeBottomDock, togglePanel, isPanelOpen, isActivePanel, allPanels, init,
-        getPanelBody
+        getPanelBody, getExtra, setExtra
     };
 })();

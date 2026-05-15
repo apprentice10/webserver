@@ -17,7 +17,8 @@
 | 95–121 | `_initSidebarResize` | K-6: mousedown on `#sidebar-resize-handle`; drag left → wider; disables transition during drag; saves on mouseup |
 | 123–153 | `_initBottomResize` | K-5: mousedown on `#bottom-dock-resize-handle`; drag up → taller; re-opens if panels exist |
 | 157 | `register(config)` | Add panel to registry |
-| 159–186 | `showPanel(id, opts)` | Open dock + activate; `opts.dock='bottom'` targets bottom dock; `opts.silent` skips `onActivate`; floating panels refreshed in-place |
+| 159–160 | `getExtra(key) / setExtra(key, value)` | Read/write arbitrary extra fields into `_state.extra` and save; used by ColumnsManager for `hiddenColumns` and `columnOrder` |
+| 162–203 | `showPanel(id, opts)` | Checks existing location first (float → dock) before using caller's `opts.dock` hint; `opts.silent` skips `onActivate` |
 | 188–220 | `hidePanel(id)` | Remove from floats, then bottom dock, then right dock; closes dock if empty; calls `onActivate` on newly-exposed active tab |
 | 222–226 | `_refreshDockBody(dockName, id)` | Calls `onActivate` for the panel that became active after another was hidden |
 | 228–247 | `moveToFloat(id, x, y)` | Remove from both docks, push to `floats` array; calls `onActivate` on newly-exposed tab in each dock |
@@ -43,11 +44,12 @@
   version: 4,
   rightDock:  { open: bool, width: 320, activeTab: string|null, tabs: string[] },
   bottomDock: { open: bool, height: 200, activeTab: string|null, tabs: string[] },
-  floats: [{ id: string, x: number, y: number, w: number, h: number }]
+  floats: [{ id: string, x: number, y: number, w: number, h: number }],
+  extra: { hiddenColumns: string[], columnOrder: string[] }  // optional, written by ColumnsManager
 }
 ```
 
-Migration chain: v2 → v3 (added `floats: []`) → v4 (added `bottomDock`).
+Migration chain: v2 → v3 (added `floats: []`) → v4 (added `bottomDock`). `extra` field added without version bump — safe because readers use `|| {}` guard.
 
 ## Bottom dock HTML structure (table.html)
 
@@ -69,7 +71,7 @@ The `info`, `log`, `flags`, `notes`, `sql` panels are registered in `templates/e
 
 ## Decisions
 
-- **`opts.dock='bottom'`**: panels opened with this option go to the bottom dock; default is right. `togglePanel` always defaults to right for initial opens.
+- **`opts.dock='bottom'`**: caller hint used only when panel is not currently in any dock or float. If the panel already has a location, it is activated there regardless of hint. This prevents panels from ending up in two docks simultaneously.
 - **Proximity snap only when dock has tabs (K-7)**: `_checkProximity` (in PanelFloats) checks `tabs.length > 0`; empty docks don't attract floats.
 - **CSS custom properties for dock size**: `--sidebar-width` and `--bottom-dock-height` set inline on dock elements. `.sidebar-closed / .bottom-dock-closed` class rules win via specificity.
 - **`closeBottomDock`**: exposed so the bottom dock close button only closes the bottom dock, not the right dock (unlike `closeAll`).

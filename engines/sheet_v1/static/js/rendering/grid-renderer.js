@@ -38,7 +38,7 @@ const GridRenderer = (() => {
 
         if (isLog) {
             return `
-                <td data-slug="log" style="width:${col.width}px"${coords}>
+                <td data-slug="log" data-column-id="${col.id}" style="width:${col.width}px"${coords}>
                     <div class="cell-log-preview"
                          onclick="HistoryActions.openRowHistory(${row.id}, GridManager.getAllRows())">
                         ${formatLogPreview(row.row_log)}
@@ -59,7 +59,7 @@ const GridRenderer = (() => {
         const flagAttr   = badges ? ' data-has-flags="true"' : "";
 
         return `
-            <td style="width:${col.width}px"${overriddenAttr}${flagAttr}${coords}>
+            <td data-column-id="${col.id}" style="width:${col.width}px"${overriddenAttr}${flagAttr}${coords}>
                 <input
                     type="text"
                     class="${cellClass}"
