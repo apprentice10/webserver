@@ -1,20 +1,24 @@
 const RowOps = (() => {
 
     // Injected by configure()
-    let _getRows         = () => [];
-    let _getFilteredRows = () => [];
-    let _updateRow       = () => {};  // (id, data) → updates _rows[idx] only
-    let _removeRows      = () => {};  // (idSet)    → filters both arrays
-    let _applyFilters    = () => {};
-    let _render          = () => {};
+    let _getRows             = () => [];
+    let _getFilteredRows     = () => [];
+    let _updateRow           = () => {};  // (id, data) → updates _rows[idx] only
+    let _removeRows          = () => {};  // (idSet)    → filters both arrays
+    let _applyFilters        = () => {};
+    let _render              = () => {};
+    let _addRowAtPosition    = () => {};  // (row) → inserts into _rows at correct index
+    let _reloadData          = () => {};  // full data reload from server
 
     function configure(deps) {
-        _getRows         = deps.getRows;
-        _getFilteredRows = deps.getFilteredRows;
-        _updateRow       = deps.updateRow;
-        _removeRows      = deps.removeRows;
-        _applyFilters    = deps.applyFilters;
-        _render          = deps.render;
+        _getRows             = deps.getRows;
+        _getFilteredRows     = deps.getFilteredRows;
+        _updateRow           = deps.updateRow;
+        _removeRows          = deps.removeRows;
+        _applyFilters        = deps.applyFilters;
+        _render              = deps.render;
+        _addRowAtPosition    = deps.addRowAtPosition || (() => {});
+        _reloadData          = deps.reloadData       || (() => {});
     }
 
     // ── Soft delete ───────────────────────────────────────────
@@ -38,6 +42,7 @@ const RowOps = (() => {
             }
             _applyFilters();
             _render();
+            document.dispatchEvent(new CustomEvent('undo:updated'));
         } catch (err) {
             Utils.showToast(err.message, "error");
         }
@@ -94,6 +99,7 @@ const RowOps = (() => {
                     : `${rowIds.length} rows permanently deleted.`,
                 "success"
             );
+            document.dispatchEvent(new CustomEvent('undo:updated'));
         } catch (err) {
             Utils.showToast(err.message, "error");
         }
@@ -163,6 +169,51 @@ const RowOps = (() => {
         }
     }
 
-    return { configure, softDeleteRow, restoreRow, hardDeleteRow, keepRow, removeOverride };
+    // ── Insert row above / below ──────────────────────────────
+
+    async function insertRowAbove(rowId) {
+        try {
+            const newRow = await ApiClient.insertRow(rowId, "above");
+            _addRowAtPosition(newRow);
+            _applyFilters();
+            _render();
+            document.dispatchEvent(new CustomEvent('undo:updated'));
+        } catch (err) {
+            Utils.showToast(err.message, "error");
+        }
+    }
+
+    async function insertRowBelow(rowId) {
+        try {
+            const newRow = await ApiClient.insertRow(rowId, "below");
+            _addRowAtPosition(newRow);
+            _applyFilters();
+            _render();
+            document.dispatchEvent(new CustomEvent('undo:updated'));
+        } catch (err) {
+            Utils.showToast(err.message, "error");
+        }
+    }
+
+    // ── Copy and insert below ─────────────────────────────────
+
+    async function copyRowInsert(rowId) {
+        try {
+            const newRow = await ApiClient.copyRowInsert(rowId);
+            _addRowAtPosition(newRow);
+            _applyFilters();
+            _render();
+            Utils.showToast("Row copied and inserted.", "success");
+            document.dispatchEvent(new CustomEvent('undo:updated'));
+        } catch (err) {
+            Utils.showToast(err.message, "error");
+        }
+    }
+
+    return {
+        configure,
+        softDeleteRow, restoreRow, hardDeleteRow, keepRow, removeOverride,
+        insertRowAbove, insertRowBelow, copyRowInsert,
+    };
 
 })();

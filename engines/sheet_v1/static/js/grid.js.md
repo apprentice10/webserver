@@ -3,17 +3,18 @@
 
 **Description:** Main grid orchestration: virtual scroll render, toggle LOG/REV, context menu wrapper, filters, ghost row. Row/cell HTML delegated to `GridRenderer` (P4-G4). Range selection delegated to `SelectionManager` (P4-G1). Keyboard nav + edit mode delegated to `CellKeyboard` (P4-G2). Context menu + flag submenu delegated to `ContextMenu` (P4-G3). Row mutation ops delegated to `RowOps` (P4-G5). Clipboard copy delegated to `ClipboardManager` (P4-G6). Cell save delegated to `CellSave` (P4-G7).
 
-## Index (~465 lines)
+## Index (~560 lines)
 
 | Lines    | Section |
 |----------|---------|
-| 1–105    | State variables + `init()` — includes `CellSave.configure()`, `RowOps.configure()`, `SelectionManager.configure()`, `CellKeyboard.configure()`, `ContextMenu.configure()`, `ClipboardManager.configure()+init()`, `grid:rowUpdated` listener |
+| 1–105    | State variables + `init()` — includes `CellSave.configure()`, `RowOps.configure()`, `SelectionManager.configure()`, `CellKeyboard.configure()`, `ContextMenu.configure()`, `ClipboardManager.configure()+init()`, `_initFindReplace()`, `_initAutocomplete()`, `grid:rowUpdated` listener |
 | 105–170  | Rendering: `OVERSCAN`, `_getRowHeight`, `render` (virtual scroll), `_initVirtualScroll` — HTML generation delegated to `GridRenderer.*` |
-| 170–220  | Event listeners (`_attachListeners`), search shortcut (`_initSearchShortcut`) |
-| 220–260  | Ghost row (`_createFromGhost`) |
-| 260–290  | Toggle deleted/LOG/REV, context menu wrapper (`openContextMenu` → `ContextMenu.open`) |
-| 290–365  | Search (`search`), filters (`_applyFilters`), `appendRows` |
-| 365–465  | Utility (`_showError`, `_normalizeCellsFromInput`, `updateRowData`, `getRowById`, `getRowByTag`, `refreshRowDOM`), public API |
+| 170–220  | Event listeners (`_attachListeners`), `scrollToRow`, `_initSearchShortcut` |
+| 220–270  | `_initFindReplace` (Ctrl+H), `_initAutocomplete`, `_initSelectAll` |
+| 270–310  | Ghost row (`_createFromGhost`) |
+| 310–350  | Toggle deleted/LOG/REV, context menu wrapper (`openContextMenu` → `ContextMenu.open`) |
+| 350–420  | Search (`search`), filters (`_applyFilters`), `appendRows` |
+| 420–520  | Utility (`_showError`, `_normalizeCellsFromInput`, `updateRowData`, `getRowById`, `getRowByTag`, `refreshRowDOM`), public API |
 
 ## State variables
 
@@ -61,7 +62,11 @@ _initSearchShortcut()
 document.addEventListener('grid:rowUpdated', ...)  ← dispatched by RollbackService after rollback
 ```
 
-To add a new global keyboard shortcut: create a new `_initXxx()` and call it from `init()`. Do **not** add global shortcuts inside `_onCellKeydown` (that handler only fires on focused `.cell-input` elements).
+To add a new global keyboard shortcut: create a new `_initXxx()` and call it from `init()`. Do **not** add global shortcuts inside `_onCellKeydown` (that handler only fires on focused `.cell-input` elements). Existing shortcuts: `/` → search, `Ctrl+A` → `SelectionManager.selectAll()` (`_initSelectAll`), `Ctrl+H` → `FindReplace.open()` (`_initFindReplace`), `Ctrl+X` → `CutPaste` (`_initCut`), `Ctrl+Shift+V` → `PasteSpecial.open()` (`_initPasteSpecial`).
+
+**CutPaste / PasteSpecial / FillHandle integration**: `render()` calls `CutPaste.applyVisual()` and `FillHandle.update()` after `SelectionManager.updateHighlight()`. Each module is configured in its own `_initXxx()` helper (called from `init()`). All three accept `{getFilteredRows, updateRowData, render}` plus module-specific extras.
+
+**SortFilterManager integration**: `init()` loads sort/filter state in parallel with rows (single `Promise.all`), then calls `SortFilterManager.loadState()` before `_applyFilters()`. The `_applyFilters()` function calls `SortFilterManager.applyToRows()` after the search filter (column filters + sort apply last). `applySort()` is a thin wrapper: `_applyFilters() + render()`, exposed on the public API for `SortFilterManager` callbacks.
 
 ## Public API
 
@@ -86,6 +91,10 @@ GridManager.refreshRowDOM(rowId, row)  // update one row in cache + DOM — call
 GridManager.clearRange()
 GridManager.selectColumn(colIdx, additive)
 GridManager.selectRow(rowIdx, additive)
+GridManager.selectAll()                    // Ctrl+A — selects all filteredRows × all columns
+GridManager.scrollToRow(rowIdx)            // scroll container so rowIdx is visible + render
+GridManager.getFilteredRows()              // snapshot of _filteredRows (active rows only)
+GridManager.applySort()                    // re-run _applyFilters() + render(); called by SortFilterManager after state change
 ```
 
 ## Selection → Operation pipeline

@@ -23,7 +23,7 @@ BACKUPS_DIR = DATA_DIR / "backups"
 
 # Bump this whenever DDL_SYSTEM_TABLES or any system table structure changes.
 # See engine/project_db.py.md for the full rule.
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 9
 
 SYSTEM_COLUMNS = {"tag", "rev", "log"}
 INTERNAL_PREFIX = "__"
@@ -132,7 +132,17 @@ CREATE TABLE IF NOT EXISTS _cell_flags (
     row_tag   TEXT NOT NULL,
     col_slug  TEXT NOT NULL DEFAULT '',
     flag_id   INTEGER NOT NULL REFERENCES _flags(id) ON DELETE CASCADE,
+    note      TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (tool_slug, row_tag, col_slug, flag_id)
+);
+
+CREATE TABLE IF NOT EXISTS _conditional_flag_rules (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    tool_slug TEXT NOT NULL,
+    col_slug  TEXT NOT NULL,
+    flag_id   INTEGER NOT NULL REFERENCES _flags(id) ON DELETE CASCADE,
+    operator  TEXT NOT NULL,
+    value     TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS _revisions (
@@ -332,10 +342,31 @@ def _migrate_to_v7(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE _tools ADD COLUMN trashed_at TEXT")
 
 
+def _migrate_to_v8(conn: sqlite3.Connection) -> None:
+    """Add sort_filter_state column to _tools for per-tool sort/filter persistence."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(_tools)").fetchall()}
+    if "sort_filter_state" not in cols:
+        conn.execute("ALTER TABLE _tools ADD COLUMN sort_filter_state TEXT")
+
+
+def _migrate_to_v9(conn: sqlite3.Connection) -> None:
+    """Add note to _cell_flags and create _conditional_flag_rules table."""
+    cf_cols = {row[1] for row in conn.execute("PRAGMA table_info(_cell_flags)").fetchall()}
+    if "note" not in cf_cols:
+        conn.execute("ALTER TABLE _cell_flags ADD COLUMN note TEXT NOT NULL DEFAULT ''")
+    existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "_conditional_flag_rules" not in existing:
+        conn.execute("""CREATE TABLE _conditional_flag_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tool_slug TEXT NOT NULL, col_slug TEXT NOT NULL,
+            flag_id INTEGER NOT NULL REFERENCES _flags(id) ON DELETE CASCADE,
+            operator TEXT NOT NULL, value TEXT NOT NULL DEFAULT '')""")
+
+
 _MIGRATIONS: dict = {
     1: _migrate_to_v1, 2: _migrate_to_v2, 3: _migrate_to_v3,
     4: _migrate_to_v4, 5: _migrate_to_v5, 6: _migrate_to_v6,
-    7: _migrate_to_v7,
+    7: _migrate_to_v7, 8: _migrate_to_v8, 9: _migrate_to_v9,
 }
 
 

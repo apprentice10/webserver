@@ -1,0 +1,313 @@
+/* ============================================================
+   SORT & FILTER — Column header indicators + filter dropdown + sort panel
+   ============================================================ */
+
+/* ── Column header sort/filter controls ─────────────────── */
+
+.th-label.th-sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.th-label.th-sortable:hover {
+    text-decoration: underline dotted;
+}
+
+.th-sort-arrow {
+    display: inline-block;
+    font-size: 11px;
+    color: var(--accent, #3b7aff);
+    margin-left: 2px;
+    min-width: 10px;
+}
+
+.th-sort-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--accent, #3b7aff);
+    vertical-align: super;
+    margin-left: 1px;
+}
+
+.th-filter-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 3px;
+    font-size: 10px;
+    color: var(--ink-dim, #999);
+    line-height: 1;
+    border-radius: 3px;
+    flex-shrink: 0;
+    margin-left: 2px;
+    transition: color .15s, background .15s;
+}
+
+.th-filter-btn:hover {
+    color: var(--accent, #3b7aff);
+    background: var(--accent-faint, rgba(59,122,255,.1));
+}
+
+.th-filter-btn.sf-filter-active {
+    color: var(--accent, #3b7aff);
+    background: var(--accent-faint, rgba(59,122,255,.12));
+}
+
+
+/* ── Filter dropdown ─────────────────────────────────────── */
+
+.sf-filter-dropdown {
+    z-index: 9000;
+    min-width: 220px;
+    max-width: 320px;
+    background: var(--surface, #fff);
+    border: 1px solid var(--border, #d0d0d0);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.14);
+    display: flex;
+    flex-direction: column;
+    max-height: 380px;
+    overflow: hidden;
+    font-size: 13px;
+}
+
+.sf-dd-head {
+    padding: 8px 10px 4px;
+    border-bottom: 1px solid var(--border, #eee);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.sf-dd-title {
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--ink-dim, #888);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.sf-dd-search {
+    padding: 4px 8px;
+    border: 1px solid var(--border, #d0d0d0);
+    border-radius: 4px;
+    font-size: 12px;
+    background: var(--canvas, #fafafa);
+    color: var(--ink, #222);
+    outline: none;
+}
+
+.sf-dd-search:focus {
+    border-color: var(--accent, #3b7aff);
+}
+
+.sf-cb-list {
+    overflow-y: auto;
+    max-height: 180px;
+    padding: 4px 6px;
+}
+
+.sf-cb-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 4px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--ink, #222);
+}
+
+.sf-cb-row:hover {
+    background: var(--row-hover, #f5f5f5);
+}
+
+.sf-cb-row input[type=checkbox] {
+    accent-color: var(--accent, #3b7aff);
+    cursor: pointer;
+}
+
+.sf-cb-all {
+    border-bottom: 1px solid var(--border, #eee);
+    padding-bottom: 4px;
+    margin-bottom: 2px;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.sf-pat-list {
+    padding: 4px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.sf-pat-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.sf-pat-input {
+    flex: 1;
+    padding: 3px 7px;
+    border: 1px solid var(--border, #d0d0d0);
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: monospace;
+    background: var(--canvas, #fafafa);
+    color: var(--ink, #222);
+    outline: none;
+}
+
+.sf-pat-input:focus {
+    border-color: var(--accent, #3b7aff);
+}
+
+.sf-rm-pat {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--ink-dim, #999);
+    padding: 0 4px;
+    font-size: 12px;
+}
+
+.sf-rm-pat:hover { color: var(--color-danger, #c00); }
+
+.sf-dd-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    border-top: 1px solid var(--border, #eee);
+    gap: 6px;
+}
+
+.sf-dd-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.sf-empty-msg {
+    font-size: 12px;
+    color: var(--ink-dim, #999);
+    padding: 4px;
+}
+
+
+/* ── Sort panel ──────────────────────────────────────────── */
+
+.sf-panel {
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--ink, #222);
+}
+
+.sf-panel-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ink-dim, #888);
+    margin: 4px 0 2px;
+}
+
+.sf-panel-levels {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.sf-panel-level {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sf-lvl-num {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent, #3b7aff);
+    min-width: 14px;
+    text-align: center;
+}
+
+.sf-lvl-col,
+.sf-lvl-dir {
+    font-size: 12px;
+    padding: 3px 6px;
+    border: 1px solid var(--border, #d0d0d0);
+    border-radius: 4px;
+    background: var(--canvas, #fafafa);
+    color: var(--ink, #222);
+}
+
+.sf-lvl-col { flex: 1; }
+
+.sf-rm-level {
+    font-size: 11px;
+    padding: 2px 6px;
+}
+
+.sf-panel-add {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.sf-add-col-sel {
+    font-size: 12px;
+    padding: 3px 6px;
+    border: 1px solid var(--border, #d0d0d0);
+    border-radius: 4px;
+    background: var(--canvas, #fafafa);
+    color: var(--ink, #222);
+    flex: 1;
+}
+
+.sf-filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 24px;
+}
+
+.sf-filter-chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--accent-faint, rgba(59,122,255,.1));
+    color: var(--accent, #3b7aff);
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.sf-filter-chip .sf-rm-filter {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: inherit;
+    font-size: 11px;
+    padding: 0 2px;
+    line-height: 1;
+}
+
+.sf-filter-chip .sf-rm-filter:hover { color: var(--color-danger, #c00); }
+
+.sf-panel-empty {
+    font-size: 12px;
+    color: var(--ink-dim, #999);
+    font-style: italic;
+}
+
+.sf-panel-actions {
+    margin-top: 4px;
+}

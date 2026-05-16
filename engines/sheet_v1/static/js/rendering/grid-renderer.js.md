@@ -7,7 +7,7 @@
 
 | Lines | Symbol | Description |
 |-------|--------|-------------|
-| 10–27 | `flagBadgesHtml(flags, overrideEtlValue)` | Renders `.cell-flag-badges` span with colored dots. Checks `FlagsManager.getHiddenIds()` / `isHiddenByName('manual_edit')`. |
+| 10–27 | `flagBadgesHtml(flags, overrideEtlValue)` | Renders `.cell-flag-badges` span with colored dots. Badge title includes `note` if present (`"flagName: note"`). Checks `FlagsManager.getHiddenIds()` / `isHiddenByName('manual_edit')`. |
 | 29–33 | `formatLogPreview(rowLog)` | Returns first line of `row_log` as escaped HTML; returns `—` placeholder if empty. |
 | 35–67 | `renderCell(row, col, isDeleted, rowIdx, colIdx)` | Renders a single `<td>`. Special-cases `log` (preview div + click handler) and `rev`/deleted (readonly). |
 | 69–91 | `renderRow(row, columns, rowIndex)` | Renders a full `<tr>` including gutter, rev badge, row-level flag dots, and all cells. |
@@ -18,5 +18,6 @@
 - **Explicit params only**: all five functions receive their inputs as parameters — no closure access to `_rows`, `_filteredRows`, or any grid.js state. This makes them independently testable and reusable.
 - **`FlagsManager` reference in `flagBadgesHtml`**: guarded by `typeof FlagsManager !== "undefined"` so the function degrades gracefully when `flags.js` is absent (e.g., unit test contexts).
 - **`GridManager.getAllRows()` in `renderCell` template string**: this is a string literal embedded in an `onclick` attribute — the call happens at click time, not at render time. No runtime coupling to `GridManager` is introduced.
+- **`.gutter-drag-handle` in gutter**: added as the first child of `.gutter-inner` so it appears left of the row number. Opacity 0 by default, revealed on `tr:hover`. CSS `cursor: grab`.
 - **`data-column-id` on every `<td>`**: added to enable CSS-based column hiding by ColumnsManager (`[data-column-id="N"] { display: none !important; }`). Both `<th>` (already present) and `<td>` now carry this attribute.
 - **`_escHtml`/`_escAttr` aliases dropped**: `Utils.escHtml` / `Utils.escAttr` used directly — no aliases needed.

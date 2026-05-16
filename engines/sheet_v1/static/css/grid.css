@@ -102,6 +102,29 @@
 tr:hover .gutter { background: var(--surface-2, var(--color-surface)); }
 tr.row-selected .gutter { background: var(--accent-faint, rgba(233,69,96,0.06)); }
 
+.gutter-drag-handle {
+    font-size: 11px;
+    color: var(--ink-subtle, var(--color-text-muted));
+    opacity: 0;
+    cursor: grab;
+    user-select: none;
+    padding: 0 2px;
+    flex-shrink: 0;
+    transition: opacity 0.1s;
+}
+tr:hover .gutter-drag-handle { opacity: 0.6; }
+tr:hover .gutter-drag-handle:hover { opacity: 1; color: var(--accent, #e94560); }
+
+.row-drop-indicator {
+    position: absolute;
+    height: 2px;
+    background: var(--accent, #e94560);
+    pointer-events: none;
+    z-index: 9999;
+    border-radius: 1px;
+    box-shadow: 0 0 4px var(--accent, #e94560);
+}
+
 /* Intestazioni */
 .data-grid thead tr {
     background: var(--color-surface);
@@ -521,6 +544,23 @@ tr:hover .btn-row-action {
 .ctx-flag-item.ctx-flag-mixed .ctx-flag-check {
     opacity: 0.35;
 }
+.ctx-flag-note-btn {
+    cursor: pointer;
+    font-size: 13px;
+    opacity: 0.5;
+    padding: 0 2px;
+    flex-shrink: 0;
+}
+.ctx-flag-note-btn:hover { opacity: 1; }
+
+/* Conditional rules in flag manager sidebar */
+.sidebar-rules-list { display: flex; flex-direction: column; gap: 2px; padding: 4px 0; }
+.sidebar-rule-item {
+    display: flex; align-items: center; gap: 6px; padding: 4px 8px;
+    font-size: 12px; border-radius: 3px; background: var(--color-surface-2);
+}
+.sidebar-rule-text { flex: 1; }
+.sidebar-rule-form { padding: 6px 4px; }
 
 /* ------------------------------------------------------------
    RANGE SELECTION
@@ -529,6 +569,83 @@ td.cell-selected {
     background: rgba(0, 120, 255, 0.10) !important;
     outline: 1px solid rgba(0, 120, 255, 0.35);
     outline-offset: -1px;
+}
+
+/* Cut state — dashed animated border */
+td.cell-cut {
+    outline: 2px dashed rgba(0, 120, 255, 0.65);
+    outline-offset: -2px;
+    background: rgba(0, 120, 255, 0.04) !important;
+}
+
+/* Fill handle — small square at bottom-right of selection */
+.fill-handle {
+    position: fixed;
+    width: 7px;
+    height: 7px;
+    background: var(--color-accent, #0078ff);
+    border: 1.5px solid var(--bg, #fff);
+    cursor: crosshair;
+    z-index: 150;
+    display: none;
+    pointer-events: all;
+}
+
+/* Fill drag indicator — dashed overlay shown while dragging */
+.fill-indicator {
+    position: fixed;
+    border: 2px dashed rgba(0, 120, 255, 0.7);
+    background: rgba(0, 120, 255, 0.06);
+    pointer-events: none;
+    z-index: 149;
+    display: none;
+}
+
+/* Paste Special modal table */
+.ps-table {
+    border-collapse: collapse;
+    font-size: 12px;
+    width: 100%;
+    margin-bottom: 12px;
+}
+.ps-table td {
+    border: 1px solid var(--border);
+    padding: 3px 6px;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ps-table tr.ps-header-row td {
+    background: var(--surface-raised, rgba(255,255,255,0.05));
+    font-weight: 600;
+}
+.ps-map-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+.ps-col-label {
+    min-width: 100px;
+    font-size: 12px;
+    color: var(--ink-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ps-map-arrow {
+    color: var(--ink-muted);
+    font-size: 12px;
+}
+.ps-col-select {
+    flex: 1;
+    font-size: 12px;
+    padding: 3px 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--ink);
 }
 
 /* Prevent text selection while drag-selecting across cells */
@@ -573,4 +690,128 @@ th.col-dragover {
     box-shadow: var(--shadow-md, 0 4px 16px rgba(0,0,0,.35));
     white-space: nowrap;
     display: none;
+}
+
+/* ------------------------------------------------------------
+   FIND & REPLACE PANEL
+   ------------------------------------------------------------ */
+.fr-panel {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    width: 380px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: var(--shadow-lg);
+    z-index: 500;
+    display: none;
+    flex-direction: column;
+    font-size: 13px;
+}
+.fr-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    cursor: grab;
+    user-select: none;
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: .4px;
+    color: var(--ink);
+}
+.fr-header:active { cursor: grabbing; }
+.fr-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--ink-muted);
+    font-size: 14px;
+    padding: 0 4px;
+    line-height: 1;
+}
+.fr-close:hover { color: var(--ink); }
+.fr-body {
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.fr-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.fr-label {
+    width: 50px;
+    flex-shrink: 0;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--ink-muted);
+}
+.fr-input {
+    flex: 1;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 13px;
+    font-family: inherit;
+}
+.fr-input:focus { outline: none; border-color: var(--accent); }
+.fr-options {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    font-size: 12px;
+    color: var(--ink-muted);
+}
+.fr-opt { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.fr-select {
+    margin-left: auto;
+    font-size: 12px;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: inherit;
+}
+.fr-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+    padding-top: 2px;
+}
+
+/* ------------------------------------------------------------
+   COLUMN AUTOCOMPLETE DROPDOWN
+   ------------------------------------------------------------ */
+.ac-dropdown {
+    position: fixed;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    box-shadow: var(--shadow-md);
+    z-index: 600;
+    max-height: 180px;
+    overflow-y: auto;
+    display: none;
+}
+.ac-item {
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--ink);
+}
+.ac-item:hover, .ac-item-active {
+    background: var(--accent);
+    color: #fff;
 }

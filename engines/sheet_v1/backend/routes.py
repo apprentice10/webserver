@@ -4,10 +4,12 @@ The dynamic loader in main.py picks up this module's `router` attribute.
 """
 
 from fastapi import APIRouter
-from . import routes_main, routes_flags, routes_export, routes_revisions
+from . import routes_main, routes_flags, routes_export, routes_revisions, routes_find_replace, routes_undo
 
 router = APIRouter()
 router.include_router(routes_flags.router)
 router.include_router(routes_main.router)
 router.include_router(routes_export.router)
 router.include_router(routes_revisions.router)
+router.include_router(routes_find_replace.router)
+router.include_router(routes_undo.router)

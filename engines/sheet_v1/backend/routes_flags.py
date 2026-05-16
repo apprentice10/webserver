@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from dashboard.project_db import get_project_conn
 from . import service
-from .schemas import FlagCreate, FlagUpdate, CellFlagToggleRequest
+from .schemas import FlagCreate, FlagUpdate, CellFlagToggleRequest, CellFlagNoteUpdate, ConditionalFlagRuleCreate
 
 router = APIRouter(prefix="/api/engines", tags=["engine"])
 
@@ -124,10 +124,86 @@ def toggle_cell_flags(
         for c in data.cells:
             if (c.row_tag, c.col_slug) not in existing_set:
                 conn.execute(
-                    "INSERT OR IGNORE INTO _cell_flags (tool_slug, row_tag, col_slug, flag_id) VALUES (?,?,?,?)",
-                    (tool_slug, c.row_tag, c.col_slug, data.flag_id),
+                    "INSERT OR IGNORE INTO _cell_flags (tool_slug, row_tag, col_slug, flag_id, note) VALUES (?,?,?,?,?)",
+                    (tool_slug, c.row_tag, c.col_slug, data.flag_id, data.note),
                 )
         action = "added"
 
     conn.commit()
     return {"action": action, "flag_id": data.flag_id, "cells_affected": len(data.cells)}
+
+
+@router.patch("/{tool_id}/cell-flags/note", status_code=200)
+def update_cell_flag_note(
+    tool_id: int,
+    data:    CellFlagNoteUpdate,
+    conn:    sqlite3.Connection = Depends(get_project_conn),
+):
+    tool      = service.get_engine(conn, tool_id)
+    tool_slug = tool["slug"]
+    for c in data.cells:
+        conn.execute(
+            "UPDATE _cell_flags SET note = ? WHERE tool_slug = ? AND row_tag = ? AND col_slug = ? AND flag_id = ?",
+            (data.note, tool_slug, c.row_tag, c.col_slug, data.flag_id),
+        )
+    conn.commit()
+    return {"flag_id": data.flag_id, "note": data.note, "cells_affected": len(data.cells)}
+
+
+# ── Conditional flag rules ────────────────────────────────────
+
+@router.get("/{tool_id}/flag-rules")
+def list_flag_rules(
+    tool_id: int,
+    conn:    sqlite3.Connection = Depends(get_project_conn),
+):
+    tool = service.get_engine(conn, tool_id)
+    rows = conn.execute(
+        """SELECT r.id, r.col_slug, r.flag_id, r.operator, r.value, f.name AS flag_name, f.color AS flag_color
+           FROM _conditional_flag_rules r
+           JOIN _flags f ON f.id = r.flag_id
+           WHERE r.tool_slug = ?
+           ORDER BY r.id""",
+        (tool["slug"],)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.post("/{tool_id}/flag-rules", status_code=201)
+def create_flag_rule(
+    tool_id: int,
+    data:    ConditionalFlagRuleCreate,
+    conn:    sqlite3.Connection = Depends(get_project_conn),
+):
+    tool = service.get_engine(conn, tool_id)
+    valid_ops = {"contains", "equals", "is_empty", "starts_with", "matches_wildcard"}
+    if data.operator not in valid_ops:
+        raise HTTPException(status_code=400, detail=f"Invalid operator '{data.operator}'")
+    flag = conn.execute("SELECT id FROM _flags WHERE id = ?", (data.flag_id,)).fetchone()
+    if not flag:
+        raise HTTPException(status_code=404, detail="Flag not found")
+    cur = conn.execute(
+        "INSERT INTO _conditional_flag_rules (tool_slug, col_slug, flag_id, operator, value) VALUES (?,?,?,?,?)",
+        (tool["slug"], data.col_slug, data.flag_id, data.operator, data.value),
+    )
+    conn.commit()
+    row = conn.execute(
+        """SELECT r.id, r.col_slug, r.flag_id, r.operator, r.value, f.name AS flag_name, f.color AS flag_color
+           FROM _conditional_flag_rules r JOIN _flags f ON f.id = r.flag_id WHERE r.id = ?""",
+        (cur.lastrowid,)
+    ).fetchone()
+    return dict(row)
+
+
+@router.delete("/{tool_id}/flag-rules/{rule_id}", status_code=204)
+def delete_flag_rule(
+    tool_id: int,
+    rule_id: int,
+    conn:    sqlite3.Connection = Depends(get_project_conn),
+):
+    tool = service.get_engine(conn, tool_id)
+    conn.execute(
+        "DELETE FROM _conditional_flag_rules WHERE id = ? AND tool_slug = ?",
+        (rule_id, tool["slug"])
+    )
+    conn.commit()

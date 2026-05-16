@@ -8,8 +8,7 @@
 
 ## Active plans
 
-| Task | Plan |
-|------|------|
+*(none)*
 
 ---
 

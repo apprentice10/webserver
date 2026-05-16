@@ -41,7 +41,12 @@ const GridManager = (() => {
             await ColumnsManager.loadColumns();
             ColumnsManager.renderHeader();
 
-            _rows = await ApiClient.loadRows(true); // Carica tutto inclusi deleted
+            const [loadedRows, sfState] = await Promise.all([
+                ApiClient.loadRows(true),
+                ApiClient.getSortFilterState().catch(() => null),
+            ]);
+            _rows = loadedRows;
+            if (typeof SortFilterManager !== 'undefined') SortFilterManager.loadState(sfState);
             _applyFilters();
             _initVirtualScroll();
             render();
@@ -61,18 +66,20 @@ const GridManager = (() => {
             });
             PasteManager.init();
             RowOps.configure({
-                getRows:         () => _rows,
-                getFilteredRows: () => _filteredRows,
-                updateRow:       (id, data) => {
+                getRows:          () => _rows,
+                getFilteredRows:  () => _filteredRows,
+                updateRow:        (id, data) => {
                     const idx = _rows.findIndex(r => r.id === id);
                     if (idx !== -1) _rows[idx] = data;
                 },
-                removeRows:      (idSet) => {
+                removeRows:       (idSet) => {
                     _rows         = _rows.filter(r => !idSet.has(r.id));
                     _filteredRows = _filteredRows.filter(r => !idSet.has(r.id));
                 },
-                applyFilters:    _applyFilters,
+                applyFilters:     _applyFilters,
                 render,
+                addRowAtPosition: _addRowAtPosition,
+                reloadData,
             });
             ContextMenu.configure({
                 getRows:         () => _rows,
@@ -84,8 +91,13 @@ const GridManager = (() => {
                 hardDeleteRow:   RowOps.hardDeleteRow,
                 keepRow:         RowOps.keepRow,
                 removeOverride:  RowOps.removeOverride,
+                insertRowAbove:  RowOps.insertRowAbove,
+                insertRowBelow:  RowOps.insertRowBelow,
+                copyRowInsert:   RowOps.copyRowInsert,
             });
             ContextMenu.init();
+            RowDrag.configure({ reloadData });
+            RowDrag.init();
             SelectionManager.initGlobal();
             ClipboardManager.configure({
                 getRanges:       SelectionManager.getRanges,
@@ -95,6 +107,17 @@ const GridManager = (() => {
             });
             ClipboardManager.init();
             _initSearchShortcut();
+            _initSelectAll();
+            _initFindReplace();
+            _initAutocomplete();
+            _initCut();
+            _initPasteSpecial();
+            _initFillHandle();
+            if (typeof SortFilterManager !== 'undefined') {
+                SortFilterManager.registerPanel();
+                SortFilterManager.attachHeaderListeners();
+                SortFilterManager.updateHeaderIndicators();
+            }
             document.addEventListener('grid:rowUpdated', e => refreshRowDOM(e.detail.rowId, e.detail.row));
         } catch (err) {
             _showError(err.message);
@@ -127,6 +150,8 @@ const GridManager = (() => {
             tbody.innerHTML = html;
             _attachListeners();
             SelectionManager.updateHighlight();
+            if (typeof CutPaste   !== 'undefined') CutPaste.applyVisual();
+            if (typeof FillHandle !== 'undefined') FillHandle.update();
             return;
         }
 
@@ -158,6 +183,8 @@ const GridManager = (() => {
         tbody.innerHTML = html;
         _attachListeners();
         SelectionManager.updateHighlight();
+        if (typeof CutPaste    !== 'undefined') CutPaste.applyVisual();
+        if (typeof FillHandle  !== 'undefined') FillHandle.update();
     }
 
     // _flagBadgesHtml, _renderRow, _renderCell, _renderGhostRow, _formatLogPreview → GridRenderer (P4-G4)
@@ -209,6 +236,51 @@ const GridManager = (() => {
     // SEARCH SHORTCUT ( / key focuses search )
     // --------------------------------------------------------
 
+    function scrollToRow(rowIdx) {
+        const container = document.getElementById('grid-scroll-container');
+        if (!container) return;
+        const rowH    = _getRowHeight();
+        const headerH = document.querySelector('#data-grid thead')?.offsetHeight || rowH;
+        const rowTop  = rowIdx * rowH;
+        const viewTop = container.scrollTop + headerH;
+        const viewBot = container.scrollTop + container.clientHeight;
+        if (rowTop < viewTop) {
+            container.scrollTop = Math.max(0, rowTop - headerH);
+        } else if (rowTop + rowH > viewBot) {
+            container.scrollTop = rowTop + rowH - container.clientHeight;
+        }
+        render();
+    }
+
+    function _initCut() {
+        CutPaste.configure({
+            getFilteredRows: () => _filteredRows,
+            getAllRows:       () => _rows,
+            updateRowData,
+            render,
+        });
+        CutPaste.init();
+    }
+
+    function _initPasteSpecial() {
+        PasteSpecial.configure({
+            getFilteredRows: () => _filteredRows,
+            updateRowData,
+            render,
+        });
+        PasteSpecial.init();
+    }
+
+    function _initFillHandle() {
+        FillHandle.configure({
+            getFilteredRows: () => _filteredRows,
+            getRowHeight:    _getRowHeight,
+            updateRowData,
+            render,
+        });
+        FillHandle.init();
+    }
+
     function _initSearchShortcut() {
         document.addEventListener('keydown', e => {
             if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -217,6 +289,37 @@ const GridManager = (() => {
             e.preventDefault();
             const search = document.getElementById('search-input');
             if (search) { search.focus(); search.select(); }
+        });
+    }
+
+    function _initFindReplace() {
+        FindReplace.configure({
+            getFilteredRows: () => _filteredRows,
+            scrollToRow,
+        });
+        document.addEventListener('keydown', e => {
+            if (!(e.ctrlKey || e.metaKey) || e.key !== 'h') return;
+            if (CellKeyboard.isEditing()) return;
+            const active = document.activeElement;
+            if (active && active.tagName !== 'BODY' && !active.closest('#data-grid, #grid-scroll-container, #fr-panel')) return;
+            e.preventDefault();
+            FindReplace.isOpen() ? FindReplace.close() : FindReplace.open();
+        });
+    }
+
+    function _initAutocomplete() {
+        AutoComplete.init();
+    }
+
+    function _initSelectAll() {
+        document.addEventListener('keydown', e => {
+            if (!(e.ctrlKey || e.metaKey) || e.key !== 'a') return;
+            if (CellKeyboard.isEditing()) return;
+            const active = document.activeElement;
+            // Only intercept when focus is inside the grid or on body
+            if (active && active.tagName !== 'BODY' && !active.closest('#data-grid, #grid-scroll-container')) return;
+            e.preventDefault();
+            SelectionManager.selectAll();
         });
     }
 
@@ -250,6 +353,8 @@ const GridManager = (() => {
                 }
             }, 0);
 
+            document.dispatchEvent(new CustomEvent('undo:updated'));
+
         } catch (err) {
             showToast(err.message, "error");
             const ghostTag = document.querySelector("[data-ghost][data-field='tag']");
@@ -260,6 +365,20 @@ const GridManager = (() => {
     // _doSaveCell, _updateLogCell → CellSave (P4-G7)
 
     // softDeleteRow, restoreRow, hardDeleteRow, keepRow, removeOverride, _doRemoveOverride → RowOps (P4-G5)
+
+    // --------------------------------------------------------
+    // ROW POSITION HELPERS
+    // --------------------------------------------------------
+
+    function _addRowAtPosition(newRow) {
+        const pos = newRow.position;
+        for (const r of _rows) {
+            if (r.position >= pos) r.position++;
+        }
+        const idx = _rows.findIndex(r => r.position > pos);
+        if (idx === -1) _rows.push(newRow);
+        else _rows.splice(idx, 0, newRow);
+    }
 
     // --------------------------------------------------------
     // SNAPSHOT / READ-ONLY
@@ -365,7 +484,17 @@ const GridManager = (() => {
             );
         }
 
+        // Sort & filter (column-level filters + multi-level sort)
+        if (typeof SortFilterManager !== 'undefined') {
+            rows = SortFilterManager.applyToRows(rows);
+        }
+
         _filteredRows = rows;
+    }
+
+    function applySort() {
+        _applyFilters();
+        render();
     }
 
 
@@ -477,10 +606,14 @@ const GridManager = (() => {
         clearRange:          SelectionManager.clearRange,
         selectColumn:        SelectionManager.selectColumn,
         selectRow:           SelectionManager.selectRow,
+        selectAll:           SelectionManager.selectAll,
         getSelectionForPaste: () => SelectionManager.getSelectionForPaste(_filteredRows),
         loadSnapshotData,
         reloadData,
         setReadOnly,
+        scrollToRow,
+        getFilteredRows: () => [..._filteredRows],
+        applySort,
     };
 
 })();

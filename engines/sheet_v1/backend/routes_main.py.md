@@ -13,7 +13,9 @@
 | 115–163 | Engine CRUD | `GET /project`, `POST /project`, `GET /{id}`, `PATCH /{id}/settings` |
 | 168–236 | Column CRUD | list, add, reorder, update, delete, width |
 | 242–330 | Row CRUD | list, create, paste, cell update, soft-delete, restore, remove-override, keep |
+| 430–end | Row position | insert-at-position, copy-insert, reorder (delegates to `service_row_position`) |
 | 330–end | Audit + SQL | `GET /{id}/audit`, `POST /{id}/query` |
+| ~602–636 | Sort / Filter | `GET /{id}/sort-filter-state`, `PATCH /{id}/sort-filter-state` — JSON blob in `_tools.sort_filter_state` |
 
 ## Decisions
 

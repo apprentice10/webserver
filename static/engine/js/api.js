@@ -121,6 +121,25 @@ const ApiClient = (() => {
             { method: "POST" });
     }
 
+    async function insertRow(rowId, placement) {
+        return request(`/api/engines/${TOOL_ID}/rows/${rowId}/insert?db=${_db()}`, {
+            method: "POST",
+            body: JSON.stringify({ placement })
+        });
+    }
+
+    async function copyRowInsert(rowId) {
+        return request(`/api/engines/${TOOL_ID}/rows/${rowId}/copy-insert?db=${_db()}`,
+            { method: "POST" });
+    }
+
+    async function reorderRow(rowId, anchorRowId, placement) {
+        return request(`/api/engines/${TOOL_ID}/rows/${rowId}/reorder?db=${_db()}`, {
+            method: "POST",
+            body: JSON.stringify({ anchor_row_id: anchorRowId, placement })
+        });
+    }
+
     async function pasteRows(rows) {
         return request(`/api/engines/${TOOL_ID}/rows/paste?db=${_db()}`, {
             method: "POST",
@@ -217,11 +236,33 @@ const ApiClient = (() => {
         return request(`/api/engines/flags/${flagId}?db=${_db()}`, { method: "DELETE" });
     }
 
-    async function toggleCellFlags(flagId, cells) {
+    async function toggleCellFlags(flagId, cells, note = "") {
         return request(`/api/engines/${TOOL_ID}/cell-flags/toggle?db=${_db()}`, {
             method: "POST",
-            body: JSON.stringify({ flag_id: flagId, cells })
+            body: JSON.stringify({ flag_id: flagId, cells, note })
         });
+    }
+
+    async function updateCellFlagNote(flagId, cells, note) {
+        return request(`/api/engines/${TOOL_ID}/cell-flags/note?db=${_db()}`, {
+            method: "PATCH",
+            body: JSON.stringify({ flag_id: flagId, cells, note })
+        });
+    }
+
+    async function listFlagRules() {
+        return request(`/api/engines/${TOOL_ID}/flag-rules?db=${_db()}`);
+    }
+
+    async function createFlagRule(rule) {
+        return request(`/api/engines/${TOOL_ID}/flag-rules?db=${_db()}`, {
+            method: "POST",
+            body: JSON.stringify(rule)
+        });
+    }
+
+    async function deleteFlagRule(ruleId) {
+        return request(`/api/engines/${TOOL_ID}/flag-rules/${ruleId}?db=${_db()}`, { method: "DELETE" });
     }
 
 
@@ -278,6 +319,51 @@ const ApiClient = (() => {
     }
 
 
+    // ── Find & Replace ────────────────────────────────────────
+
+    async function findReplace({ search, replacement, match_case, match_entire_cell, scope } = {}) {
+        return request(`/api/engines/${TOOL_ID}/find_replace?db=${_db()}`, {
+            method: "POST",
+            body: JSON.stringify({ search, replacement, match_case, match_entire_cell, scope }),
+        });
+    }
+
+    async function getColumnValues(colSlug, prefix = "") {
+        const p = new URLSearchParams({ db: DB_PATH });
+        if (prefix) p.set("prefix", prefix);
+        return request(`/api/engines/${TOOL_ID}/column_values/${encodeURIComponent(colSlug)}?${p}`);
+    }
+
+
+    // ── Undo / Redo ───────────────────────────────────────────
+
+    async function undo() {
+        return request(`/api/engines/${TOOL_ID}/undo?db=${_db()}`, { method: "POST" });
+    }
+
+    async function redo() {
+        return request(`/api/engines/${TOOL_ID}/redo?db=${_db()}`, { method: "POST" });
+    }
+
+    async function getUndoState() {
+        return request(`/api/engines/${TOOL_ID}/undo-state?db=${_db()}`);
+    }
+
+
+    // ── Sort / Filter ─────────────────────────────────────────
+
+    async function getSortFilterState() {
+        return request(`/api/engines/${TOOL_ID}/sort-filter-state?db=${_db()}`);
+    }
+
+    async function setSortFilterState(state) {
+        return request(`/api/engines/${TOOL_ID}/sort-filter-state?db=${_db()}`, {
+            method: "PATCH",
+            body: JSON.stringify(state),
+        });
+    }
+
+
     // ── Audit ─────────────────────────────────────────────────
 
     async function getAudit({ rowTag, rowTags, colSlug, colSlugs, limit = 200, revision } = {}) {
@@ -304,10 +390,12 @@ const ApiClient = (() => {
 
     return {
         loadTool, updateToolSettings,
-        listFlags, createFlag, updateFlag, deleteFlag, toggleCellFlags,
+        listFlags, createFlag, updateFlag, deleteFlag, toggleCellFlags, updateCellFlagNote,
+        listFlagRules, createFlagRule, deleteFlagRule,
         loadColumns, addColumn, updateColumn, deleteColumn, updateColumnWidth, reorderColumns,
         loadRows, createRow, updateCell, softDeleteRow, restoreRow, hardDeleteRow,
         removeOverride, keepRow, pasteRows,
+        insertRow, copyRowInsert, reorderRow,
         runSql, exportExcel,
         etlCompile, etlPreview, etlApply, etlRunSaved, etlSave,
         etlLoadConfig, etlLoadSchema, listProjectTools,
@@ -316,6 +404,9 @@ const ApiClient = (() => {
         getRevisionSnapshot, revertRevision,
         getAudit, rollbackCell,
         getUtilities,
+        findReplace, getColumnValues,
+        getSortFilterState, setSortFilterState,
+        undo, redo, getUndoState,
     };
 
 })();

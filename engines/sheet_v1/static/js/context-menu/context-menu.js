@@ -22,9 +22,13 @@ const ContextMenu = (() => {
     let _hardDeleteRow;
     let _keepRow;
     let _removeOverride;
+    let _insertRowAbove;
+    let _insertRowBelow;
+    let _copyRowInsert;
 
     function configure({ getRows, getFilteredRows, applyFilters, render,
-                         softDeleteRow, restoreRow, hardDeleteRow, keepRow, removeOverride }) {
+                         softDeleteRow, restoreRow, hardDeleteRow, keepRow, removeOverride,
+                         insertRowAbove, insertRowBelow, copyRowInsert }) {
         _getRows         = getRows;
         _getFilteredRows = getFilteredRows;
         _applyFilters    = applyFilters;
@@ -34,6 +38,9 @@ const ContextMenu = (() => {
         _hardDeleteRow   = hardDeleteRow;
         _keepRow         = keepRow;
         _removeOverride  = removeOverride;
+        _insertRowAbove  = insertRowAbove;
+        _insertRowBelow  = insertRowBelow;
+        _copyRowInsert   = copyRowInsert;
     }
 
 
@@ -60,6 +67,9 @@ const ContextMenu = (() => {
             if (action === "hard-delete")     await _hardDeleteRow(rowId);
             if (action === "keep-row")        await _keepRow(rowId);
             if (action === "remove-override") await _removeOverride(rowId, colSlug);
+            if (action === "insert-above")    await _insertRowAbove(rowId);
+            if (action === "insert-below")    await _insertRowBelow(rowId);
+            if (action === "copy-insert")     await _copyRowInsert(rowId);
 
             if (action === "cell-log") {
                 const rows         = _getRows();
@@ -84,6 +94,14 @@ const ContextMenu = (() => {
             if (action === "flags-trigger")     return;
             if (action === "open-flag-manager") { FlagsManager.show(); return; }
 
+            if (action === "note-flag") {
+                const flagId = parseInt(item.dataset.flagId, 10);
+                const cells  = SelectionManager.getSelectedCells(_getFilteredRows(), ColumnsManager.getColumns());
+                if (!cells.length || isNaN(flagId)) return;
+                _showNoteEditor(flagId, cells, item);
+                return;
+            }
+
             if (action === "toggle-flag") {
                 const flagId       = parseInt(item.dataset.flagId, 10);
                 const filteredRows = _getFilteredRows();
@@ -102,7 +120,7 @@ const ContextMenu = (() => {
                             row.cell_flags[col_slug] = arr.filter(f => f.id !== flagId);
                         } else if (flag) {
                             if (!arr.some(f => f.id === flagId))
-                                row.cell_flags[col_slug] = [...arr, flag];
+                                row.cell_flags[col_slug] = [...arr, { ...flag, note: "" }];
                         }
                     }
                     _applyFilters();
@@ -178,7 +196,12 @@ const ContextMenu = (() => {
             if (!inside) SelectionManager.collapseToCell(r, c);
         }
 
-        const isDeleted = row.is_deleted;
+        const isDeleted  = row.is_deleted;
+        const fromGutter = !!e.target.closest("td.gutter");
+        const showGutter = fromGutter && !isDeleted;
+        menu.querySelectorAll('.ctx-gutter-only').forEach(el => el.style.display = showGutter ? "" : "none");
+        menu.querySelector('.ctx-sep-gutter').style.display = showGutter ? "" : "none";
+
         menu.querySelector('[data-action="delete"]').style.display      = isDeleted ? "none" : "";
         menu.querySelector('[data-action="restore"]').style.display     = isDeleted ? "" : "none";
         menu.querySelector('[data-action="hard-delete"]').style.display = isDeleted ? "" : "none";
@@ -215,12 +238,14 @@ const ContextMenu = (() => {
         _ctxFlagsCache = null;
 
         if (RevisionPicker.getViewingRevision() !== null) {
-            ['delete', 'restore', 'hard-delete', 'keep-row', 'remove-override', 'flags-trigger'].forEach(a => {
+            ['delete', 'restore', 'hard-delete', 'keep-row', 'remove-override',
+             'flags-trigger', 'insert-above', 'insert-below', 'copy-insert'].forEach(a => {
                 menu.querySelector(`[data-action="${a}"]`).style.display = "none";
             });
             menu.querySelector('.ctx-sep-keep-row').style.display = "none";
             menu.querySelector('.ctx-sep-override').style.display = "none";
             menu.querySelector('.ctx-sep-flags').style.display    = "none";
+            menu.querySelector('.ctx-sep-gutter').style.display   = "none";
         }
 
         const x = Math.min(e.clientX, window.innerWidth  - 210);
@@ -257,6 +282,57 @@ const ContextMenu = (() => {
         return "some";
     }
 
+    function _getExistingNote(flagId, cells) {
+        const rows = _getRows();
+        for (const { row_tag, col_slug } of cells) {
+            const row = rows.find(r => r.tag === row_tag);
+            const f   = row?.cell_flags?.[col_slug]?.find(x => x.id === flagId);
+            if (f?.note) return f.note;
+        }
+        return "";
+    }
+
+    function _showNoteEditor(flagId, cells, triggerEl) {
+        const list = document.getElementById("ctx-flags-list");
+        if (!list) return;
+        const existing = _getExistingNote(flagId, cells);
+        const editorId = "ctx-flag-note-editor";
+        const old = list.querySelector(`#${editorId}`);
+        if (old) old.remove();
+        const div = document.createElement("div");
+        div.id = editorId;
+        div.style.cssText = "padding:4px 8px;display:flex;flex-direction:column;gap:4px";
+        div.innerHTML =
+            `<textarea id="ctx-flag-note-ta" rows="2" placeholder="Add note…"
+                style="width:100%;resize:vertical;font-size:12px;padding:4px;box-sizing:border-box"
+            >${Utils.escHtml(existing)}</textarea>` +
+            `<button id="ctx-flag-note-save" style="align-self:flex-end;font-size:11px">Save note</button>`;
+        triggerEl.closest(".ctx-flag-item")?.insertAdjacentElement("afterend", div) || list.appendChild(div);
+        const ta = div.querySelector("#ctx-flag-note-ta");
+        ta.focus();
+        div.querySelector("#ctx-flag-note-save").addEventListener("click", async () => {
+            const note = ta.value;
+            try {
+                await ApiClient.updateCellFlagNote(flagId, cells, note);
+                const rows = _getRows();
+                for (const { row_tag, col_slug } of cells) {
+                    const row = rows.find(r => r.tag === row_tag);
+                    if (!row?.cell_flags?.[col_slug]) continue;
+                    const f = row.cell_flags[col_slug].find(x => x.id === flagId);
+                    if (f) f.note = note;
+                }
+                _render();
+                _close();
+            } catch (err) {
+                showToast(err.message, "error");
+            }
+        });
+        ta.addEventListener("keydown", e => {
+            if (e.key === "Escape") { div.remove(); }
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); div.querySelector("#ctx-flag-note-save").click(); }
+        });
+    }
+
     function _populateFlagsSubmenu(flags, cells) {
         const list = document.getElementById("ctx-flags-list");
         if (!list) return;
@@ -270,9 +346,14 @@ const ContextMenu = (() => {
             const state      = _flagCheckState(flag.id, cells);
             const checkGlyph = state === "none" ? "" : "✓";
             const mixedClass = state === "some"  ? " ctx-flag-mixed" : "";
+            const hasFlag    = state !== "none";
+            const noteBtn    = hasFlag
+                ? `<span class="ctx-flag-note-btn" data-action="note-flag" data-flag-id="${flag.id}" title="Edit note">✎</span>`
+                : "";
             return `<div class="ctx-flag-item${mixedClass}" data-action="toggle-flag" data-flag-id="${flag.id}">` +
                    `<span class="ctx-flag-dot" style="background:${Utils.escAttr(flag.color)}"></span>` +
                    `<span style="flex:1">${Utils.escHtml(flag.name)}</span>` +
+                   `${noteBtn}` +
                    `<span class="ctx-flag-check">${checkGlyph}</span>` +
                    `</div>`;
         }).join("");

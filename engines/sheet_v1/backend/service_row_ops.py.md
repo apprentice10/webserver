@@ -1,7 +1,7 @@
 ---
 # engines/sheet_v1/backend/service_row_ops.py
 
-**Description:** Row mutation operations for Sheet V1 — soft/hard delete, restore, keep, override removal, paste, rollback.
+**Description:** Row mutation operations for Sheet V1 — soft/hard delete, restore, keep, override removal, paste, rollback. Position operations (insert, copy-insert, reorder) live in `service_row_position.py` to stay under 400 lines.
 
 ## Index
 

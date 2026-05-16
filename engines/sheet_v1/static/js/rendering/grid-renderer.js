@@ -17,9 +17,10 @@ const GridRenderer = (() => {
             ? `<span class="cell-flag-dot" style="background:#FF8C00" title="ETL: ${etlLabel}"></span>`
             : "";
         if (!overrideDot && !visible.length) return "";
-        const dots = visible.map(f =>
-            `<span class="cell-flag-dot" style="background:${Utils.escAttr(f.color)}" title="${Utils.escAttr(f.name)}"></span>`
-        ).join("");
+        const dots = visible.map(f => {
+            const tip = f.note ? `${f.name}: ${f.note}` : f.name;
+            return `<span class="cell-flag-dot" style="background:${Utils.escAttr(f.color)}" title="${Utils.escAttr(tip)}"></span>`;
+        }).join("");
         return `<span class="cell-flag-badges">${overrideDot}${dots}</span>`;
     }
 
@@ -93,7 +94,7 @@ const GridRenderer = (() => {
             <tr data-row-id="${row.id}"
                 class="${rowClass}"
                 oncontextmenu="GridManager.openContextMenu(event, ${row.id}, ${isDeleted})">
-                <td class="gutter" data-row-idx="${rowIndex}"><div class="gutter-inner"><span class="gutter-num">${rowIndex + 1}</span>${revHtml}${gutterFlagsHtml}</div></td>
+                <td class="gutter" data-row-idx="${rowIndex}"><div class="gutter-inner"><span class="gutter-drag-handle" title="Drag to reorder">⠿</span><span class="gutter-num">${rowIndex + 1}</span>${revHtml}${gutterFlagsHtml}</div></td>
                 ${cells}
             </tr>`;
     }

@@ -45,13 +45,11 @@ const PasteManager = (() => {
             const rowId = parseInt(input.dataset.rowId);
             const field = input.dataset.field;
 
-            // Calcola indice colonna tra le colonne editabili
             const editableCols = _getEditableColumns();
             const colIndex     = editableCols.findIndex(c => c.slug === field);
 
-            // Calcola indice riga tra le righe visibili
-            const visibleRows = _getVisibleRows();
-            const rowIndex    = visibleRows.findIndex(r => r.id === rowId);
+            const { filteredRows } = GridManager.getSelectionForPaste();
+            const rowIndex = filteredRows.findIndex(r => r.id === rowId);
 
             if (colIndex !== -1 && rowIndex !== -1) {
                 _anchorCell = { rowId, rowIndex, colIndex, field };
@@ -185,8 +183,6 @@ const PasteManager = (() => {
      */
     async function _pasteRange(matrix) {
         const editableCols = _getEditableColumns();
-        const visibleRows  = _getVisibleRows();
-
         const { ranges, filteredRows } = GridManager.getSelectionForPaste();
         const useSelection = _hasMultiCellSelection(ranges, filteredRows);
 
@@ -205,13 +201,12 @@ const PasteManager = (() => {
             colCount    = Math.max(...matrix.map(r => r.length));
         }
 
-        await _pasteIntoSelection(matrix, ranges, filteredRows, startRowIdx, startColIdx, rowCount, colCount, editableCols, visibleRows);
+        await _pasteIntoSelection(matrix, ranges, filteredRows, startRowIdx, startColIdx, rowCount, colCount, editableCols);
     }
 
-    async function _pasteIntoSelection(matrix, ranges, filteredRows, startRowIdx, startColIdx, rowCount, colCount, editableCols, visibleRows) {
-        // Allow calling without all args (single-value range fill path)
+    async function _pasteIntoSelection(matrix, ranges, filteredRows, startRowIdx, startColIdx, rowCount, colCount, editableCols) {
         if (!editableCols) editableCols = _getEditableColumns();
-        if (!visibleRows)  visibleRows  = _getVisibleRows();
+        if (!filteredRows) filteredRows = GridManager.getSelectionForPaste().filteredRows;
 
         if (startRowIdx === undefined) {
             const bounds = _getSelectionBounds(ranges, editableCols);
@@ -228,9 +223,9 @@ const PasteManager = (() => {
 
         for (let r = 0; r < rowCount; r++) {
             const rowIdx = startRowIdx + r;
-            if (rowIdx >= visibleRows.length) break;
+            if (rowIdx >= filteredRows.length) break;
 
-            const row = visibleRows[rowIdx];
+            const row = filteredRows[rowIdx];
             if (row.is_deleted) continue;
 
             for (let c = 0; c < colCount; c++) {
@@ -386,22 +381,6 @@ const PasteManager = (() => {
             c => c.slug !== "rev" && c.slug !== "log"
         );
     }
-
-    /**
-     * Restituisce le righe attualmente visibili nella griglia
-     * (esclude ghost row e righe filtrate).
-     */
-    function _getVisibleRows() {
-        // Legge le righe dal DOM — riflette esattamente
-        // quello che l'utente vede inclusi i filtri attivi
-        return Array.from(
-            document.querySelectorAll("tr[data-row-id]")
-        ).map(tr => {
-            const rowId = parseInt(tr.dataset.rowId);
-            return GridManager.getRowById(rowId);
-        }).filter(Boolean);
-    }
-
 
     // --------------------------------------------------------
     // API PUBBLICA

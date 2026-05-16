@@ -123,6 +123,10 @@ Create the companion `.md` when a new source file is created. Update it when a s
 - Describing what the code does without explaining why non-obvious choices were made.
 - Duplicating content from `_context/` — link instead.
 
+**Always:**
+- Read companion `.md` before the source file.
+- Avoid reading the hole source file, pick what you need from the companion `.md` and focus on that.
+- Keep the companion `.md` file updated, if you find discrepancy fix the companion `.md`.
 ---
 
 ## Module Size Constraints

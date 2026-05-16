@@ -18,11 +18,13 @@
 | 167–176 | `clearRange()` | Resets all selection state; removes `.cell-selected` and `selecting` class |
 | 178–194 | `selectColumn(colIdx, additive)` | Selects all rows in one column; uses `_getFilteredRowCount()` |
 | 196–208 | `selectRow(rowIdx, additive)` | Selects all columns in one row; calls `ColumnsManager.getColumns()` |
-| 210–214 | `collapseToCell(r, c)` | Replaces selection with a single-cell range; used by openContextMenu |
+| 210–222 | `selectAll()` | Selects entire dataset: range (0,0)→(rowCount-1, colCount-1); uses `_getFilteredRowCount()` and `ColumnsManager.getColumns()` |
+| 224–228 | `collapseToCell(r, c)` | Replaces selection with a single-cell range; used by openContextMenu |
+| 229–235 | `setRanges(ranges)` | Replaces `_ranges` with an arbitrary array of range objects; used by FindReplace to highlight all matches |
 | 217–229 | `isSingleCellSelection()` | Returns true if 0 or 1 unique cells are selected across all ranges |
 | 231–245 | `getSelectedRowIds(filteredRows)` | Returns unique row ids for all selected rows |
 | 247–268 | `getSelectedCells(filteredRows, columns)` | Returns `[{row_tag, col_slug}]` for all selected cells; skips log/rev |
-| 271–281 | Public return | `configure`, `initGlobal`, `attachCellListeners`, `updateHighlight`, `clearRange`, `selectColumn`, `selectRow`, `collapseToCell`, `isSingleCellSelection`, `getSelectedCells`, `getSelectedRowIds`, `getRanges`, `getFirstRange`, `getSelectionForPaste` |
+| 283–299 | Public return | `configure`, `initGlobal`, `attachCellListeners`, `updateHighlight`, `clearRange`, `selectColumn`, `selectRow`, `selectAll`, `collapseToCell`, `isSingleCellSelection`, `getSelectedCells`, `getSelectedRowIds`, `getRanges`, `getFirstRange`, `getSelectionForPaste` |
 
 ## Decisions
 

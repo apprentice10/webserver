@@ -17,6 +17,7 @@ from dashboard.project_db import (
 )
 from dashboard.utils import format_log_entry as _format_log_entry, append_log as _append_log
 from dashboard.staleness import mark_tool_stale, mark_dependents_stale
+from .service_undo import push_undo
 
 
 def remove_override(
@@ -105,6 +106,11 @@ def soft_delete_row(
     mark_dependents_stale(conn, slug)
     conn.commit()
 
+    push_undo(tool_id, {
+        "type": "soft_delete", "tool_slug": slug, "tool_id": tool_id,
+        "trash_id": trash_id, "row_tag": tag_val,
+    })
+
     trash_row = conn.execute(
         "SELECT * FROM _trash WHERE id = ?", (trash_id,)
     ).fetchone()
@@ -184,9 +190,22 @@ def hard_delete_row(
     ).fetchone()
     if not trash:
         raise HTTPException(status_code=404, detail="Trash row not found")
+    trash = dict(trash)
 
+    rev = get_current_revision(conn)
+    row_data_str = trash["row_data"]
+    row_data_dict = json.loads(row_data_str)
+    tag_val = row_data_dict.get("tag", "")
+
+    audit(conn, slug, "HARD_DELETE", row_tag=tag_val,
+          old_val=row_data_str, change_type="hard_delete", revision=rev)
     conn.execute("DELETE FROM _trash WHERE id = ?", (trash_id,))
     conn.commit()
+
+    push_undo(tool_id, {
+        "type": "hard_delete", "tool_slug": slug, "tool_id": tool_id,
+        "row_data": row_data_dict, "row_tag": tag_val,
+    })
     return {"ok": True, "deleted_id": trash_id}
 
 

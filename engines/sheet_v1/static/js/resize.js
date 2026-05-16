@@ -62,6 +62,11 @@ const ResizeManager = (() => {
 
         document.addEventListener("mousemove", _onMouseMove);
         document.addEventListener("mouseup", _onMouseUp);
+        document.addEventListener("dragstart", _preventDrag);
+    }
+
+    function _preventDrag(e) {
+        e.preventDefault();
     }
 
     function _onMouseMove(e) {
@@ -90,6 +95,7 @@ const ResizeManager = (() => {
 
         document.removeEventListener("mousemove", _onMouseMove);
         document.removeEventListener("mouseup", _onMouseUp);
+        document.removeEventListener("dragstart", _preventDrag);
 
         // Salva nel backend con debounce
         const finalWidth = _thElement.offsetWidth;

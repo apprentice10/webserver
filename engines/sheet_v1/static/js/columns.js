@@ -109,6 +109,9 @@ const ColumnsManager = (() => {
                 } catch (_) {}
             }
 
+            const sortArrow   = col.is_system ? '' : `<span class="th-sort-arrow"></span><span class="th-sort-badge" style="display:none"></span>`;
+            const filterBtn   = col.is_system ? '' : `<button class="th-filter-btn" data-slug="${col.slug}" title="Filter" draggable="false">▿</button>`;
+            const sortableClass = col.is_system ? '' : ' th-sortable';
             html += `
                 <th style="width:${col.width}px;min-width:20px"
                     data-column-id="${col.id}"
@@ -117,8 +120,9 @@ const ColumnsManager = (() => {
                     draggable="true"
                     ${lineageTitle}>
                     <div class="th-content th-draggable">
-                        <span class="th-label">${_escHtml(col.name)}</span>
+                        <span class="th-label${sortableClass}" data-slug="${col.slug}">${_escHtml(col.name)}</span>
                         ${lineageTitle ? '<span class="th-lineage-dot" aria-hidden="true">⬡</span>' : ""}
+                        ${sortArrow}${filterBtn}
                     </div>
                     <div class="resize-handle" data-column-id="${col.id}" draggable="false"></div>
                 </th>`;
@@ -127,6 +131,7 @@ const ColumnsManager = (() => {
         headerRow.innerHTML = html;
         ResizeManager.init();
         _attachDragListeners();
+        if (typeof SortFilterManager !== 'undefined') SortFilterManager.updateHeaderIndicators();
     }
 
     function _attachDragListeners() {

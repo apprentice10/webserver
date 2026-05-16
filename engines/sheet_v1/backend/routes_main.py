@@ -13,7 +13,7 @@ from typing import Optional
 logger = logging.getLogger("engine.routes")
 
 from dashboard.project_db import get_project_conn, audit
-from . import service, service_columns, service_row_ops, service_templates
+from . import service, service_columns, service_row_ops, service_row_position, service_templates
 from dashboard.catalog import ENGINE_CATALOG, UTILITY_BY_CATEGORY
 from .schemas import (
     EngineCreate, EngineSettingsUpdate, EnginePositionUpdate, EngineGroupUpdate,
@@ -21,7 +21,7 @@ from .schemas import (
     TemplateCreate, TemplateResponse,
     ColumnCreate, ColumnUpdate, ColumnWidthUpdate, ColumnReorder, ColumnResponse,
     RowCreate, CellUpdate, PasteData,
-    SqlQuery,
+    SqlQuery, InsertRowRequest, ReorderRowRequest, SortFilterStateUpdate,
 )
 
 router = APIRouter(prefix="/api/engines", tags=["engine"])
@@ -427,6 +427,39 @@ def keep_row(
     return {"kept": True, "row_tag": tag}
 
 
+@router.post("/{tool_id}/rows/{row_id}/insert")
+def insert_row_at_position(
+    tool_id: int,
+    row_id: int,
+    data: InsertRowRequest = ...,
+    conn: sqlite3.Connection = Depends(get_project_conn)
+):
+    return service_row_position.insert_row_at_position(
+        conn, tool_id, row_id, data.placement, None
+    )
+
+
+@router.post("/{tool_id}/rows/{row_id}/copy-insert")
+def copy_row_insert(
+    tool_id: int,
+    row_id: int,
+    conn: sqlite3.Connection = Depends(get_project_conn)
+):
+    return service_row_position.copy_row_insert(conn, tool_id, row_id, None)
+
+
+@router.post("/{tool_id}/rows/{row_id}/reorder")
+def reorder_row(
+    tool_id: int,
+    row_id: int,
+    data: ReorderRowRequest = ...,
+    conn: sqlite3.Connection = Depends(get_project_conn)
+):
+    return service_row_position.reorder_row(
+        conn, tool_id, row_id, data.anchor_row_id, data.placement, None
+    )
+
+
 # ============================================================
 # TRASH / SOFT-DELETE
 # ============================================================
@@ -563,6 +596,43 @@ def hard_delete_row(
     conn:    sqlite3.Connection = Depends(get_project_conn)
 ):
     return service_row_ops.hard_delete_row(conn, tool_id, row_id, None)
+
+
+# ============================================================
+# SORT / FILTER STATE
+# ============================================================
+
+@router.get("/{tool_id}/sort-filter-state")
+def get_sort_filter_state(
+    tool_id: int,
+    conn:    sqlite3.Connection = Depends(get_project_conn),
+):
+    row = conn.execute("SELECT sort_filter_state FROM _tools WHERE id = ?", (tool_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Tool not found")
+    raw = row[0]
+    if raw:
+        try:
+            return json.loads(raw)
+        except Exception:
+            return {"sort": [], "filters": {}}
+    return {"sort": [], "filters": {}}
+
+
+@router.patch("/{tool_id}/sort-filter-state")
+def set_sort_filter_state(
+    tool_id: int,
+    data:    SortFilterStateUpdate,
+    conn:    sqlite3.Connection = Depends(get_project_conn),
+):
+    if not conn.execute("SELECT 1 FROM _tools WHERE id = ?", (tool_id,)).fetchone():
+        raise HTTPException(status_code=404, detail="Tool not found")
+    conn.execute(
+        "UPDATE _tools SET sort_filter_state = ? WHERE id = ?",
+        (json.dumps({"sort": data.sort, "filters": data.filters}), tool_id),
+    )
+    conn.commit()
+    return {"ok": True}
 
 
 # ============================================================

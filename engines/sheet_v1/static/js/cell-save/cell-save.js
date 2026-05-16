@@ -51,6 +51,7 @@ const CellSave = (() => {
 
             inputEl.style.opacity = "1";
             inputEl.dataset.originalValue = newValue;
+            document.dispatchEvent(new CustomEvent('undo:updated'));
 
         } catch (err) {
             inputEl.value = inputEl.dataset.originalValue ?? "";

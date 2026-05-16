@@ -217,10 +217,29 @@ const SelectionManager = (() => {
         updateHighlight();
     }
 
+    function selectAll() {
+        const rowCount = _getFilteredRowCount();
+        const cols = ColumnsManager.getColumns();
+        if (rowCount === 0 || cols.length === 0) return;
+        _ranges = [{ start: { r: 0, c: 0 }, end: { r: rowCount - 1, c: cols.length - 1 } }];
+        _activeDragIdx = -1;
+        _isDragging = false;
+        document.getElementById("data-grid")?.classList.remove("selecting");
+        updateHighlight();
+    }
+
     // Collapse selection to a single cell — used by openContextMenu when right-click
     // lands outside the current selection.
     function collapseToCell(r, c) {
         _ranges = [{ start: { r, c }, end: { r, c } }];
+        updateHighlight();
+    }
+
+    // Replace current selection with an arbitrary array of range objects (used by FindReplace).
+    function setRanges(ranges) {
+        _ranges = ranges;
+        _activeDragIdx = -1;
+        _isDragging = false;
         updateHighlight();
     }
 
@@ -299,6 +318,7 @@ const SelectionManager = (() => {
         clearRange,
         selectColumn,
         selectRow,
+        selectAll,
         collapseToCell,
         isSingleCellSelection,
         getSelectedCells,
@@ -306,6 +326,7 @@ const SelectionManager = (() => {
         getRanges:            () => [..._ranges],
         getFirstRange:        () => (_ranges.length > 0 ? _ranges[0] : null),
         getSelectionForPaste: (filteredRows) => ({ ranges: _ranges, filteredRows }),
+        setRanges,
     };
 
 })();

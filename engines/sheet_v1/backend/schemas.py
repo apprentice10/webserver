@@ -3,7 +3,7 @@ Sheet V1 Pydantic request/response schemas.
 """
 
 from pydantic import BaseModel
-from typing import Optional, Any
+from typing import Optional, Any, Literal
 from datetime import datetime
 
 
@@ -156,3 +156,39 @@ class CellFlagEntry(BaseModel):
 class CellFlagToggleRequest(BaseModel):
     flag_id: int
     cells:   list[CellFlagEntry]
+    note:    str = ""
+
+
+class CellFlagNoteUpdate(BaseModel):
+    flag_id: int
+    cells:   list[CellFlagEntry]
+    note:    str
+
+
+class ConditionalFlagRuleCreate(BaseModel):
+    col_slug: str
+    flag_id:  int
+    operator: str  # contains|equals|is_empty|starts_with|matches_wildcard
+    value:    str = ""
+
+
+class InsertRowRequest(BaseModel):
+    placement: Literal["above", "below"]
+
+
+class ReorderRowRequest(BaseModel):
+    anchor_row_id: int
+    placement:     Literal["before", "after"]
+
+
+class FindReplaceRequest(BaseModel):
+    search:           str
+    replacement:      str
+    match_case:       bool = False
+    match_entire_cell: bool = False
+    scope:            Optional[list[dict]] = None  # [{row_id, col_slug}]; None = full sheet
+
+
+class SortFilterStateUpdate(BaseModel):
+    sort:    list[dict] = []
+    filters: dict       = {}

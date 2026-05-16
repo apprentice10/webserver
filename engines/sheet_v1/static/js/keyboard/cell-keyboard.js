@@ -144,6 +144,9 @@ const CellKeyboard = (() => {
     }
 
     function onCellKeydown(e) {
+        // AutoComplete intercepts arrow/alt/escape keys when its dropdown is visible
+        if (AutoComplete.onKeydown(e, this)) return;
+
         const isEditing = !this.hasAttribute("readonly");
 
         if (e.key === "Enter") {

@@ -42,6 +42,7 @@
 | `engines/sheet_v1/backend/service.py` | Core business logic: engine CRUD, get_rows, update_cell, create_row, get_columns |
 | `engines/sheet_v1/backend/service_columns.py` | Column CRUD: add, update, delete, reorder, resize |
 | `engines/sheet_v1/backend/service_row_ops.py` | Row mutations: soft/hard delete, restore, paste, rollback, override |
+| `engines/sheet_v1/backend/service_row_position.py` | Row position ops: insert above/below, copy-insert, reorder |
 | `engines/sheet_v1/backend/service_templates.py` | ETL template CRUD |
 | `engines/sheet_v1/engine.json` | Plugin manifest for Sheet engine |
 | `_legacy/instrument_list/` | Dead code — **do not read** |
@@ -90,8 +91,12 @@
 | `keyboard/cell-keyboard.js` | Cell edit mode, keyboard nav, ghost row handlers |
 | `context-menu/context-menu.js` | Context menu open/close, flags submenu |
 | `rendering/grid-renderer.js` | Pure HTML generators: `renderRow`, `renderCell`, `renderGhostRow` |
-| `row-ops/row-ops.js` | Soft/hard delete, restore, keepRow, removeOverride |
+| `row-ops/row-ops.js` | Soft/hard delete, restore, keepRow, removeOverride, insertRowAbove, insertRowBelow, copyRowInsert |
+| `row-ops/row-drag.js` | Drag-to-reorder via gutter handle: mousedown threshold, drop indicator, `reorderRow` API call |
 | `clipboard/clipboard-manager.js` | Ctrl+C range copy to clipboard |
+| `cut-paste/cut-paste.js` | Ctrl+X cut state: dashed-border visual, capture paste event, write to dest + clear source |
+| `paste-special/paste-special.js` | Ctrl+Shift+V smart paste dialog: column mapper, header detection, preview table |
+| `fill/fill-handle.js` | Drag fill handle at selection bottom-right: fill down (rows) or right (cols), numeric step detection |
 | `cell-save/cell-save.js` | `doSaveCell`, `updateLogCell` |
 | `panels/panel-floats.js` | Float panel create/drag/resize/proximity-snap |
 | `panels/panel-tab-bar.js` | Tab HTML, render, drag-reorder, drag-to-float |

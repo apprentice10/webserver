@@ -9,6 +9,7 @@ Le righe cancellate vivono in _trash (soft delete).
 Gli override ETL vivono in _overrides.
 """
 
+import fnmatch
 import json
 import sqlite3
 from fastapi import HTTPException
@@ -22,6 +23,7 @@ from dashboard.project_db import (
 from dashboard.utils import slugify as _slugify, format_log_entry as _format_log_entry, append_log as _append_log
 from dashboard.staleness import mark_tool_stale, mark_dependents_stale
 from dashboard.catalog import ENGINE_BY_SLUG
+from .service_undo import push_undo
 
 
 def _unique_slug(conn: sqlite3.Connection, base_slug: str) -> str:
@@ -153,11 +155,36 @@ def get_columns(conn: sqlite3.Connection, tool_id: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-
-
 # ============================================================
 # RIGHE — CRUD con trash
 # ============================================================
+
+def _eval_conditional_rule(cell_value, operator: str, rule_value: str) -> bool:
+    v = str(cell_value) if cell_value is not None else ""
+    if operator == "equals":           return v == rule_value
+    if operator == "contains":         return rule_value.lower() in v.lower()
+    if operator == "is_empty":         return v.strip() == ""
+    if operator == "starts_with":      return v.lower().startswith(rule_value.lower())
+    if operator == "matches_wildcard": return fnmatch.fnmatch(v.lower(), rule_value.lower())
+    return False
+
+def _get_row_cell_flags(conn: sqlite3.Connection, tool_slug: str, row_tag: str, row_values: dict) -> dict:
+    manual = conn.execute(
+        "SELECT cf.col_slug, f.id, f.name, f.color, cf.note FROM _cell_flags cf "
+        "JOIN _flags f ON f.id = cf.flag_id WHERE cf.tool_slug=? AND cf.row_tag=?",
+        (tool_slug, row_tag)).fetchall()
+    flags_map: dict = {}
+    for r in manual:
+        flags_map.setdefault(r["col_slug"], []).append(
+            {"id": r["id"], "name": r["name"], "color": r["color"], "note": r["note"]})
+    for r in conn.execute(
+        "SELECT r.col_slug, r.operator, r.value, f.id, f.name, f.color FROM _conditional_flag_rules r "
+        "JOIN _flags f ON f.id = r.flag_id WHERE r.tool_slug=?", (tool_slug,)).fetchall():
+        if _eval_conditional_rule(row_values.get(r["col_slug"], ""), r["operator"], r["value"]):
+            col_flags = flags_map.setdefault(r["col_slug"], [])
+            if not any(f["id"] == r["id"] for f in col_flags):
+                col_flags.append({"id": r["id"], "name": r["name"], "color": r["color"], "note": ""})
+    return flags_map
 
 def get_rows(
     conn: sqlite3.Connection,
@@ -173,9 +200,9 @@ def get_rows(
     ).fetchall()
     override_map = get_tool_overrides(conn, slug)
 
-    # Bulk load all cell flags for this tool: {row_tag: {col_slug: [{id, name, color}]}}
+    # Bulk load manual cell flags: {row_tag: {col_slug: [{id, name, color, note}]}}
     flag_rows = conn.execute(
-        """SELECT cf.row_tag, cf.col_slug, f.id, f.name, f.color
+        """SELECT cf.row_tag, cf.col_slug, f.id, f.name, f.color, cf.note
            FROM _cell_flags cf
            JOIN _flags f ON f.id = cf.flag_id
            WHERE cf.tool_slug = ?""",
@@ -184,13 +211,26 @@ def get_rows(
     flags_map: dict = {}
     for fr in flag_rows:
         flags_map.setdefault(fr["row_tag"], {}).setdefault(fr["col_slug"], []).append(
-            {"id": fr["id"], "name": fr["name"], "color": fr["color"]}
+            {"id": fr["id"], "name": fr["name"], "color": fr["color"], "note": fr["note"]}
         )
+
+    # Bulk load conditional rules for evaluation
+    cond_rules = conn.execute(
+        """SELECT r.col_slug, r.operator, r.value, f.id, f.name, f.color
+           FROM _conditional_flag_rules r JOIN _flags f ON f.id = r.flag_id
+           WHERE r.tool_slug = ?""",
+        (slug,)
+    ).fetchall()
 
     result = []
     for r in active:
         row = serialize_active_row(r, tool_id, project_id, override_map.get(dict(r).get("tag", ""), {}))
         row["cell_flags"] = flags_map.get(row["tag"], {})
+        for cr in cond_rules:
+            if _eval_conditional_rule(row.get(cr["col_slug"], ""), cr["operator"], cr["value"]):
+                col_flags = row["cell_flags"].setdefault(cr["col_slug"], [])
+                if not any(f["id"] == cr["id"] for f in col_flags):
+                    col_flags.append({"id": cr["id"], "name": cr["name"], "color": cr["color"], "note": ""})
         result.append(row)
 
     if include_deleted:
@@ -241,13 +281,18 @@ def create_row(
     )
 
     row_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    audit(conn, slug, "INSERT", row_tag=tag_value, new_val=tag_value,
+    audit(conn, slug, "INSERT", row_tag=tag_value, new_val=json.dumps(insert_data),
           change_type="insert", revision=rev)
     mark_tool_stale(conn, slug)
     mark_dependents_stale(conn, slug)
     conn.commit()
 
     row = conn.execute(f'SELECT * FROM "{slug}" WHERE __id = ?', (row_id,)).fetchone()
+    row_snapshot = {k: v for k, v in dict(row).items() if not k.startswith("__")}
+    push_undo(tool_id, {
+        "type": "row_insert", "tool_slug": slug, "tool_id": tool_id,
+        "row_id": row_id, "row_tag": tag_value, "row_snapshot": row_snapshot,
+    })
     return serialize_active_row(row, tool_id, project_id)
 
 
@@ -328,12 +373,20 @@ def update_cell(
     mark_dependents_stale(conn, tool_slug)
     conn.commit()
 
+    push_undo(tool_id, {
+        "type": "cell_edit", "tool_slug": tool_slug, "tool_id": tool_id,
+        "row_id": row_id, "col_slug": slug,
+        "old_val": old_value, "new_val": new_value, "row_tag": tag_val,
+    })
+
     updated = conn.execute(
         f'SELECT * FROM "{tool_slug}" WHERE __id = ?', (row_id,)
     ).fetchone()
     tag_after = dict(updated).get("tag", tag_val)
     overrides = get_row_overrides(conn, tool_slug, tag_after)
-    return serialize_active_row(updated, tool_id, project_id, overrides)
+    result_row = serialize_active_row(updated, tool_id, project_id, overrides)
+    result_row["cell_flags"] = _get_row_cell_flags(conn, tool_slug, tag_after, result_row)
+    return result_row
 
 
 
