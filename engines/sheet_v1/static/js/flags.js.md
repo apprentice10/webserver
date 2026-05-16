@@ -33,5 +33,6 @@
 - **Full re-render on mutation**: `show()` called again after create/delete/error — simpler than patching DOM; list always small.
 - **Conditional rules are tool-scoped**: `ApiClient.listFlagRules()` and friends use `TOOL_ID` from api.js.
 - **Preview count is client-side**: uses `GridManager.getAllRows()` — no network round-trip; same wildcard logic as backend.
+- **`addRule`/`deleteRule` call `GridManager.reloadData()`**: rules are evaluated server-side in `get_rows`; a full reload is the only way to see them applied in the grid immediately after a change.
 - **`_toggleRuleValue` on public API**: the form's `onchange="FlagsManager._toggleRuleValue()"` needs it; the leading `_` signals internal use but it must be exported for inline HTML handlers.
 - **Load order**: after `sidebar.js`, before `sql_editor.js`. Depends on `ApiClient`, `Utils`, `ColumnsManager`, `GridManager`.

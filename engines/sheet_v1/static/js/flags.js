@@ -117,7 +117,7 @@ const FlagsManager = (() => {
             `<option value="${f.id}">${Utils.escHtml(f.name)}</option>`).join("");
         return `
         <div class="sidebar-rule-form" id="sidebar-rule-form">
-            <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;font-size:12px">
+            <div class="rule-row">
                 <select id="rule-col">${colOpts}</select>
                 <select id="rule-op" onchange="FlagsManager._toggleRuleValue()">
                     <option value="contains">contains</option>
@@ -126,12 +126,12 @@ const FlagsManager = (() => {
                     <option value="matches_wildcard">matches wildcard</option>
                     <option value="is_empty">is empty</option>
                 </select>
-                <input type="text" id="rule-val" placeholder="value" style="width:80px">
-                <span>→</span>
+                <input type="text" id="rule-val" placeholder="value">
+                <span style="color:var(--color-text-muted)">→</span>
                 <select id="rule-flag">${flagOpts}</select>
                 <button class="btn btn-primary btn-sm" onclick="FlagsManager.addRule()">Add</button>
             </div>
-            <div id="rule-match-count" style="font-size:11px;color:var(--color-text-muted);margin-top:2px"></div>
+            <div id="rule-match-count" class="sidebar-empty" style="margin-top:4px;text-align:left"></div>
         </div>`;
     }
 
@@ -183,8 +183,7 @@ const FlagsManager = (() => {
             _rules = rules;
             const columns = (typeof ColumnsManager !== "undefined") ? ColumnsManager.getColumns() : [];
             const html = _render(_flags) + _addFormHtml() +
-                         `<hr style="margin:8px 0;border-color:var(--color-border)">` +
-                         `<div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--color-text-muted);padding:0 4px 4px">Conditional Rules</div>` +
+                         `<div class="sidebar-section-title">Conditional Rules</div>` +
                          _rulesHtml(_rules) + _ruleFormHtml(_flags, columns);
             SidebarManager.setTitle('FLAG MANAGER');
             SidebarManager.setContent(html);
@@ -276,14 +275,14 @@ const FlagsManager = (() => {
     }
 
     async function addRule() {
-        const colSlug = document.getElementById("rule-col")?.value;
+        const colSlug  = document.getElementById("rule-col")?.value;
         const operator = document.getElementById("rule-op")?.value;
-        const value   = operator === "is_empty" ? "" : (document.getElementById("rule-val")?.value ?? "");
-        const flagId  = parseInt(document.getElementById("rule-flag")?.value, 10);
+        const value    = operator === "is_empty" ? "" : (document.getElementById("rule-val")?.value ?? "");
+        const flagId   = parseInt(document.getElementById("rule-flag")?.value, 10);
         if (!colSlug || !operator || isNaN(flagId)) return;
         try {
             await ApiClient.createFlagRule({ col_slug: colSlug, flag_id: flagId, operator, value });
-            await show();
+            await Promise.all([show(), GridManager.reloadData()]);
         } catch (err) {
             Utils.showToast(err.message, "error");
         }
@@ -293,7 +292,7 @@ const FlagsManager = (() => {
         if (!confirm("Delete this conditional rule?")) return;
         try {
             await ApiClient.deleteFlagRule(ruleId);
-            await show();
+            await Promise.all([show(), GridManager.reloadData()]);
         } catch (err) {
             Utils.showToast(err.message, "error");
         }

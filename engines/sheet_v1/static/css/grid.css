@@ -553,14 +553,80 @@ tr:hover .btn-row-action {
 }
 .ctx-flag-note-btn:hover { opacity: 1; }
 
+/* Note editor injected inside the flag submenu */
+.ctx-submenu.note-open { display: block; }
+.ctx-flag-note-editor {
+    padding: 6px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-top: 1px solid var(--color-border);
+}
+.ctx-flag-note-ta {
+    width: 100%;
+    resize: vertical;
+    font-size: 12px;
+    padding: 4px 6px;
+    box-sizing: border-box;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    color: var(--color-text);
+    outline: none;
+    font-family: inherit;
+}
+.ctx-flag-note-ta:focus { border-color: var(--color-accent, #4A90D9); }
+.ctx-flag-note-save {
+    align-self: flex-end;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+}
+.ctx-flag-note-save:hover { border-color: var(--color-accent, #4A90D9); color: var(--color-accent, #4A90D9); }
+
 /* Conditional rules in flag manager sidebar */
+.sidebar-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    padding: 8px 4px 4px;
+    letter-spacing: 0.4px;
+}
 .sidebar-rules-list { display: flex; flex-direction: column; gap: 2px; padding: 4px 0; }
 .sidebar-rule-item {
     display: flex; align-items: center; gap: 6px; padding: 4px 8px;
     font-size: 12px; border-radius: 3px; background: var(--color-surface-2);
 }
 .sidebar-rule-text { flex: 1; }
-.sidebar-rule-form { padding: 6px 4px; }
+.sidebar-rule-form {
+    padding: 8px 0 4px;
+    border-top: 1px solid var(--color-border);
+}
+.sidebar-rule-form .rule-row {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.sidebar-rule-form select,
+.sidebar-rule-form input[type="text"] {
+    font-size: 12px;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 3px 6px;
+    color: var(--color-text);
+    outline: none;
+    font-family: inherit;
+}
+.sidebar-rule-form select:focus,
+.sidebar-rule-form input[type="text"]:focus { border-color: var(--color-accent, #4A90D9); }
+.sidebar-rule-form input[type="text"] { width: 80px; }
 
 /* ------------------------------------------------------------
    RANGE SELECTION

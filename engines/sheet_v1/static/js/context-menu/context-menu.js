@@ -60,6 +60,16 @@ const ContextMenu = (() => {
             const colSlug    = _ctxColSlug;
             const colSlugLog = _ctxColSlugLog;
             const flagsSnap  = _ctxFlagsCache;
+
+            // note-flag must be handled before _close() — the menu stays open for the inline editor.
+            if (action === "note-flag") {
+                const flagId = parseInt(item.dataset.flagId, 10);
+                const cells  = SelectionManager.getSelectedCells(_getFilteredRows(), ColumnsManager.getColumns());
+                if (!cells.length || isNaN(flagId)) return;
+                _showNoteEditor(flagId, cells, item);
+                return;
+            }
+
             _close();
 
             if (action === "delete")          await _softDeleteRow(rowId);
@@ -93,14 +103,6 @@ const ContextMenu = (() => {
 
             if (action === "flags-trigger")     return;
             if (action === "open-flag-manager") { FlagsManager.show(); return; }
-
-            if (action === "note-flag") {
-                const flagId = parseInt(item.dataset.flagId, 10);
-                const cells  = SelectionManager.getSelectedCells(_getFilteredRows(), ColumnsManager.getColumns());
-                if (!cells.length || isNaN(flagId)) return;
-                _showNoteEditor(flagId, cells, item);
-                return;
-            }
 
             if (action === "toggle-flag") {
                 const flagId       = parseInt(item.dataset.flagId, 10);
@@ -293,23 +295,34 @@ const ContextMenu = (() => {
     }
 
     function _showNoteEditor(flagId, cells, triggerEl) {
-        const list = document.getElementById("ctx-flags-list");
+        const list    = document.getElementById("ctx-flags-list");
+        const submenu = document.getElementById("ctx-flags-submenu");
         if (!list) return;
+
+        // Pin the submenu open — CSS :hover can drop once the user moves the mouse.
+        if (submenu) submenu.classList.add("note-open");
+
         const existing = _getExistingNote(flagId, cells);
         const editorId = "ctx-flag-note-editor";
         const old = list.querySelector(`#${editorId}`);
         if (old) old.remove();
+
         const div = document.createElement("div");
         div.id = editorId;
-        div.style.cssText = "padding:4px 8px;display:flex;flex-direction:column;gap:4px";
+        div.className = "ctx-flag-note-editor";
         div.innerHTML =
-            `<textarea id="ctx-flag-note-ta" rows="2" placeholder="Add note…"
-                style="width:100%;resize:vertical;font-size:12px;padding:4px;box-sizing:border-box"
-            >${Utils.escHtml(existing)}</textarea>` +
-            `<button id="ctx-flag-note-save" style="align-self:flex-end;font-size:11px">Save note</button>`;
-        triggerEl.closest(".ctx-flag-item")?.insertAdjacentElement("afterend", div) || list.appendChild(div);
+            `<textarea id="ctx-flag-note-ta" class="ctx-flag-note-ta" rows="2" placeholder="Add note…">${Utils.escHtml(existing)}</textarea>` +
+            `<button id="ctx-flag-note-save" class="ctx-flag-note-save">Save note</button>`;
+        triggerEl.closest(".ctx-flag-item")?.insertAdjacentElement("afterend", div) ?? list.appendChild(div);
+
         const ta = div.querySelector("#ctx-flag-note-ta");
         ta.focus();
+
+        function dismiss() {
+            if (submenu) submenu.classList.remove("note-open");
+            div.remove();
+        }
+
         div.querySelector("#ctx-flag-note-save").addEventListener("click", async () => {
             const note = ta.value;
             try {
@@ -328,7 +341,7 @@ const ContextMenu = (() => {
             }
         });
         ta.addEventListener("keydown", e => {
-            if (e.key === "Escape") { div.remove(); }
+            if (e.key === "Escape") { e.stopPropagation(); dismiss(); }
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); div.querySelector("#ctx-flag-note-save").click(); }
         });
     }

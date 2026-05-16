@@ -23,6 +23,7 @@
 - **`openContextMenu` kept in grid.js public API**: template strings reference it directly; renaming would break rendered HTML.
 - **`removeFlagFromCells` in public API**: called by `flags.js` on flag delete; delegates to `ContextMenu.removeFlagFromCells`.
 - **Gutter-only items**: hidden for deleted rows and in revision-viewing mode.
-- **Note action does NOT close the menu**: `action === "note-flag"` returns early before `_close()`, keeping the submenu open for the inline editor.
+- **Note action does NOT close the menu**: `action === "note-flag"` is checked and dispatched *before* `_close()` is called, returning early so the submenu stays visible and the inline editor can be injected into `#ctx-flags-list`.
+- **`note-open` class pins the submenu**: `_showNoteEditor` adds `.note-open` to `#ctx-flags-submenu` so it stays `display:block` even if the mouse leaves the hover area. The class is removed when the editor is dismissed (Save or Escape).
 - **Note pencil (✎) only shown when flag is applied**: `state !== "none"` — no note makes sense on unapplied flags.
 - **Enter key saves note, Shift+Enter inserts newline** in the note textarea.
