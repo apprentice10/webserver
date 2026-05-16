@@ -77,6 +77,7 @@ const ResizeManager = (() => {
 
         // Aggiorna visivamente in tempo reale
         _thElement.style.width = newWidth + "px";
+        syncTableWidth();
 
         // Aggiorna stato locale
         ColumnsManager.updateLocalWidth(_columnId, newWidth);
@@ -136,6 +137,7 @@ const ResizeManager = (() => {
         const newWidth = Math.max(20, fitted + 24);
 
         th.style.width = newWidth + "px";
+        syncTableWidth();
         ColumnsManager.updateLocalWidth(columnId, newWidth);
 
         ApiClient.updateColumnWidth(columnId, newWidth).catch(err => {
@@ -192,6 +194,29 @@ const ResizeManager = (() => {
                 console.warn("Auto-fit error:", err.message);
             });
         });
+        syncTableWidth();
+    }
+
+
+    // --------------------------------------------------------
+    // TABLE WIDTH SYNC
+    // --------------------------------------------------------
+
+    // Without an explicit pixel width on <table>, table-layout:fixed ignores
+    // per-th widths and redistributes space — making it impossible to shrink a
+    // column below its current rendered size.
+    function syncTableWidth() {
+        const headerRow = document.getElementById("grid-header-row");
+        if (!headerRow) return;
+        let total = 0;
+        const gutter = headerRow.querySelector(".col-gutter");
+        if (gutter) total += gutter.offsetWidth;
+        headerRow.querySelectorAll("th[data-column-id]").forEach(th => {
+            const w = parseInt(th.style.width);
+            if (!isNaN(w)) total += w;
+        });
+        const table = document.querySelector("table.data-grid");
+        if (table) table.style.width = total + "px";
     }
 
 
@@ -199,6 +224,6 @@ const ResizeManager = (() => {
     // API PUBBLICA
     // --------------------------------------------------------
 
-    return { init, fitAll };
+    return { init, fitAll, syncTableWidth };
 
 })();

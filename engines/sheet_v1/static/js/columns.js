@@ -132,6 +132,7 @@ const ColumnsManager = (() => {
         ResizeManager.init();
         _attachDragListeners();
         if (typeof SortFilterManager !== 'undefined') SortFilterManager.updateHeaderIndicators();
+        ResizeManager.syncTableWidth();
     }
 
     function _attachDragListeners() {

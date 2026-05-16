@@ -11,7 +11,7 @@
 | State | 13–16 | `_columns[]`, `_hiddenColumns` (Set of slugs), `_dragSrcId`, ctx vars |
 | Getters | 24–29 | `getColumns()`, `getVisibleColumns()`, `loadColumns()`, `loadFromData()` |
 | Column state — localStorage | 42–85 | `_loadColumnState`, `_applyColumnOrder`, `_applyHiddenColumnsCSS`, `hideColumn`, `showColumn` |
-| renderHeader | 90–128 | All columns draggable; CSS hides hidden ones; lineage tooltip |
+| renderHeader | 90–136 | All columns draggable; CSS hides hidden ones; lineage tooltip; calls ResizeManager.syncTableWidth() at end |
 | _attachDragListeners | 130–199 | Drag/drop + contextmenu; API call skipped for system column source |
 | openAddColumnModal / submitAddColumn | 205–250 | Add column modal with auto-slug |
 | renameColumn | 255–285 | prompt + confirm for ETL cols |
