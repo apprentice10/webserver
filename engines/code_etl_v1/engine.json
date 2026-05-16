@@ -1,0 +1,10 @@
+{
+  "name": "Code ETL",
+  "version": "1.0",
+  "type": "utility",
+  "utility_category": "etl",
+  "slug": "code-etl",
+  "description": "Write ETL transformations as SQL expressions.",
+  "icon": "</>",
+  "dashboard_uses": ["etl-api v1"]
+}

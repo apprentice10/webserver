@@ -34,13 +34,15 @@
     <!-- LEFT SIDEBAR -->
     <aside class="side" id="main-sidebar">
         <div class="side-section">
-            <div class="side-label" id="side-tools-label" data-i18n="side.tools">TOOLS</div>
+            <div class="side-label" id="side-engines-label" data-i18n="side.engines">ENGINES</div>
             <nav class="side-nav" id="tools-nav">
                 <!-- Populated by main.js -->
             </nav>
             <div class="side-actions">
-                <button class="side-new disabled" id="btn-new-tool" onclick="newTool()" data-i18n="side.new_tool">+ New Tool</button>
+                <button class="side-new disabled" id="btn-new-engine" onclick="newEngine()" data-i18n="side.new_engine">+ New Engine</button>
+                <button class="side-new disabled" id="btn-new-group" onclick="newGroup()" title="New group">+ Group</button>
             </div>
+            <div id="side-trash"></div>
         </div>
         <div class="side-bottom">
             <div class="side-label" id="side-project-label" data-i18n="side.project">PROJECT</div>
@@ -126,37 +128,39 @@
     </div>
 </div>
 
-<!-- MODAL: NEW TOOL -->
-<div class="modal-overlay" id="modal-new-tool">
+<!-- MODAL: NEW ENGINE -->
+<div class="modal-overlay" id="modal-new-engine">
     <div class="modal modal-lg">
         <div class="modal-header">
-            <h2>New Tool</h2>
-            <button class="modal-close" onclick="closeModal('modal-new-tool')">✕</button>
+            <h2>New Engine</h2>
+            <button class="modal-close" onclick="closeModal('modal-new-engine')">✕</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
-                <label>Tool type</label>
+                <label>Engine type</label>
                 <div class="catalog-grid" id="catalog-grid">
                     <p class="text-muted">Loading…</p>
                 </div>
             </div>
-            <div class="form-group" id="tool-name-group" style="display:none">
-                <label for="input-tool-name">Name</label>
-                <input type="text" id="input-tool-name" placeholder="e.g. Instruments Phase 1"
-                       onkeydown="if(event.key==='Enter') submitNewTool()">
+            <div class="form-group" id="engine-name-group" style="display:none">
+                <label for="input-engine-name">Name</label>
+                <input type="text" id="input-engine-name" placeholder="e.g. Instruments Phase 1"
+                       oninput="_validateEngineName()"
+                       onkeydown="if(event.key==='Enter') submitNewEngine()">
+                <span id="engine-name-warning" style="display:none;font-size:12px;color:var(--color-error)">An engine with this name already exists.</span>
             </div>
-            <div class="form-group" id="tool-templates-group" style="display:none">
+            <div class="form-group" id="engine-templates-group" style="display:none">
                 <label>ETL template (optional)</label>
                 <div class="templates-list" id="templates-list"></div>
-                <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+                <div id="engine-file-load-group" style="display:none;align-items:center;gap:8px;margin-top:8px">
                     <button class="btn btn-ghost btn-sm" onclick="importEtlFromFile()">📂 Load from file</button>
                     <span id="file-etl-name" style="display:none;font-size:12px;color:var(--success)"></span>
                 </div>
             </div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-outline" onclick="closeModal('modal-new-tool')">Cancel</button>
-            <button class="btn btn-primary" id="btn-create-tool" onclick="submitNewTool()" disabled>Create</button>
+            <button class="btn btn-outline" onclick="closeModal('modal-new-engine')">Cancel</button>
+            <button class="btn btn-primary" id="btn-create-engine" onclick="submitNewEngine()" disabled>Create</button>
         </div>
     </div>
 </div>
@@ -187,7 +191,43 @@
     </div>
 </div>
 
+<!-- MODAL: ENGINE MISSING (blocking — project cannot be opened) -->
+<div class="modal-overlay" id="modal-engine-missing">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Missing Engines</h2>
+        </div>
+        <div class="modal-body">
+            <p>This project requires engines that are not installed:</p>
+            <ul id="engine-missing-list" style="margin:8px 0 12px 0;padding-left:20px"></ul>
+            <p class="text-muted" style="font-size:12px">Install the required engine folders inside <code>engines/</code> and restart the server.</p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeModal('modal-engine-missing')">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: ENGINE VERSION MISMATCH (warning — user can open anyway) -->
+<div class="modal-overlay" id="modal-engine-mismatch">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Engine Version Mismatch</h2>
+        </div>
+        <div class="modal-body">
+            <p>Some engines in this project use a different version from what is installed:</p>
+            <ul id="engine-mismatch-list" style="margin:8px 0 12px 0;padding-left:20px"></ul>
+            <p class="text-muted" style="font-size:12px">Opening anyway may cause unexpected behavior.</p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="_cancelMismatchModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="_confirmMismatchModal()">Open anyway</button>
+        </div>
+    </div>
+</div>
+
 <script src="/static/js/main.js"></script>
+<script src="/static/js/sidebar_groups.js"></script>
 <script src="/static/engine/js/i18n.js"></script>
 <script src="/static/engine/js/app_shell.js"></script>
 {% block extra_js %}{% endblock %}

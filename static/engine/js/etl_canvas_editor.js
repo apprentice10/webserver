@@ -355,7 +355,7 @@ const EtlCanvasEditor = (() => {
 
     async function _loadToolCols() {
         try {
-            const data = await fetch(`/api/tools/${_toolId}/columns?db=${encodeURIComponent(_dbPath)}`).then(r => r.json());
+            const data = await fetch(`/api/engines/${_toolId}/columns?db=${encodeURIComponent(_dbPath)}`).then(r => r.json());
             _toolCols = (data || []).filter(c => !c.is_system);
         } catch (_) {}
     }

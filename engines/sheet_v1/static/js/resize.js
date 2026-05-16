@@ -44,6 +44,7 @@ const ResizeManager = (() => {
     // --------------------------------------------------------
 
     function _onMouseDown(e) {
+        if (e.button !== 0) return;
         e.preventDefault();
         e.stopPropagation();
 
@@ -67,7 +68,7 @@ const ResizeManager = (() => {
         if (!_dragging) return;
 
         const delta    = e.clientX - _startX;
-        const newWidth = Math.max(40, Math.min(_startWidth + delta, 800));
+        const newWidth = Math.max(20, _startWidth + delta);
 
         // Aggiorna visivamente in tempo reale
         _thElement.style.width = newWidth + "px";
@@ -126,7 +127,7 @@ const ResizeManager = (() => {
 
         const refEl  = document.querySelector(".cell-input") || th;
         const fitted = _measureMaxTextWidth(values, refEl);
-        const newWidth = Math.max(40, Math.min(fitted + 24, 800));
+        const newWidth = Math.max(20, fitted + 24);
 
         th.style.width = newWidth + "px";
         ColumnsManager.updateLocalWidth(columnId, newWidth);
@@ -158,9 +159,40 @@ const ResizeManager = (() => {
 
 
     // --------------------------------------------------------
+    // FIT ALL COLUMNS
+    // --------------------------------------------------------
+
+    function fitAll() {
+        const refEl = document.querySelector(".cell-input");
+        document.querySelectorAll("th[data-column-id]").forEach(th => {
+            const columnId = parseInt(th.dataset.columnId);
+            const slug     = th.dataset.slug;
+            const values   = [];
+
+            const label = th.querySelector(".th-label");
+            if (label) values.push(label.textContent.trim());
+
+            document.querySelectorAll(`input[data-field="${CSS.escape(slug)}"]`).forEach(inp => {
+                if (inp.value) values.push(inp.value);
+            });
+
+            const fitted   = _measureMaxTextWidth(values, refEl || th);
+            const newWidth = Math.max(20, fitted + 24);
+
+            th.style.width = newWidth + "px";
+            ColumnsManager.updateLocalWidth(columnId, newWidth);
+
+            ApiClient.updateColumnWidth(columnId, newWidth).catch(err => {
+                console.warn("Auto-fit error:", err.message);
+            });
+        });
+    }
+
+
+    // --------------------------------------------------------
     // API PUBBLICA
     // --------------------------------------------------------
 
-    return { init };
+    return { init, fitAll };
 
 })();

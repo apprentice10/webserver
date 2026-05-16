@@ -1,38 +1,11 @@
-I've been trying to explain this for a long time but I guess I don't get it right. I'm going to explain it as a user that doesn't know how to program but interacts with the webserver we are making:
--The dashboard for me is the base, the struccture that keeps everything linked with the data base
--The tools are like features that I can add to the dashboard, right know we only have one tool type "instrument list" (witch I want to change the name to a more generic name like "tables")
-Use this example as a real life interacction with the project:
-    -First time user installs the webserver (the tools/ folder is empty)
-    -if user opens an already made database it will list all the tools and it's version that he needs to load the database: let's say "tables V1", "typical assembly V2.3"
-    -The user then ask for these tools, copies the "tables V1" and "typical assembly V2.3" folders in the tools/ folder. (the version is for compatibility between the tool and the database we are going to have to adress that also)
-    -Reopens the database and loads everything as spected.
-
--Inside "tables V1" contains all the files for that particular tool
--Inside "typical assembly V2.3" contains all the files for that particular tool
--The only thing that both folders won't have and depend on is the style (color, text, ect) witch resides in the dashboard and will maintain the looks of the hole site the same.
-
--Now is where I find a problem and I need you to help me with: there are going to be some features (for example the ETL) that the tools uses I want also want this to behave the same as the tool
-    -Right now we have 2 types of ETL the "</> code" and the "canvas", we have to split them into 2 separate tools
-    -so when the user opens the ETL it will show only what's inside the /tools folder. if the user has 2 that basically does the same, he can switch between them like it does now.
+GRILL-ME TEXT:
+The end result I want is a carefully detailed plan bronken into steps keeping in mind that each step is going to start from a new session. you're going to link this plan into CURRENT_STATE.md to keep track of it. when asking something use language I can understand, I'm not a programmer, (I know the basics) but don't beat me up with really complex language.
 
 
 
 
-
-Whe creating a new tool, if the user selects a template, the name of the tool should load from the template, the user can change it in the textbox.
-When creating a new tool, if the user selects a template, after the user clicks "create" it should jump rirectly to the ETL of that tool with the template ready to "Preview" and "Apply" after that.
-Tools should never have the same name, if the same name is found an error message should appear warning the user and asking to change to a new one.
-Set canvas the default view when entering the ETL editor
-Delete tool option:
-    -Add a collasable trash section in the "side-section"
-    -Add a delete button on each tool
-    -When the user deletes a tool the program should check for dependecies. show the "etl-design" of that tool highlignting other tools that depends on it and ask to remove dependecy before deleting. (no tool can be deleted if another one depends on it) 
-    -When user deletes a tool it ends in the trash
-    -When a tool is in the trash its data should not be able to retrieve (hidden)
-    -When a tool is in the rtrash it can be restore: moves the tool back in the tool section
-
-New tool type ExternalStructuredSource:
-    A new type of tool that creates a table from External Structured Sources (CSV, Excel, AutoCADDXF, API):
+-New engine type ExternalStructuredSource:
+    A new type of engine that creates a table from External Structured Sources (CSV, Excel, AutoCADDXF, API):
         -Load a DXF file (Can load many files), for each DXF file:
             -Dwg gets added to a list, user can enter date (date default=today), design number, design name, Path
             -Retreaves the blocks name and attributes.
@@ -60,8 +33,8 @@ New tool type ExternalStructuredSource:
             -User can change the path of the file.
 
 
-New tool type SemiStructuredDocumentSource:
-    A new type of tool that creates a table from Semi Structured Document Sources (PDF):
+-New engine type SemiStructuredDocumentSource:
+    A new type of engine that creates a table from Semi Structured Document Sources (PDF):
         -Load a PDF file (Can load many files), for each PDF file:
             -PDF gets added to a list, user can enter date (date default=today), design number, design name, Path
             -Scan document (Extract Text Objects + Coordinates -> Spatial Grouping -> Pattern Recognition -> Context Association, Nearby texts become metadata)
@@ -74,7 +47,7 @@ New tool type SemiStructuredDocumentSource:
             -User can change the path of the file
 
 
-New tool type Excel Template-driven document generation:
+-New engine type Excel Template-driven document generation:
     Design and architect a flexible Excel Template Export System for an engineering/instrumentation web platform.
 
     The system must allow users to export ETL table data into arbitrary Excel structures/templates while keeping the user as free as possible to design the Excel layout manually.

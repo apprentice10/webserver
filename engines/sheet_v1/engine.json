@@ -1,0 +1,12 @@
+{
+  "name": "Sheet",
+  "version": "1.0",
+  "type": "engine",
+  "slug": "sheet",
+  "description": "General purpose structured data sheet.",
+  "icon": "📋",
+  "dashboard_uses": ["grid-api v1", "etl-api v1"],
+  "uses_utilities": ["etl"],
+  "ai_prompt": "This engine is a general-purpose table for structured records. Rows are individual entries, columns are user-defined fields. Supports ETL for automated data population.",
+  "supports_template": false
+}

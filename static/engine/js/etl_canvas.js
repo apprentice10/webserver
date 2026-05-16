@@ -346,7 +346,7 @@ const EtlCanvas = (() => {
 
     async function _loadToolInfo() {
         try {
-            const tools = await fetch(`/api/tools/project?db=${encodeURIComponent(_dbPath)}`).then(r => r.json());
+            const tools = await fetch(`/api/engines/project?db=${encodeURIComponent(_dbPath)}`).then(r => r.json());
             const tool  = tools.find(t => t.id === _toolId);
             if (tool) {
                 const el = document.getElementById("tool-name");
@@ -370,7 +370,7 @@ const EtlCanvas = (() => {
 
         try {
             const config = await fetch(
-                `/api/tools/${toolId}/etl/config?db=${encodeURIComponent(dbPath)}`
+                `/api/engines/${toolId}/etl/config?db=${encodeURIComponent(dbPath)}`
             ).then(r => r.json());
             _model = config.etl_model || { sources: [], transformations: [], final_relation_id: null };
         } catch (err) {
@@ -394,7 +394,7 @@ const EtlCanvas = (() => {
         if (btn) btn.disabled = true;
         try {
             const res = await fetch(
-                `/api/tools/${_toolId}/etl/run?db=${encodeURIComponent(_dbPath)}`,
+                `/api/engines/${_toolId}/etl/run?db=${encodeURIComponent(_dbPath)}`,
                 { method: "POST" }
             );
             if (!res.ok) {

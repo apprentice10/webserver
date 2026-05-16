@@ -33,6 +33,12 @@ function _removeRecent(path) {
 // Current active project (in-memory only — URL is the ground truth)
 let _activeProject = null;
 
+// Cached tool list for the active project (used for duplicate-name check)
+let _currentTools = [];
+
+// Drag state for engine reordering
+let _draggedToolId = null;
+
 
 // ── Sidebar / layout state ────────────────────────────────────────────
 
@@ -167,6 +173,9 @@ async function deleteProjectFile(event, path) {
 
 // ── Open project from path ────────────────────────────────────────────
 
+let _pendingProjectData = null;
+let _pendingUpdateUrl   = false;
+
 async function _openProjectFromPath(path, { updateUrl = true } = {}) {
     const res = await fetch('/api/project/open', {
         method: 'POST',
@@ -178,14 +187,65 @@ async function _openProjectFromPath(path, { updateUrl = true } = {}) {
         throw new Error(err.detail || 'Failed to open project');
     }
     const project = await res.json();
+
+    if (project.engine_missing && project.engine_missing.length > 0) {
+        closeModal('modal-open-project');
+        _showEngineMissingModal(project.engine_missing);
+        return project;
+    }
+    if (project.engine_version_mismatch && project.engine_version_mismatch.length > 0) {
+        closeModal('modal-open-project');
+        _showEngineMismatchModal(project, updateUrl);
+        return project;
+    }
+
+    _finalizeProjectOpen(project, updateUrl);
+    return project;
+}
+
+function _finalizeProjectOpen(project, updateUrl) {
     _addRecent(project);
     setActiveProject(project);
     if (updateUrl) {
         const url = new URL(window.location);
-        url.searchParams.set('db', path);
+        url.searchParams.set('db', project.path);
         window.history.pushState({}, '', url);
     }
-    return project;
+}
+
+function _showEngineMissingModal(missing) {
+    const list = document.getElementById('engine-missing-list');
+    if (list) {
+        list.innerHTML = missing.map(m =>
+            `<li><strong>${escapeHtml(m.slug)}</strong> — requires v${escapeHtml(m.required_version)}</li>`
+        ).join('');
+    }
+    openModal('modal-engine-missing');
+}
+
+function _showEngineMismatchModal(project, updateUrl) {
+    _pendingProjectData = project;
+    _pendingUpdateUrl   = updateUrl;
+    const list = document.getElementById('engine-mismatch-list');
+    if (list) {
+        list.innerHTML = project.engine_version_mismatch.map(m =>
+            `<li><strong>${escapeHtml(m.name || m.slug)}</strong>: installed v${escapeHtml(m.installed_version)}, project requires v${escapeHtml(m.required_version)}</li>`
+        ).join('');
+    }
+    openModal('modal-engine-mismatch');
+}
+
+function _cancelMismatchModal() {
+    _pendingProjectData = null;
+    closeModal('modal-engine-mismatch');
+}
+
+function _confirmMismatchModal() {
+    const project   = _pendingProjectData;
+    const updateUrl = _pendingUpdateUrl;
+    _pendingProjectData = null;
+    closeModal('modal-engine-mismatch');
+    if (project) _finalizeProjectOpen(project, updateUrl);
 }
 
 
@@ -289,8 +349,10 @@ function clearActiveProject() {
     if (nameEl) nameEl.textContent = 'No project open';
     const nav = document.getElementById('tools-nav');
     if (nav) nav.innerHTML = '';
-    const btn = document.getElementById('btn-new-tool');
+    const btn = document.getElementById('btn-new-engine');
     if (btn) btn.classList.add('disabled');
+    const grpBtn = document.getElementById('btn-new-group');
+    if (grpBtn) grpBtn.classList.add('disabled');
     const etlDesignBtn = document.getElementById('btn-side-etl-design');
     if (etlDesignBtn) etlDesignBtn.style.display = 'none';
 }
@@ -299,8 +361,10 @@ async function _applyProjectToUI(project) {
     const nameEl = document.getElementById('project-name');
     if (nameEl) nameEl.textContent = project.name;
 
-    const btn = document.getElementById('btn-new-tool');
+    const btn = document.getElementById('btn-new-engine');
     if (btn) btn.classList.remove('disabled');
+    const grpBtn = document.getElementById('btn-new-group');
+    if (grpBtn) grpBtn.classList.remove('disabled');
 
     const etlDesignBtn = document.getElementById('btn-side-etl-design');
     if (etlDesignBtn) {
@@ -308,38 +372,318 @@ async function _applyProjectToUI(project) {
         etlDesignBtn.style.display = '';
     }
 
+    await _loadSidebarGroups(project.path);
     if (project.tools) {
         _renderSidebarTools(project.tools, project.path);
     } else {
         try {
-            const tools = await fetch(`/api/tools/project?db=${encodeURIComponent(project.path)}`).then(r => r.json());
+            const tools = await fetch(`/api/engines/project?db=${encodeURIComponent(project.path)}`).then(r => r.json());
             _renderSidebarTools(tools, project.path);
         } catch (_) {}
     }
+    _renderTrashSection(project.path);
 
     // Run on-open backup if configured
     _runOnOpenBackup(project.path);
     _startBackupTimer(project.path);
 }
 
+let _sidebarGroups = [];
+
+async function _loadSidebarGroups(dbPath) {
+    try {
+        _sidebarGroups = await fetch(`/api/engines/groups?db=${encodeURIComponent(dbPath)}`).then(r => r.json());
+    } catch (_) {
+        _sidebarGroups = [];
+    }
+}
+
 function _renderSidebarTools(tools, dbPath) {
+    _currentTools = tools;
     const nav = document.getElementById('tools-nav');
     if (!nav) return;
-    if (!tools.length) {
-        nav.innerHTML = '<div class="side-empty">No tools — create one!</div>';
-        return;
-    }
+
     const params = new URLSearchParams(window.location.search);
     const currentToolId = params.has('tool') ? parseInt(params.get('tool')) : null;
-    nav.innerHTML = tools.map(tool => `
+
+    if (!tools.length && !_sidebarGroups.length) {
+        nav.innerHTML = '<div class="side-empty">No engines — create one!</div>';
+        return;
+    }
+
+    let html = '';
+    let globalIdx = 0;
+
+    // Ungrouped engines first (no group_id)
+    const ungrouped = tools.filter(t => !t.group_id);
+    ungrouped.forEach(tool => {
+        html += _renderSidebarTool(tool, globalIdx++, dbPath, currentToolId);
+    });
+
+    // Groups
+    const groupMap = {};
+    tools.forEach(t => { if (t.group_id) { (groupMap[t.group_id] = groupMap[t.group_id] || []).push(t); } });
+
+    _sidebarGroups.forEach(group => {
+        const members = groupMap[group.id] || [];
+        const collapsed = group.is_collapsed;
+        html += `<div class="side-group" data-group-id="${group.id}"
+                draggable="true"
+                ondragstart="SidebarGroups.onGroupDragStart(event, ${group.id})"
+                ondragover="SidebarGroups.onGroupDragOver(event)"
+                ondrop="SidebarGroups.onGroupDrop(event, ${group.id}, '${escapeAttr(dbPath)}', () => _refreshSidebarTools('${escapeAttr(dbPath)}'))">
+            <div class="side-group-header"
+                 ondragover="SidebarGroups.onGroupDragOver(event)"
+                 ondrop="SidebarGroups.onEngineDropToGroup(event, ${group.id}, '${escapeAttr(dbPath)}', () => _refreshSidebarTools('${escapeAttr(dbPath)}')); SidebarGroups.onGroupDrop(event, ${group.id}, '${escapeAttr(dbPath)}', () => _refreshSidebarTools('${escapeAttr(dbPath)}'))"
+                 onclick="_toggleGroup(${group.id}, ${collapsed ? 0 : 1}, '${escapeAttr(dbPath)}')">
+                <span class="side-group-icon">${escapeHtml(group.icon || '📁')}</span>
+                <span class="side-group-name">${escapeHtml(group.name)}</span>
+                <button class="side-group-edit" title="Edit group"
+                        onclick="_editGroup(event, ${group.id}, '${escapeAttr(dbPath)}')">✏</button>
+                <span class="side-group-caret">${collapsed ? '›' : '˅'}</span>
+            </div>`;
+        if (!collapsed) {
+            members.forEach(tool => {
+                html += _renderSidebarTool(tool, globalIdx++, dbPath, currentToolId, group.id);
+            });
+        }
+        html += '</div>';
+    });
+
+    // Ungrouped drop zone — engine dropped here gets group_id removed
+    html += `<div class="side-ungrouped-zone"
+             ondragover="event.preventDefault(); event.dataTransfer.dropEffect='move'"
+             ondrop="_onEngineDropUngrouped(event, '${escapeAttr(dbPath)}')"></div>`;
+
+    nav.innerHTML = html;
+}
+
+async function _refreshSidebarTools(dbPath) {
+    try {
+        await _loadSidebarGroups(dbPath);
+        const tools = await fetch(`/api/engines/project?db=${encodeURIComponent(dbPath)}`).then(r => r.json());
+        _renderSidebarTools(tools, dbPath);
+    } catch (_) {}
+}
+
+async function _onEngineDropUngrouped(event, dbPath) {
+    event.preventDefault();
+    const engineId = event.dataTransfer.getData('text/engine-id');
+    if (!engineId) return;
+    _draggedToolId = null;
+    try {
+        await fetch(`/api/engines/${engineId}/group?db=${encodeURIComponent(dbPath)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ group_id: null }),
+        });
+        await _refreshSidebarTools(dbPath);
+    } catch (_) {}
+}
+
+function _renderSidebarTool(tool, idx, dbPath, currentToolId, inGroupId) {
+    const groupAttr = inGroupId ? ` data-in-group="${inGroupId}"` : '';
+    return `<div class="side-item-wrap${inGroupId ? ' side-item-wrap--grouped' : ''}"
+            ondragover="_onEngineDragOver(event)"
+            ondrop="_onEngineDrop(event, ${idx}, '${escapeAttr(dbPath)}')">
         <a href="#" class="side-item${tool.id === currentToolId ? ' active' : ''}"
-           data-tool-id="${tool.id}"
-           onclick="openToolById(${tool.id}, '${escapeAttr(dbPath)}'); return false;">
+           data-tool-id="${tool.id}" data-index="${idx}"${groupAttr}
+           draggable="true"
+           onclick="openToolById(${tool.id}, '${escapeAttr(dbPath)}'); return false;"
+           ondragstart="_onEngineDragStart(event, ${tool.id})">
             <span class="si-icon">${escapeHtml(tool.icon || '📄')}</span>
             <span class="si-label">${escapeHtml(tool.name)}</span>
             ${tool.is_stale ? '<span class="si-stale" title="ETL stale"></span>' : ''}
         </a>
-    `).join('');
+        <button class="side-item-edit" title="Edit engine"
+                onclick="_editEngine(event, ${tool.id})">✏</button>
+        <button class="side-item-del" title="Delete engine"
+                onclick="_deleteEngine(event, ${tool.id}, '${escapeAttr(tool.name)}', '${escapeAttr(dbPath)}')">✕</button>
+    </div>`;
+}
+
+function _editEngine(event, toolId) {
+    event.stopPropagation();
+    event.preventDefault();
+    const btn  = event.currentTarget;
+    const wrap = btn.closest('.side-item-wrap');
+    const item = wrap ? wrap.querySelector('.side-item') : btn;
+    const icon = item ? (item.querySelector('.si-icon')?.textContent || '') : '';
+    const name = item ? (item.querySelector('.si-label')?.textContent || '') : '';
+    AppShell.openToolPopover(item || btn, { name, icon });
+}
+
+async function _toggleGroup(groupId, newCollapsed, dbPath) {
+    try {
+        await fetch(`/api/engines/groups/${groupId}?db=${encodeURIComponent(dbPath)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_collapsed: newCollapsed }),
+        });
+        const g = _sidebarGroups.find(g => g.id === groupId);
+        if (g) g.is_collapsed = newCollapsed;
+        _renderSidebarTools(_currentTools, dbPath);
+    } catch (_) {}
+}
+
+function newGroup() {
+    if (!_activeProject) return;
+    const anchor = document.getElementById('btn-new-group') || document.body;
+    SidebarGroups.openGroupPopover(anchor, {
+        onSave: async (name, icon) => {
+            try {
+                const res = await fetch(`/api/engines/groups?db=${encodeURIComponent(_activeProject.path)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, icon }),
+                });
+                if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+                _sidebarGroups.push(await res.json());
+                _renderSidebarTools(_currentTools, _activeProject.path);
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+    });
+}
+
+function _editGroup(event, groupId, dbPath) {
+    event.stopPropagation();
+    const group = _sidebarGroups.find(g => g.id === groupId);
+    if (!group) return;
+    SidebarGroups.openGroupPopover(event.currentTarget, {
+        name: group.name,
+        icon: group.icon || '📁',
+        onSave: async (name, icon) => {
+            try {
+                const res = await fetch(`/api/engines/groups/${groupId}?db=${encodeURIComponent(dbPath)}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, icon }),
+                });
+                if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+                const updated = await res.json();
+                const g = _sidebarGroups.find(g => g.id === groupId);
+                if (g) { g.name = updated.name; g.icon = updated.icon; }
+                _renderSidebarTools(_currentTools, dbPath);
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+    });
+}
+
+
+// ── Engine drag-and-drop reorder ──────────────────────────────────────
+
+function _onEngineDragStart(event, toolId) {
+    _draggedToolId = toolId;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/engine-id', String(toolId));
+}
+
+function _onEngineDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+}
+
+async function _onEngineDrop(event, targetIndex, dbPath) {
+    event.preventDefault();
+    if (_draggedToolId === null) return;
+    const draggedId = _draggedToolId;
+    _draggedToolId = null;
+    try {
+        await fetch(`/api/engines/${draggedId}/position?db=${encodeURIComponent(dbPath)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ position: targetIndex }),
+        });
+        const tools = await fetch(`/api/engines/project?db=${encodeURIComponent(dbPath)}`).then(r => r.json());
+        _renderSidebarTools(tools, dbPath);
+    } catch (_) {}
+}
+
+
+// ── Engine delete / trash ─────────────────────────────────────────────
+
+async function _deleteEngine(event, toolId, toolName, dbPath) {
+    event.stopPropagation();
+    event.preventDefault();
+    try {
+        const deps = await fetch(`/api/engines/${toolId}/dependents?db=${encodeURIComponent(dbPath)}`).then(r => r.json());
+        if (deps.length) {
+            const names = deps.map(d => `• ${d.name}`).join('\n');
+            alert(`Cannot delete "${toolName}" — these engines use its data:\n\n${names}\n\nRemove those ETL connections first.`);
+            return;
+        }
+        if (!confirm(`Move "${toolName}" to trash?`)) return;
+        await fetch(`/api/engines/${toolId}?db=${encodeURIComponent(dbPath)}`, { method: 'DELETE' });
+        _currentTools = _currentTools.filter(t => t.id !== toolId);
+        _renderSidebarTools(_currentTools, dbPath);
+        _renderTrashSection(dbPath);
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+let _trashCollapsed = true;
+
+async function _renderTrashSection(dbPath) {
+    const trashEl = document.getElementById('side-trash');
+    if (!trashEl) return;
+    try {
+        const trashed = await fetch(`/api/engines/trash?db=${encodeURIComponent(dbPath)}`).then(r => r.json());
+        if (!trashed.length) {
+            trashEl.innerHTML = '';
+            return;
+        }
+        const caret = _trashCollapsed ? '›' : '˅';
+        let html = `<div class="side-group" style="border-top:1px solid var(--border)">
+            <div class="side-group-header" onclick="_toggleTrash('${escapeAttr(dbPath)}')">
+                <span class="side-group-icon">🗑</span>
+                <span class="side-group-name">Trash (${trashed.length})</span>
+                <span class="side-group-caret">${caret}</span>
+            </div>`;
+        if (!_trashCollapsed) {
+            html += trashed.map(t => `
+                <div class="side-trash-item">
+                    <span class="si-icon">${escapeHtml(t.icon || '📄')}</span>
+                    <span class="si-label">${escapeHtml(t.name)}</span>
+                    <button title="Restore" onclick="_restoreEngine(${t.id}, '${escapeAttr(dbPath)}')">↩</button>
+                    <button title="Delete permanently" class="btn-danger-hover"
+                            onclick="_permanentDelete(${t.id}, '${escapeAttr(t.name)}', '${escapeAttr(dbPath)}')">🗑</button>
+                </div>
+            `).join('');
+        }
+        html += '</div>';
+        trashEl.innerHTML = html;
+    } catch (_) {}
+}
+
+function _toggleTrash(dbPath) {
+    _trashCollapsed = !_trashCollapsed;
+    _renderTrashSection(dbPath);
+}
+
+async function _restoreEngine(toolId, dbPath) {
+    try {
+        await fetch(`/api/engines/${toolId}/restore?db=${encodeURIComponent(dbPath)}`, { method: 'POST' });
+        const tools = await fetch(`/api/engines/project?db=${encodeURIComponent(dbPath)}`).then(r => r.json());
+        _renderSidebarTools(tools, dbPath);
+        _renderTrashSection(dbPath);
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+async function _permanentDelete(toolId, toolName, dbPath) {
+    if (!confirm(`Permanently delete all data for "${toolName}"?\n\nThis cannot be undone.`)) return;
+    try {
+        await fetch(`/api/engines/${toolId}/permanent?db=${encodeURIComponent(dbPath)}`, { method: 'DELETE' });
+        _renderTrashSection(dbPath);
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
 }
 
 
@@ -350,49 +694,66 @@ function openToolById(toolId, dbPath) {
 }
 
 
-// ── New Tool ──────────────────────────────────────────────────────────
+// ── New Engine ────────────────────────────────────────────────────────
 
-let _selectedCatalogType = null;
-let _selectedTemplateId  = null;
-let _selectedEtlSql      = null;
+function _validateEngineName() {
+    const nameInput = document.getElementById('input-engine-name');
+    const warning   = document.getElementById('engine-name-warning');
+    const createBtn = document.getElementById('btn-create-engine');
+    if (!nameInput || !createBtn) return;
+    const val = nameInput.value.trim().toLowerCase();
+    const isDuplicate = !!val && _currentTools.some(t => t.name.toLowerCase() === val);
+    if (warning) warning.style.display = isDuplicate ? '' : 'none';
+    createBtn.disabled = isDuplicate || !val;
+}
 
-async function newTool() {
+let _selectedCatalogType  = null;
+let _selectedTemplateId   = null;
+let _selectedEtlSql       = null;
+let _catalogEntriesBySlug = {};
+
+async function newEngine() {
     if (!_activeProject) return;
     _selectedCatalogType = null;
     _selectedTemplateId  = null;
     _selectedEtlSql      = null;
 
-    const nameGroup = document.getElementById('tool-name-group');
+    const nameGroup = document.getElementById('engine-name-group');
     if (nameGroup) nameGroup.style.display = 'none';
-    const templatesGroup = document.getElementById('tool-templates-group');
+    const templatesGroup = document.getElementById('engine-templates-group');
     if (templatesGroup) templatesGroup.style.display = 'none';
-    const createBtn = document.getElementById('btn-create-tool');
+    const fileLoadGroup = document.getElementById('engine-file-load-group');
+    if (fileLoadGroup) fileLoadGroup.style.display = 'none';
+    const createBtn = document.getElementById('btn-create-engine');
     if (createBtn) createBtn.disabled = true;
-    const nameInput = document.getElementById('input-tool-name');
+    const nameInput = document.getElementById('input-engine-name');
     if (nameInput) nameInput.value = '';
     const fileNameEl = document.getElementById('file-etl-name');
     if (fileNameEl) { fileNameEl.style.display = 'none'; fileNameEl.textContent = ''; }
 
-    openModal('modal-new-tool');
-    await _loadToolCatalog();
+    openModal('modal-new-engine');
+    await _loadEngineCatalog();
 }
 
-async function _loadToolCatalog() {
+async function _loadEngineCatalog() {
     const grid = document.getElementById('catalog-grid');
     if (!grid) return;
     grid.innerHTML = "<p class='text-muted'>Loading…</p>";
     try {
-        const types = await fetch('/api/tools/types').then(r => r.json());
+        const types = await fetch('/api/engines/catalog').then(r => r.json());
         if (!types.length) {
-            grid.innerHTML = "<p class='text-muted'>No tool types available.</p>";
+            grid.innerHTML = "<p class='text-muted'>No engines found. Copy an engine folder into your <code>engines/</code> directory.</p>";
             return;
         }
+        _catalogEntriesBySlug = {};
+        types.forEach(t => { _catalogEntriesBySlug[t.slug] = t; });
         grid.innerHTML = types.map(t => `
-            <div class="catalog-card" data-type-slug="${escapeHtml(t.type_slug)}"
-                 onclick="selectCatalogType('${escapeAttr(t.type_slug)}', '${escapeAttr(t.name)}', '${escapeAttr(t.icon)}')">
-                <div class="catalog-card-icon">${escapeHtml(t.icon)}</div>
+            <div class="catalog-card" data-slug="${escapeHtml(t.slug)}"
+                 onclick="selectEngineType('${escapeAttr(t.slug)}')">
+                <div class="catalog-card-icon">${escapeHtml(t.icon || '📄')}</div>
                 <div class="catalog-card-name">${escapeHtml(t.name)}</div>
-                <div class="catalog-card-desc">${escapeHtml(t.description)}</div>
+                <div class="catalog-card-version" style="font-size:11px;color:var(--color-text-muted)">v${escapeHtml(t.version)}</div>
+                <div class="catalog-card-desc">${escapeHtml(t.description || '')}</div>
             </div>
         `).join('');
     } catch (err) {
@@ -400,25 +761,34 @@ async function _loadToolCatalog() {
     }
 }
 
-function selectCatalogType(typeSlug, typeName, typeIcon) {
-    _selectedCatalogType = { typeSlug, typeName, typeIcon };
-    _selectedTemplateId  = null;
+function selectEngineType(slug) {
+    const entry = _catalogEntriesBySlug[slug];
+    if (!entry) return;
+    _selectedCatalogType = {
+        typeSlug:        entry.slug,
+        typeName:        entry.name,
+        typeIcon:        entry.icon || '📄',
+        engineVersion:   entry.version,
+        supportsTemplate: !!entry.supports_template,
+    };
+    _selectedTemplateId = null;
 
     document.querySelectorAll('.catalog-card').forEach(el => {
-        el.classList.toggle('selected', el.dataset.typeSlug === typeSlug);
+        el.classList.toggle('selected', el.dataset.slug === slug);
     });
 
-    const nameGroup = document.getElementById('tool-name-group');
+    const nameGroup = document.getElementById('engine-name-group');
     if (nameGroup) nameGroup.style.display = 'flex';
-    const nameInput = document.getElementById('input-tool-name');
-    if (nameInput && !nameInput.value) nameInput.value = typeName;
+    const nameInput = document.getElementById('input-engine-name');
+    if (nameInput && !nameInput.value) nameInput.value = entry.name;
     if (nameInput) nameInput.focus();
-    const createBtn = document.getElementById('btn-create-tool');
-    if (createBtn) createBtn.disabled = false;
+    _validateEngineName();
 
-    _loadTemplatesInModal(typeSlug);
-    const templatesGroup = document.getElementById('tool-templates-group');
+    _loadTemplatesInModal(slug);
+    const templatesGroup = document.getElementById('engine-templates-group');
     if (templatesGroup) templatesGroup.style.display = 'flex';
+    const fileLoadGroup = document.getElementById('engine-file-load-group');
+    if (fileLoadGroup) fileLoadGroup.style.display = entry.supports_template ? 'flex' : 'none';
 }
 
 async function _loadTemplatesInModal(typeSlug) {
@@ -427,7 +797,7 @@ async function _loadTemplatesInModal(typeSlug) {
     const params = new URLSearchParams({ db: _activeProject.path });
     if (typeSlug) params.set('type_slug', typeSlug);
     try {
-        const templates = await fetch(`/api/tools/templates?${params}`).then(r => r.json());
+        const templates = await fetch(`/api/engines/templates?${params}`).then(r => r.json());
         if (!templates.length) {
             list.innerHTML = '<div style="font-size:12px;color:var(--color-text-muted)">No saved templates.</div>';
             return;
@@ -491,36 +861,46 @@ async function deleteTemplateFromModal(event, templateId, typeSlug) {
     if (!confirm('Delete this template?')) return;
     if (!_activeProject) return;
     try {
-        await fetch(`/api/tools/templates/${templateId}?db=${encodeURIComponent(_activeProject.path)}`, { method: 'DELETE' });
+        await fetch(`/api/engines/templates/${templateId}?db=${encodeURIComponent(_activeProject.path)}`, { method: 'DELETE' });
         await _loadTemplatesInModal(typeSlug);
     } catch (err) {
         alert('Error: ' + err.message);
     }
 }
 
-async function submitNewTool() {
+async function submitNewEngine() {
     if (!_selectedCatalogType || !_activeProject) return;
-    const nameInput = document.getElementById('input-tool-name');
+    const nameInput = document.getElementById('input-engine-name');
     const name = nameInput ? nameInput.value.trim() : _selectedCatalogType.typeName;
     if (!name) { alert('Tool name is required.'); return; }
 
-    const createBtn = document.getElementById('btn-create-tool');
+    const createBtn = document.getElementById('btn-create-engine');
     if (createBtn) createBtn.disabled = true;
 
     try {
-        const payload = { name, tool_type: _selectedCatalogType.typeSlug, icon: _selectedCatalogType.typeIcon };
+        const payload = {
+            name,
+            tool_type:      _selectedCatalogType.typeSlug,
+            engine_version: _selectedCatalogType.engineVersion,
+            icon:           _selectedCatalogType.typeIcon,
+        };
         if (_selectedTemplateId) payload.template_id = _selectedTemplateId;
         else if (_selectedEtlSql) payload.etl_sql = _selectedEtlSql;
 
-        const res = await fetch(`/api/tools/project?db=${encodeURIComponent(_activeProject.path)}`, {
+        const res = await fetch(`/api/engines/project?db=${encodeURIComponent(_activeProject.path)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
         if (!res.ok) throw new Error((await res.json()).detail || 'Tool creation failed');
         const tool = await res.json();
-        closeModal('modal-new-tool');
-        window.location.href = `/tool?db=${encodeURIComponent(_activeProject.path)}&tool=${tool.id}`;
+        const hasTemplate = _selectedTemplateId || _selectedEtlSql;
+        closeModal('modal-new-engine');
+        if (hasTemplate) {
+            window.location.href = `/etl?db=${encodeURIComponent(_activeProject.path)}&tool=${tool.id}`;
+        } else {
+            window.location.href = `/tool?db=${encodeURIComponent(_activeProject.path)}&tool=${tool.id}`;
+        }
     } catch (err) {
         alert('Error: ' + err.message);
         if (createBtn) createBtn.disabled = false;

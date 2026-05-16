@@ -4,10 +4,10 @@ const I18n = (() => {
     const _tables = {
         it: {
             'app.name': 'Instrument Manager',
-            'side.tools': 'STRUMENTI',
+            'side.engines': 'MOTORI',
             'side.project': 'PROGETTO',
             'side.settings': 'Impostazioni',
-            'side.new_tool': '+ Nuovo Tool',
+            'side.new_engine': '+ Nuovo Engine',
             'toolbar.search': 'Cerca per TAG, servizio, tipo…',
             'toolbar.density': 'Densità',
             'toolbar.dense': 'Densa',
@@ -82,10 +82,10 @@ const I18n = (() => {
         },
         en: {
             'app.name': 'Instrument Manager',
-            'side.tools': 'TOOLS',
+            'side.engines': 'ENGINES',
             'side.project': 'PROJECT',
             'side.settings': 'Settings',
-            'side.new_tool': '+ New Tool',
+            'side.new_engine': '+ New Engine',
             'toolbar.search': 'Search by TAG, service, type…',
             'toolbar.density': 'Density',
             'toolbar.dense': 'Dense',

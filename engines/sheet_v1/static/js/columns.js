@@ -110,7 +110,7 @@ const ColumnsManager = (() => {
             }
 
             html += `
-                <th style="width:${col.width}px;min-width:40px"
+                <th style="width:${col.width}px;min-width:20px"
                     data-column-id="${col.id}"
                     data-slug="${col.slug}"
                     data-is-system="${col.is_system ? 1 : 0}"
@@ -406,8 +406,9 @@ const ColumnsManager = (() => {
             const name = _ctxColName;
             _closeColContextMenu();
 
-            if (action === "rename")   renameColumn(id, name);
-            if (action === "delete")   deleteColumn(id, name);
+            if (action === "rename")       renameColumn(id, name);
+            if (action === "delete")       deleteColumn(id, name);
+            if (action === "fit-all-cols") ResizeManager.fitAll();
             if (action === "hide-col") {
                 const col = _columns.find(c => c.id === id);
                 if (col) hideColumn(col.slug);

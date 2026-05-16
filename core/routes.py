@@ -1,4 +1,4 @@
-"""
+﻿"""
 core/routes.py
 --------------
 Project management, filesystem browser, and ETL graph/run endpoints.
@@ -16,7 +16,8 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from engine.project_db import create_project_db, open_project_db, SCHEMA_VERSION
+from dashboard.catalog import check_requirements
+from dashboard.project_db import create_project_db, open_project_db, SCHEMA_VERSION
 
 router    = APIRouter(tags=["project"])
 fs_router = APIRouter(prefix="/api/fs", tags=["filesystem"])
@@ -102,7 +103,11 @@ def open_project(data: ProjectOpenBody):
             "SELECT name, client, description FROM _project LIMIT 1"
         ).fetchone()
         tools = conn.execute(
-            "SELECT id, name, slug, icon, tool_type, is_stale FROM _tools ORDER BY id"
+            "SELECT id, name, slug, icon, tool_type, is_stale, group_id FROM _tools"
+            " WHERE is_trashed = 0 OR is_trashed IS NULL ORDER BY position, id"
+        ).fetchall()
+        tool_reqs = conn.execute(
+            "SELECT DISTINCT tool_type, engine_version FROM _tools WHERE is_trashed = 0 OR is_trashed IS NULL"
         ).fetchall()
     except sqlite3.OperationalError:
         conn.close()
@@ -111,12 +116,15 @@ def open_project(data: ProjectOpenBody):
         conn.close()
     if not row:
         raise HTTPException(400, "Not a valid project file (no project record)")
+    compat = check_requirements([(r["tool_type"], r["engine_version"]) for r in tool_reqs])
     return {
-        "path":        str(db_path),
-        "name":        row["name"],
-        "client":      row["client"],
-        "description": row["description"],
-        "tools":       [dict(t) for t in tools],
+        "path":                    str(db_path),
+        "name":                    row["name"],
+        "client":                  row["client"],
+        "description":             row["description"],
+        "tools":                   [dict(t) for t in tools],
+        "engine_missing":          compat["missing"],
+        "engine_version_mismatch": compat["mismatched"],
     }
 
 
@@ -219,7 +227,7 @@ def get_etl_graph(db: str = Query(...)):
 
 @router.post("/api/project/etl-run-stale")
 def etl_run_stale(db: str = Query(...)):
-    from engine.etl import etl_run_saved
+    from dashboard.etl import etl_run_saved
     conn = _open(db)
     try:
         rows = conn.execute(
@@ -251,7 +259,7 @@ def etl_run_stale(db: str = Query(...)):
 
 @router.post("/api/project/etl-run-all")
 def etl_run_all(db: str = Query(...)):
-    from engine.etl import etl_apply
+    from dashboard.etl import etl_apply
     conn = _open(db)
     try:
         rows = conn.execute(

@@ -1,0 +1,10 @@
+{
+  "name": "Canvas ETL",
+  "version": "1.0",
+  "type": "utility",
+  "utility_category": "etl",
+  "slug": "canvas-etl",
+  "description": "Design ETL transformations visually on a canvas.",
+  "icon": "◈",
+  "dashboard_uses": ["etl-api v1"]
+}

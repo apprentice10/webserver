@@ -18,7 +18,7 @@
 | deleteColumn | 290–320 | confirm + ETL warning |
 | updateLocalWidth | 325–328 | Called by ResizeManager |
 | Utility | 333–345 | `_toSlug`, `_escHtml`, `_escAttr` |
-| Column header context menu | 350–450 | Hide/Show hidden submenu; rename; delete |
+| Column header context menu | 350–450 | Hide/Show hidden submenu; rename; delete; fit-all-cols → ResizeManager.fitAll() |
 
 ---
 

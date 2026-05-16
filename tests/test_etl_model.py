@@ -1,6 +1,6 @@
-from engine.etl_compiler import compile_sql, validate_model, EtlValidationError
-from engine.etl_model import model_from_dict
-from engine.sql_to_model import sql_to_model, _tokenize_expr, _parse_expr, _try_rewrite_split_part
+﻿from dashboard.etl_compiler import compile_sql, validate_model, EtlValidationError
+from dashboard.etl_model import model_from_dict
+from dashboard.sql_to_model import sql_to_model, _tokenize_expr, _parse_expr, _try_rewrite_split_part
 import pytest
 
 
@@ -1008,7 +1008,7 @@ def test_parse_case_expression():
 
 def test_parse_concat_with_separator():
     """a || ' ' || b with uniform separator → CONCAT_WS(' ', a, b)."""
-    from engine.sql_to_model import _mask_strings
+    from dashboard.sql_to_model import _mask_strings
     masked, str_tbl = _mask_strings("a || ' ' || b")
     result = _parse_expr(masked, str_tbl)
     assert result["type"] == "function"

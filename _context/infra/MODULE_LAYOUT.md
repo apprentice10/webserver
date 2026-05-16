@@ -6,65 +6,81 @@
 
 ---
 
-## Backend
+## Backend — Shared Platform (`dashboard/`)
 
 | Module | Responsibility |
 |--------|---------------|
-| `main.py` | FastAPI app setup, static files, page routes |
+| `main.py` | FastAPI app setup, static files, page routes, dynamic engine loader |
 | `core/routes.py` | `/api/project/` CRUD (new, open, delete, backup, fs browse) |
-| `engine/project_db.py` | Per-project DB setup, `get_project_conn`, `SYSTEM_COLUMN_DEFS`, `audit()`, `_run_migrations` |
-| `engine/routes.py` | `/api/tools/` core endpoints — thin layer, delegates to service |
-| `engine/routes_flags.py` | Flag CRUD + cell-flag toggle endpoints |
-| `engine/routes_etl.py` | ETL compile/preview/apply/run/save/config/schema endpoints |
-| `engine/routes_export.py` | Excel export endpoint |
-| `engine/service.py` | Core business logic: get_tool, get_rows, update_cell, create_row, get_columns |
-| `engine/service_columns.py` | Column CRUD: add, update, delete, reorder, resize |
-| `engine/service_row_ops.py` | Row mutations: soft/hard delete, restore, paste, rollback, override |
-| `engine/service_templates.py` | ETL template CRUD |
-| `engine/staleness.py` | ETL staleness helpers: `mark_tool_stale`, `mark_dependents_stale` |
-| `engine/etl.py` | ETL preview/apply/run/save/schema |
-| `engine/etl_model.py` | ETL model dataclasses (`EtlModel`, all transformation types) |
-| `engine/etl_compiler.py` | ETL compiler orchestration: `compile_sql` |
-| `engine/etl_compiler_expr.py` | Expression-to-SQL cluster: `expr_to_sql`, grammar constants |
-| `engine/etl_compiler_graph.py` | Graph utilities: `_kahn_sort`, `_collect_ancestors`, `_output_aliases_for` |
-| `engine/etl_compiler_validate.py` | Validation helpers: `validate_model`, `_validate_expr` |
-| `engine/sql_parser.py` | SQL parsing: table refs, col lineage, alias resolution |
-| `engine/sql_to_model.py` | SQL → ETL model conversion (reverse compiler) |
-| `engine/sql_to_model_expr.py` | Expression subsystem for sql_to_model |
-| `engine/sql_to_model_lexer.py` | SQL lexer utilities for sql_to_model |
-| `engine/schemas.py` | All Pydantic request/response models |
-| `engine/utils.py` | `slugify`, `now_str`, `format_log_entry`, `append_log` |
-| `engine/catalog.py` | Dynamic scanner: `tools/*/tool.json` → `TOOL_CATALOG` |
-| `tools/instrument_list/tool.json` | Plugin manifest for Instrument List |
+| `dashboard/project_db.py` | Per-project DB setup, `get_project_conn`, `SYSTEM_COLUMN_DEFS`, `audit()`, `_run_migrations` |
+| `dashboard/routes_etl.py` | ETL compile/preview/apply/run/save/config/schema endpoints |
+| `dashboard/staleness.py` | ETL staleness helpers: `mark_tool_stale`, `mark_dependents_stale` |
+| `dashboard/etl.py` | ETL preview/apply/run/save/schema |
+| `dashboard/etl_model.py` | ETL model dataclasses (`EtlModel`, all transformation types) |
+| `dashboard/etl_compiler.py` | ETL compiler orchestration: `compile_sql` |
+| `dashboard/etl_compiler_expr.py` | Expression-to-SQL cluster: `expr_to_sql`, grammar constants |
+| `dashboard/etl_compiler_graph.py` | Graph utilities: `_kahn_sort`, `_collect_ancestors`, `_output_aliases_for` |
+| `dashboard/etl_compiler_validate.py` | Validation helpers: `validate_model`, `_validate_expr` |
+| `dashboard/sql_parser.py` | SQL parsing: table refs, col lineage, alias resolution |
+| `dashboard/sql_to_model.py` | SQL → ETL model conversion (reverse compiler) |
+| `dashboard/sql_to_model_expr.py` | Expression subsystem for sql_to_model |
+| `dashboard/sql_to_model_lexer.py` | SQL lexer utilities for sql_to_model |
+| `dashboard/schemas.py` | Shared Pydantic base models (non-Sheet-specific) |
+| `dashboard/utils.py` | `slugify`, `now_str`, `format_log_entry`, `append_log` |
+| `dashboard/catalog.py` | Dynamic scanner: `engines/*/engine.json` → `ENGINE_CATALOG` |
+
+## Backend — Sheet V1 Engine (`engines/sheet_v1/backend/`)
+
+| Module | Responsibility |
+|--------|---------------|
+| `engines/sheet_v1/backend/routes.py` | Combined router — aggregates all Sheet sub-routers for dynamic loader |
+| `engines/sheet_v1/backend/routes_main.py` | Core Sheet endpoints: engine CRUD, column CRUD, row CRUD, cell update, audit, SQL query |
+| `engines/sheet_v1/backend/routes_flags.py` | Flag CRUD + cell-flag toggle endpoints |
+| `engines/sheet_v1/backend/routes_export.py` | Excel export endpoint |
+| `engines/sheet_v1/backend/routes_revisions.py` | Revision system: create, list, delete, revert |
+| `engines/sheet_v1/backend/schemas.py` | Sheet V1 Pydantic request/response models |
+| `engines/sheet_v1/backend/service.py` | Core business logic: engine CRUD, get_rows, update_cell, create_row, get_columns |
+| `engines/sheet_v1/backend/service_columns.py` | Column CRUD: add, update, delete, reorder, resize |
+| `engines/sheet_v1/backend/service_row_ops.py` | Row mutations: soft/hard delete, restore, paste, rollback, override |
+| `engines/sheet_v1/backend/service_templates.py` | ETL template CRUD |
+| `engines/sheet_v1/engine.json` | Plugin manifest for Sheet engine |
 | `_legacy/instrument_list/` | Dead code — **do not read** |
 
 ---
 
-## Frontend — Root modules (`static/engine/js/`)
+## Frontend — Shared Dashboard (`static/engine/js/`)
 
 | Module | Responsibility |
 |--------|---------------|
 | `utils.js` | `escHtml`, `escAttr`, `showToast`, `formatTimestamp` |
 | `api.js` | HTTP client — sole module allowed to `fetch` |
-| `columns.js` | Column management IIFE |
-| `resize.js` | Column resize + auto-fit |
-| `paste.js` | Excel/CSV paste (range + append) |
-| `grid.js` | Grid orchestration: render, virtual scroll, init, public API |
-| `toolbar.js` | Toolbar actions, settings, ETL run |
-| `sidebar.js` | Thin adapter over PanelSystem for sidebar open/close/toggle |
-| `sql_editor.js` | Power SQL Editor panel |
-| `etl_editor.js` | ETL Editor standalone page orchestration |
 | `panel_system.js` | Panel registry, dock layout, float management, state persistence |
-| `flags.js` | Flag management sidebar IIFE |
 | `i18n.js` | EN/IT string tables, `applyLocale()`, `setLang()` |
 | `app_shell.js` | Theme/accent/density management, settings modal, tool-pill, REV chip |
 | `etl_canvas.js` | Project-level ETL DAG view (read-only node graph) |
 | `etl_design.js` | ETL design canvas navigation |
+| `etl-editor/etl-expr.js` | ETL expression DSL tokenize/parse/serialize |
+| `etl-editor/etl-model-renderer.js` | 7 public render functions for ETL model UI |
+| `etl-editor/etl-preview-renderer.js` | `renderPreview`, `renderApplyResult`, `showMsg` |
+| `etl-editor/etl-persistence.js` | Templates + file I/O + `etl:loadModel` event bridge |
+| `etl_canvas_editor.js` | Interactive ETL canvas editor (node drag, SVG edges, side panel) |
+| `etl_canvas_panel.js` | Type-specific side panels for canvas node editing |
+| `etl_canvas_preview.js` | Edge-click partial preview panel |
+| `etl_dsl.js` | Restricted DSL formula bar (recursive-descent parser + serializer) |
 
-## Frontend — Subsystem modules
+## Frontend — Sheet V1 Engine (`engines/sheet_v1/static/js/`)
 
 | Module | Responsibility |
 |--------|---------------|
+| `grid.js` | Grid orchestration: render, virtual scroll, init, public API |
+| `toolbar.js` | Toolbar actions, settings, ETL run |
+| `columns.js` | Column management IIFE |
+| `sidebar.js` | Thin adapter over PanelSystem for sidebar open/close/toggle |
+| `flags.js` | Flag management sidebar IIFE |
+| `paste.js` | Excel/CSV paste (range + append) |
+| `resize.js` | Column resize + auto-fit |
+| `sql_editor.js` | Power SQL Editor panel |
+| `etl_editor.js` | ETL Editor standalone page orchestration |
 | `history/history-api.js` | Thin wrappers over `ApiClient.getAudit` + `rollbackCell` |
 | `history/history-renderer.js` | `renderAuditEntries`, `exportLog` — pure HTML generators |
 | `history/history-panel.js` | `showRowLog`, `showCellLog`, `showRangeLog` — owns `_logSidebarCtx` |
@@ -79,14 +95,7 @@
 | `cell-save/cell-save.js` | `doSaveCell`, `updateLogCell` |
 | `panels/panel-floats.js` | Float panel create/drag/resize/proximity-snap |
 | `panels/panel-tab-bar.js` | Tab HTML, render, drag-reorder, drag-to-float |
-| `etl-editor/etl-expr.js` | ETL expression DSL tokenize/parse/serialize |
-| `etl-editor/etl-model-renderer.js` | 7 public render functions for ETL model UI |
-| `etl-editor/etl-preview-renderer.js` | `renderPreview`, `renderApplyResult`, `showMsg` |
-| `etl-editor/etl-persistence.js` | Templates + file I/O + `etl:loadModel` event bridge |
-| `etl_canvas_editor.js` | Interactive ETL canvas editor (node drag, SVG edges, side panel) |
-| `etl_canvas_panel.js` | Type-specific side panels for canvas node editing |
-| `etl_canvas_preview.js` | Edge-click partial preview panel |
-| `etl_dsl.js` | Restricted DSL formula bar (recursive-descent parser + serializer) |
+| `revision-picker/revision-picker.js` | Revision selector UI component |
 
 ---
 
@@ -95,11 +104,11 @@
 | File | Responsibility |
 |------|---------------|
 | `static/css/main.css` | Design tokens, app shell, theme/accent/density |
-| `static/engine/css/grid.css` | Grid, gutter, context menu, range readout |
-| `static/engine/css/panel_system.css` | Dock zones, tab groups, floating windows |
-| `static/engine/css/panels.css` | Sidebar panel content, info, log, history styles |
-| `static/engine/css/sidebar.css` | Sidebar shell, flag sidebar |
-| `static/engine/css/etl_canvas.css` | ETL canvas node/edge styles |
+| `static/engine/css/panel_system.css` | Dock zones, tab groups, floating windows (shared) |
+| `static/engine/css/etl_canvas.css` | ETL canvas node/edge styles (shared, moves in R7) |
+| `engines/sheet_v1/static/css/grid.css` | Grid, gutter, context menu, range readout |
+| `engines/sheet_v1/static/css/panels.css` | Sidebar panel content, info, log, history styles |
+| `engines/sheet_v1/static/css/sidebar.css` | Sidebar shell, flag sidebar |
 
 ---
 

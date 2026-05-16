@@ -5,7 +5,7 @@
 {% block extra_css %}
 <link rel="stylesheet" href="/static/engine/css/layout.css">
 <link rel="stylesheet" href="/static/engine/css/toolbar.css">
-<link rel="stylesheet" href="/static/engine/css/grid.css">
+<link rel="stylesheet" href="/engines/sheet_v1/static/css/grid.css">
 <link rel="stylesheet" href="/static/engine/css/note.css">
 <link rel="stylesheet" href="/static/engine/css/sql_editor.css">
 <link rel="stylesheet" href="/static/engine/css/modal.css">
@@ -537,10 +537,7 @@
         <span class="etl-page-title">ETL Editor</span>
         <span class="etl-page-tool-name" id="etl-tool-name">—</span>
         <div style="flex:1"></div>
-        <div class="ecv-view-toggle">
-            <button id="ecv-btn-canvas" class="ecv-toggle-btn" onclick="EtlCanvasEditor.activate()">⬡ Canvas</button>
-            <button id="ecv-btn-code"   class="ecv-toggle-btn ecv-toggle-btn--active" onclick="EtlCanvasEditor.deactivate()">&#60;/&#62; Code</button>
-        </div>
+        <div class="ecv-view-toggle" id="ecv-view-toggle"></div>
     </div>
 
     <div class="etl-page-body" id="ecv-code-view">
@@ -728,20 +725,55 @@
 <script src="/static/engine/js/etl-editor/etl-model-renderer.js"></script>
 <script src="/static/engine/js/etl-editor/etl-preview-renderer.js"></script>
 <script src="/static/engine/js/etl-editor/etl-persistence.js"></script>
-<script src="/static/engine/js/etl_editor.js"></script>
+<script src="/engines/sheet_v1/static/js/etl_editor.js"></script>
 <script src="/static/engine/js/etl_dsl.js"></script>
 <script src="/static/engine/js/etl_canvas_panel.js"></script>
 <script src="/static/engine/js/etl_canvas_preview.js"></script>
 <script src="/static/engine/js/etl_canvas_editor.js"></script>
 <script>
+    function _activateEtlUtility(slug) {
+        document.querySelectorAll(".ecv-toggle-btn").forEach(b => b.classList.remove("ecv-toggle-btn--active"));
+        const btn = document.getElementById("ecv-btn-util-" + slug);
+        if (btn) btn.classList.add("ecv-toggle-btn--active");
+        localStorage.setItem("etl_last_utility_" + TOOL_ID, slug);
+        if (slug === "canvas-etl") EtlCanvasEditor.activate();
+        else EtlCanvasEditor.deactivate();
+    }
+
+    function _escHtml(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
     document.addEventListener("DOMContentLoaded", async () => {
-        // Carica nome tool
         try {
             const tool = await ApiClient.loadTool();
             document.getElementById("etl-tool-name").textContent = `— ${tool.name}`;
             document.getElementById("rev-badge").textContent = `REV ${tool.current_rev}`;
             document.title = `ETL — ${tool.name}`;
         } catch (e) {}
+
+        // Utility discovery — builds the view-switcher from installed ETL utilities.
+        try {
+            const utils = await ApiClient.getUtilities("etl");
+            const toggle = document.getElementById("ecv-view-toggle");
+            if (utils.length === 0) {
+                toggle.innerHTML = `<span class="ecv-no-utility">No ETL utility installed. Copy an ETL utility folder into your engines/ directory.</span>`;
+            } else if (utils.length === 1) {
+                // Single utility installed — activate it silently, no switcher shown.
+                const u = utils[0];
+                if (u.slug === "canvas-etl") EtlCanvasEditor.activate();
+            } else {
+                // Multiple utilities — render switcher tabs.
+                const lastUsed = localStorage.getItem("etl_last_utility_" + TOOL_ID) || "canvas-etl";
+                toggle.innerHTML = utils.map(u => {
+                    const active = u.slug === lastUsed ? " ecv-toggle-btn--active" : "";
+                    return `<button id="ecv-btn-util-${u.slug}" class="ecv-toggle-btn${active}" onclick="_activateEtlUtility('${u.slug}')">${_escHtml(u.icon)} ${_escHtml(u.name)}</button>`;
+                }).join("");
+                if (lastUsed === "canvas-etl") EtlCanvasEditor.activate();
+            }
+        } catch (e) {
+            console.warn("Could not load ETL utilities:", e);
+        }
 
         await EtlEditor.init();
         EtlCanvasEditor.init(DB_PATH, TOOL_ID);

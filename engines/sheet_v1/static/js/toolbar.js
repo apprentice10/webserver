@@ -55,8 +55,8 @@ const ToolbarManager = (() => {
         document.title = `${_tool.name} — Instrument Manager`;
 
         // Topbar breadcrumb — tool pill
-        const pillName = document.querySelector('#topbar-tool-pill .pill-name');
-        const pillIcon = document.querySelector('#topbar-tool-pill .tool-icon');
+        const pillName = document.querySelector('#topbar-engine-pill .pill-name');
+        const pillIcon = document.querySelector('#topbar-engine-pill .tool-icon');
         if (pillName) pillName.textContent = _tool.name;
         if (pillIcon) pillIcon.textContent  = _tool.icon || '📄';
 
@@ -250,7 +250,7 @@ const ToolbarManager = (() => {
     // --------------------------------------------------------
 
     function exportExcel() {
-        const url = `/api/tools/${TOOL_ID}/export/excel?db=${encodeURIComponent(DB_PATH)}`;
+        const url = `/api/engines/${TOOL_ID}/export/excel?db=${encodeURIComponent(DB_PATH)}`;
         window.location.href = url;
     }
 

@@ -13,43 +13,43 @@
 | Pattern | Descrizione |
 |---------|-------------|
 | `/api/projects/` | CRUD progetti (registry DB) |
-| `/api/tools/project/{project_id}` | Lista/crea tool per progetto |
-| `/api/tools/{tool_id}/*` | Colonne, righe, celle, ETL, SQL |
+| `/api/engines/project/{project_id}` | Lista/crea tool per progetto |
+| `/api/engines/{tool_id}/*` | Colonne, righe, celle, ETL, SQL |
 
-### Dettaglio `/api/tools/{tool_id}/*`
+### Dettaglio `/api/engines/{tool_id}/*`
 
 Tutti richiedono `?project_id=N` per ownership validation.
 
 | Metodo + Path | Descrizione |
 |---------------|-------------|
-| `GET /api/tools/{tid}?project_id=` | Get tool metadata |
-| `PUT /api/tools/{tid}/settings?project_id=` | Update nome/icona/rev |
-| `GET /api/tools/{tid}/columns?project_id=` | Lista colonne |
-| `POST /api/tools/{tid}/columns?project_id=` | Aggiungi colonna |
-| `PUT /api/tools/{tid}/columns/reorder?project_id=` | Riordina colonne (PRIMA di PATCH!) |
-| `PATCH /api/tools/{tid}/columns/{col_id}?project_id=` | Update colonna |
-| `DELETE /api/tools/{tid}/columns/{col_id}?project_id=` | Elimina colonna |
-| `GET /api/tools/{tid}/rows?project_id=` | Lista righe |
-| `POST /api/tools/{tid}/rows?project_id=` | Crea riga |
-| `PATCH /api/tools/{tid}/rows/{row_id}/cell?project_id=` | Update cella |
-| `DELETE /api/tools/{tid}/rows/{row_id}?project_id=` | Soft delete riga |
-| `POST /api/tools/{tid}/rows/{row_id}/restore?project_id=` | Restore riga |
-| `DELETE /api/tools/{tid}/rows/{row_id}/hard?project_id=` | Hard delete (trash only) |
-| `POST /api/tools/{tid}/rows/paste?project_id=` | Paste multi-riga |
-| `POST /api/tools/{tid}/sql?project_id=` | Power SQL editor |
-| `POST /api/tools/{tid}/etl/preview?project_id=` | Anteprima ETL |
-| `POST /api/tools/{tid}/etl/apply?project_id=` | Applica ETL |
-| `POST /api/tools/{tid}/etl/run?project_id=` | Run ETL salvato (topologico) |
-| `POST /api/tools/{tid}/etl/save?project_id=` | Salva versione ETL |
-| `GET /api/tools/{tid}/etl/config?project_id=` | Get config ETL corrente |
-| `GET /api/tools/{tid}/etl/schema?project_id=` | Schema browser |
-| `GET /api/tools/templates?project_id=&type_slug=` | Lista template ETL |
-| `POST /api/tools/templates?project_id=` | Salva template |
-| `DELETE /api/tools/templates/{tmpl_id}` | Elimina template |
-| `GET /api/tools/flags?project_id=` | Lista flag progetto |
-| `POST /api/tools/flags?project_id=` | Crea nuovo flag (non-system) |
-| `PATCH /api/tools/flags/{flag_id}?project_id=` | Aggiorna colore (tutti) o nome (non-system) |
-| `DELETE /api/tools/flags/{flag_id}?project_id=` | Elimina flag (solo non-system) |
+| `GET /api/engines/{tid}?project_id=` | Get tool metadata |
+| `PUT /api/engines/{tid}/settings?project_id=` | Update nome/icona/rev |
+| `GET /api/engines/{tid}/columns?project_id=` | Lista colonne |
+| `POST /api/engines/{tid}/columns?project_id=` | Aggiungi colonna |
+| `PUT /api/engines/{tid}/columns/reorder?project_id=` | Riordina colonne (PRIMA di PATCH!) |
+| `PATCH /api/engines/{tid}/columns/{col_id}?project_id=` | Update colonna |
+| `DELETE /api/engines/{tid}/columns/{col_id}?project_id=` | Elimina colonna |
+| `GET /api/engines/{tid}/rows?project_id=` | Lista righe |
+| `POST /api/engines/{tid}/rows?project_id=` | Crea riga |
+| `PATCH /api/engines/{tid}/rows/{row_id}/cell?project_id=` | Update cella |
+| `DELETE /api/engines/{tid}/rows/{row_id}?project_id=` | Soft delete riga |
+| `POST /api/engines/{tid}/rows/{row_id}/restore?project_id=` | Restore riga |
+| `DELETE /api/engines/{tid}/rows/{row_id}/hard?project_id=` | Hard delete (trash only) |
+| `POST /api/engines/{tid}/rows/paste?project_id=` | Paste multi-riga |
+| `POST /api/engines/{tid}/sql?project_id=` | Power SQL editor |
+| `POST /api/engines/{tid}/etl/preview?project_id=` | Anteprima ETL |
+| `POST /api/engines/{tid}/etl/apply?project_id=` | Applica ETL |
+| `POST /api/engines/{tid}/etl/run?project_id=` | Run ETL salvato (topologico) |
+| `POST /api/engines/{tid}/etl/save?project_id=` | Salva versione ETL |
+| `GET /api/engines/{tid}/etl/config?project_id=` | Get config ETL corrente |
+| `GET /api/engines/{tid}/etl/schema?project_id=` | Schema browser |
+| `GET /api/engines/templates?project_id=&type_slug=` | Lista template ETL |
+| `POST /api/engines/templates?project_id=` | Salva template |
+| `DELETE /api/engines/templates/{tmpl_id}` | Elimina template |
+| `GET /api/engines/flags?project_id=` | Lista flag progetto |
+| `POST /api/engines/flags?project_id=` | Crea nuovo flag (non-system) |
+| `PATCH /api/engines/flags/{flag_id}?project_id=` | Aggiorna colore (tutti) o nome (non-system) |
+| `DELETE /api/engines/flags/{flag_id}?project_id=` | Elimina flag (solo non-system) |
 
 ### Revision endpoints (`/api/project/…?db=…`)
 

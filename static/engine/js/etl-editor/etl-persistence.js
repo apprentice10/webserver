@@ -27,7 +27,7 @@ const EtlPersistence = (() => {
             const params = [];
             if (typeof DB_PATH !== "undefined") params.push(`db=${encodeURIComponent(DB_PATH)}`);
             if (_toolType) params.push(`type_slug=${encodeURIComponent(_toolType)}`);
-            const url = "/api/tools/templates" + (params.length ? "?" + params.join("&") : "");
+            const url = "/api/engines/templates" + (params.length ? "?" + params.join("&") : "");
             _cachedTemplates = await fetch(url).then(r => r.json());
             EtlModelRenderer.renderTemplatesList(_cachedTemplates, el);
         } catch (err) {

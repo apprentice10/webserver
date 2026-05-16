@@ -38,7 +38,7 @@ ETL run for the current tool.
   the raw type string (`table`, `filter`, `join`, etc.), so adding a new
   transformation type only requires a new CSS rule — no JS change needed.
 
-- **`run()` calls `POST /api/tools/{id}/etl/run`:** This runs the saved ETL
+- **`run()` calls `POST /api/engines/{id}/etl/run`:** This runs the saved ETL
   model (not a preview), same as the "Run ETL" button in the toolbar. It does
   not call `etl-run-stale` (project-wide) — it is scoped to this single tool.
 

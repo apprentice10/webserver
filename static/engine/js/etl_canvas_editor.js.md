@@ -33,7 +33,7 @@
 | `_showAddSourcePopup(e)` | internal | Async; fetches project tools via `ApiClient.listProjectTools()`, populates `#ecv-src-popup`, positions it below the button |
 | `addSource(type, name, alias)` | public | Appends a new source to `_model.sources`; auto-positions at left column; opens panel for non-table types |
 | `_onEdgeClick(from, x, y)` | internal | Async; calls `ApiClient.etlPreview` with partial model (`final_relation_id = from`); delegates display to `EtlCanvasPreview` |
-| `_loadToolCols()` | internal | `GET /api/tools/{id}/columns` → filters non-system columns into `_toolCols` |
+| `_loadToolCols()` | internal | `GET /api/engines/{id}/columns` → filters non-system columns into `_toolCols` |
 | `activate()` | public | Syncs model from EtlEditor, loads tool cols, shows canvas, inits canvas once, auto-layouts new nodes, renders |
 | `deactivate()` | public | Pushes model to EtlEditor, hides canvas, shows code view |
 | `init(projectId, toolId)` | public | Sets ids, loads positions from localStorage |

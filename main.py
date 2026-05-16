@@ -1,14 +1,14 @@
+import importlib
+import jinja2
+from pathlib import Path
+
 from fastapi import FastAPI, Request, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 
 from core.routes import router as core_router, fs_router
-from engine.routes import router as engine_router
-from engine.routes_flags import router as flags_router
-from engine.routes_etl import router as etl_router
-from engine.routes_export import router as export_router
-from engine.routes_revisions import router as revisions_router
+from dashboard.routes_etl import router as etl_router
 
 app = FastAPI(
     title="Instrument Manager",
@@ -17,15 +17,38 @@ app = FastAPI(
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+
+_engines_dir = Path(__file__).parent / "engines"
+for _engine_dir in sorted(_engines_dir.iterdir()):
+    _static_dir = _engine_dir / "static"
+    if _engine_dir.is_dir() and _static_dir.is_dir():
+        app.mount(
+            f"/engines/{_engine_dir.name}/static",
+            StaticFiles(directory=str(_static_dir)),
+            name=f"engine_{_engine_dir.name}_static",
+        )
+
+for _engine_dir in sorted(_engines_dir.iterdir()):
+    _backend_routes = _engine_dir / "backend" / "routes.py"
+    if _engine_dir.is_dir() and _backend_routes.exists():
+        _mod = importlib.import_module(f"engines.{_engine_dir.name}.backend.routes")
+        app.include_router(_mod.router)
+
+_tmpl_dirs = [str(Path(__file__).parent / "templates")]
+for _engine_dir in sorted(_engines_dir.iterdir()):
+    _tmpl_dir = _engine_dir / "templates"
+    if _engine_dir.is_dir() and _tmpl_dir.is_dir():
+        _tmpl_dirs.append(str(_tmpl_dir))
+
+_jinja_env = jinja2.Environment(
+    loader=jinja2.FileSystemLoader(_tmpl_dirs),
+    autoescape=jinja2.select_autoescape(["html", "xml"]),
+)
+templates = Jinja2Templates(env=_jinja_env)
 
 app.include_router(core_router)
 app.include_router(fs_router)
-app.include_router(flags_router)
 app.include_router(etl_router)
-app.include_router(export_router)
-app.include_router(revisions_router)
-app.include_router(engine_router)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -41,7 +64,7 @@ async def health_check():
 @app.get("/tool", response_class=HTMLResponse)
 async def tool_page(request: Request, db: str = Query(...), tool: int = Query(...)):
     return templates.TemplateResponse(
-        request, "engine/table.html", {"db": db, "tool_id": tool}
+        request, "table.html", {"db": db, "tool_id": tool}
     )
 
 

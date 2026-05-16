@@ -10,9 +10,11 @@
 
 **LOG** — Per-row audit field. Stores JSON of all cell changes: `[{ts, rev, col, old, new}]`. Displayed in the LOG column in the grid. System column, never edited directly.
 
-**Tool** — An independent technical document in a project (Instrument List, Cable List, I/O List, etc.). Backed by a flat SQLite table named by its `slug`.
+**Engine** — A self-contained plugin that provides a specific document type (e.g. Sheet, Cable List). Defined by a manifest folder in `engines/` with an `engine.json`. In the database it is an instance stored in `_tools` with `tool_type` referencing the engine's `type_slug`.
 
-**Tool Type (`type_slug`)** — Category of a tool (e.g. `instrument_list`, `cable_list`). Determines which ETL templates are available. Stored in `_tools.tool_type`.
+**Engine Type (`type_slug`)** — The slug identifying an engine category (e.g. `sheet`, `cable_list`). Determines which ETL templates are available. Stored in `_tools.tool_type`.
+
+**Utility** — A plugin of `"type": "utility"` in `engine.json`. Provides add-on capabilities (e.g. Code ETL, Canvas ETL) grouped by `utility_category`. Not user-instantiable; used internally by engines.
 
 **System Column** — `tag`, `rev`, `log`. Always present in every tool. Cannot be deleted or renamed. `is_system=1` in `_columns`.
 
@@ -51,4 +53,8 @@
 **query_config** — JSON blob stored in `_tools.query_config`. Contains `etl_sql`, `etl_history`, `etl_deps`. The ETL system's configuration per tool.
 
 **lineage_info** — JSON blob on `_columns.lineage_info`. Stores which source table/column an ETL-created column was derived from (used in schema browser).
+
+**Self-Contained Engine** — An engine plugin whose Python backend, JS/CSS frontend, HTML template, and manifest all live under `engines/<slug>/`. The dashboard package provides only shared infrastructure; the engine folder can be zipped and redistributed independently.
+
+**Dynamic Loader** — The `main.py` startup routine that scans `engines/*/backend/routes.py` and `engines/*/static/`, imports each router, and mounts each static directory automatically. Adding a new engine requires no changes to `main.py`.
 
