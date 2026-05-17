@@ -18,8 +18,8 @@ type: reference
 | 80–103 | `getSortDir / getSortIndex / setSortLevel / clearAllSort` | Cycle asc→desc→none on header click; appends new level to end |
 | 105–122 | `isFilterActive / getFilterTerms / setColumnFilter / clearColumnFilter / clearAll` | Filter state management |
 | 124–155 | `_updateHeaderSortIndicators / _updateHeaderFilterIndicators / updateHeaderIndicators` | DOM sync for header arrows, rank badges, filter dot |
-| 157–230 | `openFilterDropdown / _buildDropdownHtml / _positionDropdown / _attachDropdownEvents` | Full filter dropdown UI with checkbox list + wildcard terms |
-| 232–244 | `_applyDropdownFilter / closeFilterDropdown` | Collect terms from dropdown DOM and apply |
+| 157–240 | `_makeTermRow / openFilterDropdown / _attachDropdownEvents` | Filter dropdown — search-term rows (wildcard `*/?`) with `+` to add more, checkbox list filtered live by first term |
+| 242–252 | `closeFilterDropdown` | Remove dropdown from DOM, detach outside-click/key handlers |
 | 246–264 | `attachHeaderListeners` | Event delegation on `#grid-header-row` — one binding, survives header re-renders |
 | 266–320 | `registerPanel / _refreshSortPanel / _renderPanel` | PanelSystem-registered sort panel with level list and filter summary |
 | 322–393 | `_attachPanelEvents / return` | Panel interactivity; public API |
@@ -28,7 +28,8 @@ type: reference
 
 - **Filter applied before sort** inside `applyToRows`: deleted-row filter and search filter happen before this in `grid.js._applyFilters()`, so all three stages compose correctly.
 - **Checkbox list: all checked = no filter term** — when all values are checked, no `values` term is stored. This avoids storing large arrays and treats "all selected" as "no filter".
-- **Wildcard patterns** use `*` (any sequence) and `?` (any single char), case-insensitive regex.
+- **Wildcard patterns** use `*` (any sequence) and `?` (any single char), case-insensitive regex. Search-term inputs in the filter dropdown support these directly (e.g. `*02`).
+- **Filter dropdown search rows**: all term inputs live-filter the checkbox list (OR across terms, wildcard-aware via `_matchWildcard`). `+` adds another OR condition; `×` removes it (re-filters immediately). All non-empty inputs become `pattern` terms on Apply.
 - **Persist debounce 500ms** — rapid sort/filter changes don't flood the backend.
 - **`attachHeaderListeners` binds once** via event delegation on `#grid-header-row`. The element persists across `renderHeader()` calls (only innerHTML changes), so the listener is never lost.
 - **`typeof SortFilterManager !== 'undefined'` guard** — used in `columns.js` and `grid.js` so the module degrades gracefully if removed.

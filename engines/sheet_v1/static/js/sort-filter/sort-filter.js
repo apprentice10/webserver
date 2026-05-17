@@ -107,6 +107,13 @@ const SortFilterManager = (() => {
 
     // ── Filter dropdown ───────────────────────────────────────
 
+    function _makeTermRow(value, isFirst) {
+        const div = document.createElement('div');
+        div.className = 'sf-search-row';
+        div.innerHTML = `<input class="sf-term-input${isFirst ? ' sf-term-first' : ''}" type="text" value="${Utils.escAttr(value)}" placeholder="Search… (* wildcards)" autocomplete="off">${isFirst ? '<button class="sf-add-term" title="Add condition">+</button>' : '<button class="sf-rm-term" title="Remove condition">×</button>'}`;
+        return div;
+    }
+
     function openFilterDropdown(slug, anchorEl, allRows) {
         closeFilterDropdown();
         const col     = ColumnsManager.getColumns().find(c => c.slug === slug);
@@ -116,12 +123,30 @@ const SortFilterManager = (() => {
         const checked = valTerm ? valTerm.values : [...uniq];
         const pats    = terms.filter(t => t.type === 'pattern');
 
-        const dd = document.createElement('div');
-        dd.className = 'sf-filter-dropdown';
         const allChk = checked.length === uniq.length;
         const cbRows = uniq.map(v => `<label class="sf-cb-row"><input type="checkbox" value="${Utils.escAttr(v)}" ${checked.includes(v) ? 'checked' : ''}>${v === '' ? '<em>(empty)</em>' : Utils.escHtml(v)}</label>`).join('');
-        const patRows = pats.map(p => `<div class="sf-pat-row"><input class="sf-pat-input" type="text" value="${Utils.escAttr(p.pattern)}" placeholder="e.g. TT-*"><button class="sf-rm-pat" title="Remove">✕</button></div>`).join('');
-        dd.innerHTML = `<div class="sf-dd-head"><span class="sf-dd-title">${Utils.escHtml(col ? col.name : slug)}</span><input class="sf-dd-search" type="text" placeholder="Search…"><label class="sf-cb-row sf-cb-all"><input type="checkbox" id="sf-cb-all" ${allChk ? 'checked' : ''}> Select all</label></div><div class="sf-cb-list">${cbRows || '<p class="sf-empty-msg">No values</p>'}</div><div class="sf-pat-list">${patRows}</div><div class="sf-dd-foot"><button class="sf-btn-add-pat btn btn-ghost btn-sm">+ Wildcard</button><div class="sf-dd-actions"><button class="sf-btn-clear btn btn-ghost btn-sm">Clear</button><button class="sf-btn-apply btn btn-sm">Apply</button></div></div>`;
+
+        const dd = document.createElement('div');
+        dd.className = 'sf-filter-dropdown';
+        dd.innerHTML = `
+            <div class="sf-dd-head">
+                <span class="sf-dd-title">${Utils.escHtml(col ? col.name : slug)}</span>
+                <div class="sf-search-terms"></div>
+                <label class="sf-cb-row sf-cb-all"><input type="checkbox" id="sf-cb-all" ${allChk ? 'checked' : ''}> Select all</label>
+            </div>
+            <div class="sf-cb-list">${cbRows || '<p class="sf-empty-msg">No values</p>'}</div>
+            <div class="sf-dd-foot">
+                <div class="sf-dd-actions">
+                    <button class="sf-btn-clear btn btn-ghost btn-sm">Clear</button>
+                    <button class="sf-btn-apply btn btn-sm">Apply</button>
+                </div>
+            </div>`;
+
+        const termsContainer = dd.querySelector('.sf-search-terms');
+        const firstPat = pats[0]?.pattern || '';
+        termsContainer.appendChild(_makeTermRow(firstPat, true));
+        pats.slice(1).forEach(p => termsContainer.appendChild(_makeTermRow(p.pattern, false)));
+
         document.body.appendChild(dd);
 
         const r = anchorEl.getBoundingClientRect();
@@ -136,32 +161,40 @@ const SortFilterManager = (() => {
     }
 
     function _attachDropdownEvents(dd, slug, uniq) {
-        const search = dd.querySelector('.sf-dd-search'), cbList = dd.querySelector('.sf-cb-list');
-        const allCb  = dd.querySelector('#sf-cb-all'),   patList = dd.querySelector('.sf-pat-list');
+        const cbList        = dd.querySelector('.sf-cb-list');
+        const allCb         = dd.querySelector('#sf-cb-all');
+        const termsContainer = dd.querySelector('.sf-search-terms');
 
-        search.addEventListener('input', () => {
-            const q = search.value.toLowerCase();
-            cbList.querySelectorAll('.sf-cb-row').forEach(r => { r.style.display = r.querySelector('input').value.toLowerCase().includes(q) ? '' : 'none'; });
-        });
+        // Live-filter checkboxes from any search-term input: wildcard-aware, OR across all terms
+        function _liveFilter() {
+            const patterns = [...termsContainer.querySelectorAll('.sf-term-input')]
+                .map(inp => inp.value.trim()).filter(Boolean);
+            cbList.querySelectorAll('.sf-cb-row').forEach(row => {
+                const val = row.querySelector('input').value;
+                row.style.display = (!patterns.length || patterns.some(p => _matchWildcard(val, p))) ? '' : 'none';
+            });
+        }
+        termsContainer.addEventListener('input', e => { if (e.target.classList.contains('sf-term-input')) _liveFilter(); });
+        setTimeout(() => { const fi = dd.querySelector('.sf-term-first'); if (fi) fi.focus(); }, 10);
+
         if (allCb) allCb.addEventListener('change', () => cbList.querySelectorAll('input[type=checkbox]').forEach(cb => { cb.checked = allCb.checked; }));
 
-        dd.querySelector('.sf-btn-add-pat').addEventListener('click', () => {
-            const row = document.createElement('div');
-            row.className = 'sf-pat-row';
-            row.innerHTML = `<input class="sf-pat-input" type="text" placeholder="e.g. TT-*"><button class="sf-rm-pat" title="Remove">✕</button>`;
-            row.querySelector('.sf-rm-pat').addEventListener('click', () => row.remove());
-            patList.appendChild(row);
-            row.querySelector('input').focus();
+        termsContainer.addEventListener('click', e => {
+            if (e.target.closest('.sf-add-term')) {
+                termsContainer.appendChild(_makeTermRow('', false));
+                termsContainer.lastElementChild.querySelector('input').focus();
+            }
+            const rmBtn = e.target.closest('.sf-rm-term');
+            if (rmBtn) { rmBtn.closest('.sf-search-row').remove(); _liveFilter(); }
         });
-        patList.addEventListener('click', e => { const b = e.target.closest('.sf-rm-pat'); if (b) b.closest('.sf-pat-row').remove(); });
 
         dd.querySelector('.sf-btn-clear').addEventListener('click', () => { clearColumnFilter(slug); closeFilterDropdown(); GridManager.applySort(); });
         dd.querySelector('.sf-btn-apply').addEventListener('click', () => {
-            const vals  = [...dd.querySelectorAll('.sf-cb-list input[type=checkbox]:checked')].map(cb => cb.value);
-            const terms = [];
-            if (vals.length !== uniq.length) terms.push({ type: 'values', values: vals });
-            dd.querySelectorAll('.sf-pat-input').forEach(inp => { const p = inp.value.trim(); if (p) terms.push({ type: 'pattern', pattern: p }); });
-            setColumnFilter(slug, terms);
+            const vals = [...cbList.querySelectorAll('input[type=checkbox]:checked')].map(cb => cb.value);
+            const termsList = [];
+            if (vals.length !== uniq.length) termsList.push({ type: 'values', values: vals });
+            dd.querySelectorAll('.sf-term-input').forEach(inp => { const p = inp.value.trim(); if (p) termsList.push({ type: 'pattern', pattern: p }); });
+            setColumnFilter(slug, termsList);
             closeFilterDropdown();
             GridManager.applySort();
         });
