@@ -25,22 +25,31 @@ const ContextMenu = (() => {
     let _insertRowAbove;
     let _insertRowBelow;
     let _copyRowInsert;
+    let _cutSelection;
+    let _copySelection;
+    let _pasteFromClipboard;
+    let _openPasteSpecial;
 
     function configure({ getRows, getFilteredRows, applyFilters, render,
                          softDeleteRow, restoreRow, hardDeleteRow, keepRow, removeOverride,
-                         insertRowAbove, insertRowBelow, copyRowInsert }) {
-        _getRows         = getRows;
-        _getFilteredRows = getFilteredRows;
-        _applyFilters    = applyFilters;
-        _render          = render;
-        _softDeleteRow   = softDeleteRow;
-        _restoreRow      = restoreRow;
-        _hardDeleteRow   = hardDeleteRow;
-        _keepRow         = keepRow;
-        _removeOverride  = removeOverride;
-        _insertRowAbove  = insertRowAbove;
-        _insertRowBelow  = insertRowBelow;
-        _copyRowInsert   = copyRowInsert;
+                         insertRowAbove, insertRowBelow, copyRowInsert,
+                         cutSelection, copySelection, pasteFromClipboard, openPasteSpecial }) {
+        _getRows            = getRows;
+        _getFilteredRows    = getFilteredRows;
+        _applyFilters       = applyFilters;
+        _render             = render;
+        _softDeleteRow      = softDeleteRow;
+        _restoreRow         = restoreRow;
+        _hardDeleteRow      = hardDeleteRow;
+        _keepRow            = keepRow;
+        _removeOverride     = removeOverride;
+        _insertRowAbove     = insertRowAbove;
+        _insertRowBelow     = insertRowBelow;
+        _copyRowInsert      = copyRowInsert;
+        _cutSelection       = cutSelection;
+        _copySelection      = copySelection;
+        _pasteFromClipboard = pasteFromClipboard;
+        _openPasteSpecial   = openPasteSpecial;
     }
 
 
@@ -80,6 +89,10 @@ const ContextMenu = (() => {
             if (action === "insert-above")    await _insertRowAbove(rowId);
             if (action === "insert-below")    await _insertRowBelow(rowId);
             if (action === "copy-insert")     await _copyRowInsert(rowId);
+            if (action === "ctx-cut")          { _cutSelection?.(); return; }
+            if (action === "ctx-copy")         { _copySelection?.(); return; }
+            if (action === "ctx-paste")        { _pasteFromClipboard?.(); return; }
+            if (action === "ctx-paste-special"){ _openPasteSpecial?.(); return; }
 
             if (action === "cell-log") {
                 const rows         = _getRows();
@@ -239,15 +252,22 @@ const ContextMenu = (() => {
         }
         _ctxFlagsCache = null;
 
+        // Hide cut/copy on deleted rows (no editable data to act on)
+        const showClipboardWrite = !isDeleted;
+        menu.querySelector('[data-action="ctx-cut"]').style.display  = showClipboardWrite ? "" : "none";
+        menu.querySelector('[data-action="ctx-copy"]').style.display = showClipboardWrite ? "" : "none";
+
         if (RevisionPicker.getViewingRevision() !== null) {
             ['delete', 'restore', 'hard-delete', 'keep-row', 'remove-override',
-             'flags-trigger', 'insert-above', 'insert-below', 'copy-insert'].forEach(a => {
+             'flags-trigger', 'insert-above', 'insert-below', 'copy-insert',
+             'ctx-cut', 'ctx-copy', 'ctx-paste', 'ctx-paste-special'].forEach(a => {
                 menu.querySelector(`[data-action="${a}"]`).style.display = "none";
             });
-            menu.querySelector('.ctx-sep-keep-row').style.display = "none";
-            menu.querySelector('.ctx-sep-override').style.display = "none";
-            menu.querySelector('.ctx-sep-flags').style.display    = "none";
-            menu.querySelector('.ctx-sep-gutter').style.display   = "none";
+            menu.querySelector('.ctx-sep-keep-row').style.display  = "none";
+            menu.querySelector('.ctx-sep-override').style.display  = "none";
+            menu.querySelector('.ctx-sep-flags').style.display     = "none";
+            menu.querySelector('.ctx-sep-gutter').style.display    = "none";
+            menu.querySelector('.ctx-sep-clipboard').style.display = "none";
         }
 
         const x = Math.min(e.clientX, window.innerWidth  - 210);

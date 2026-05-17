@@ -133,36 +133,36 @@ const CutPaste = (() => {
 
         showToast(`Pasting ${updates.length} cell${updates.length > 1 ? 's' : ''}...`, 'info');
 
-        let okCount = 0;
-        const errors = [];
-        for (const u of updates) {
-            try {
-                const upd = await ApiClient.updateCell(u.destRowId, u.destSlug, u.value);
-                _cfg.updateRowData(u.destRowId, upd);
-                okCount++;
-            } catch (err) {
-                errors.push(`${u.destRowId}/${u.destSlug}: ${err.message}`);
-            }
-        }
-
-        // Clear source cells not overlapping with the destination
+        // Destination writes
+        const destCells = updates.map(u => ({ row_id: u.destRowId, col_slug: u.destSlug, value: u.value }));
+        // Source clears (non-overlapping)
         const destKeys = new Set(updates.map(u => `${u.destRowId}|${u.destSlug}`));
-        for (const c of savedCutCells) {
-            if (!c.rowId) continue;
-            if (destKeys.has(`${c.rowId}|${c.col_slug}`)) continue;
-            const srcRow = allRows.find(r => r.id === c.rowId);
-            if (!srcRow || srcRow.is_deleted) continue;
+        const clearCells = savedCutCells
+            .filter(c => c.rowId && !destKeys.has(`${c.rowId}|${c.col_slug}`))
+            .filter(c => { const r = allRows.find(x => x.id === c.rowId); return r && !r.is_deleted; })
+            .map(c => ({ row_id: c.rowId, col_slug: c.col_slug, value: '' }));
+
+        let errors = [];
+        try {
+            const res = await ApiClient.batchUpdate(destCells);
+            (res.updated || []).forEach(upd => _cfg.updateRowData(upd.id ?? upd.__id, upd));
+        } catch (err) {
+            errors.push(err.message);
+        }
+
+        if (clearCells.length) {
             try {
-                const upd = await ApiClient.updateCell(c.rowId, c.col_slug, '');
-                _cfg.updateRowData(c.rowId, upd);
+                const res2 = await ApiClient.batchUpdate(clearCells);
+                (res2.updated || []).forEach(upd => _cfg.updateRowData(upd.id ?? upd.__id, upd));
             } catch (err) {
-                errors.push(`clear ${c.rowId}/${c.col_slug}: ${err.message}`);
+                errors.push(err.message);
             }
         }
 
+        document.dispatchEvent(new CustomEvent('undo:updated'));
         _cfg.render();
         showToast(
-            errors.length ? `${okCount} pasted, ${errors.length} errors.` : `${okCount} cell${okCount > 1 ? 's' : ''} pasted.`,
+            errors.length ? `Paste completed with errors.` : `${destCells.length} cell${destCells.length > 1 ? 's' : ''} pasted.`,
             errors.length ? 'error' : 'success'
         );
     }
@@ -195,6 +195,22 @@ const CutPaste = (() => {
         navigator.clipboard.writeText(lines.join('\n')).catch(() => {});
     }
 
-    return { configure, init, isActive, applyVisual, cancelCut };
+    function triggerCut() {
+        if (CellKeyboard.isEditing()) return;
+        const filteredRows = _cfg.getFilteredRows();
+        const columns  = ColumnsManager.getColumns();
+        const selected = SelectionManager.getSelectedCells(filteredRows, columns);
+        if (!selected.length) return;
+        const allRows = _cfg.getAllRows();
+        const rowMap  = new Map(allRows.map(r => [r.tag, r]));
+        _cutCells = selected.map(({ row_tag, col_slug }) => {
+            const row = rowMap.get(row_tag);
+            return { rowId: row ? row.id : null, row_tag, col_slug, value: row ? (row[col_slug] ?? '') : '' };
+        });
+        _copyToClipboard(filteredRows, columns);
+        _cfg.render();
+    }
+
+    return { configure, init, isActive, applyVisual, cancelCut, triggerCut };
 
 })();

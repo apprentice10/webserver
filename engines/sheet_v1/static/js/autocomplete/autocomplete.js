@@ -85,6 +85,10 @@ const AutoComplete = (() => {
         if (e.key === 'Alt') {
             if (_selectedIdx >= 0) { e.preventDefault(); _accept(_suggestions[_selectedIdx]); return true; }
         }
+        if (e.key === 'Tab') {
+            if (_selectedIdx >= 0) { e.preventDefault(); _accept(_suggestions[_selectedIdx]); return true; }
+            hide();
+        }
         if (e.key === 'Escape') {
             hide();
             return true;

@@ -134,7 +134,7 @@ const FillHandle = (() => {
                 for (let i = 1; i <= fillCount; i++) {
                     const destRow = filteredRows[rMax + i];
                     if (!destRow || destRow.is_deleted) continue;
-                    fillCells.push({ rowId: destRow.id, slug: colObj.slug, value: _fillValue(srcVals, step, i) });
+                    fillCells.push({ row_id: destRow.id, col_slug: colObj.slug, value: _fillValue(srcVals, step, i) });
                 }
             }
         } else {
@@ -154,7 +154,7 @@ const FillHandle = (() => {
                     const colObj = allCols[c];
                     if (!colObj || colObj.slug === 'rev' || colObj.slug === 'log') continue;
                     filled++;
-                    fillCells.push({ rowId: row.id, slug: colObj.slug, value: _fillValue(srcVals, step, filled) });
+                    fillCells.push({ row_id: row.id, col_slug: colObj.slug, value: _fillValue(srcVals, step, filled) });
                 }
             }
         }
@@ -162,22 +162,15 @@ const FillHandle = (() => {
         if (!fillCells.length) { update(); return; }
 
         showToast(`Filling ${fillCells.length} cell${fillCells.length > 1 ? 's' : ''}...`, 'info');
-        let okCount = 0;
-        const errors = [];
-        for (const fc of fillCells) {
-            try {
-                const upd = await ApiClient.updateCell(fc.rowId, fc.slug, fc.value);
-                _cfg.updateRowData(fc.rowId, upd);
-                okCount++;
-            } catch (err) {
-                errors.push(`${fc.rowId}/${fc.slug}: ${err.message}`);
-            }
+        try {
+            const res = await ApiClient.batchUpdate(fillCells);
+            for (const row of res.updated) _cfg.updateRowData(row.id, row);
+            _cfg.render();
+            showToast(`${res.updated.length} cell${res.updated.length !== 1 ? 's' : ''} filled.`, 'success');
+        } catch (err) {
+            _cfg.render();
+            showToast(`Fill failed: ${err.message}`, 'error');
         }
-        _cfg.render();
-        showToast(
-            errors.length ? `${okCount} filled, ${errors.length} errors.` : `${okCount} cell${okCount > 1 ? 's' : ''} filled.`,
-            errors.length ? 'error' : 'success'
-        );
     }
 
     // Returns the numeric step if all consecutive diffs are equal, else null.

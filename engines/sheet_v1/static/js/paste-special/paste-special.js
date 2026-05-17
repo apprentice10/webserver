@@ -1,6 +1,7 @@
 const PasteSpecial = (() => {
 
-    let _matrix = null;
+    let _matrix    = null;
+    let _activeTab = 'mapper';
     let _cfg = {};
 
     function configure(opts) { _cfg = opts; }
@@ -37,8 +38,28 @@ const PasteSpecial = (() => {
         _matrix = null;
     }
 
+    function switchTab(tab) {
+        _activeTab = tab;
+        ['mapper', 'text', 'transpose'].forEach(t => {
+            const btn   = document.getElementById(`ps-tab-btn-${t}`);
+            const panel = document.getElementById(`ps-tab-${t}`);
+            if (btn)   btn.classList.toggle('ps-tab-active', t === tab);
+            if (panel) panel.style.display = t === tab ? '' : 'none';
+        });
+        if (tab === 'text')      _renderTextInfo();
+        if (tab === 'transpose') _renderTransposeInfo();
+    }
+
     async function confirm() {
         if (!_matrix) return;
+        if (_activeTab === 'mapper') return await _confirmMapper();
+        if (_activeTab === 'text')   return await _confirmText();
+        if (_activeTab === 'transpose') return await _confirmTranspose();
+    }
+
+    // ---- Tab: Column mapper ----
+
+    async function _confirmMapper() {
         const hasHeader = document.getElementById('ps-header-toggle')?.checked ?? false;
         const dataRows  = hasHeader ? _matrix.slice(1) : _matrix;
         if (!dataRows.length) { showToast('No data rows to paste.', 'info'); return; }
@@ -54,9 +75,7 @@ const PasteSpecial = (() => {
 
         const filteredRows = _cfg.getFilteredRows();
         const ranges = SelectionManager.getRanges();
-        const startRowIdx = ranges.length > 0
-            ? Math.min(ranges[0].start.r, ranges[0].end.r)
-            : 0;
+        const startRowIdx = ranges.length > 0 ? Math.min(ranges[0].start.r, ranges[0].end.r) : 0;
 
         const updates = [];
         for (let ri = 0; ri < dataRows.length; ri++) {
@@ -70,27 +89,81 @@ const PasteSpecial = (() => {
             }
         }
 
-        close();
-        if (!updates.length) { showToast('No cells to update.', 'info'); return; }
+        await _doBatchPaste(updates);
+    }
 
-        showToast(`Updating ${updates.length} cells...`, 'info');
-        let okCount = 0;
-        const errors = [];
-        for (const u of updates) {
-            try {
-                const upd = await ApiClient.updateCell(u.rowId, u.slug, u.value);
-                _cfg.updateRowData(u.rowId, upd);
-                okCount++;
-            } catch (err) {
-                errors.push(`${u.rowId}/${u.slug}: ${err.message}`);
+    // ---- Tab: Paste text (positional, no mapper) ----
+
+    async function _confirmText() {
+        const filteredRows = _cfg.getFilteredRows();
+        const editableCols = ColumnsManager.getColumns().filter(c => c.slug !== 'rev' && c.slug !== 'log');
+        const ranges       = SelectionManager.getRanges();
+        const startRowIdx  = ranges.length > 0 ? Math.min(ranges[0].start.r, ranges[0].end.r) : 0;
+        const startColIdx  = ranges.length > 0 ? Math.min(ranges[0].start.c, ranges[0].end.c) : 0;
+
+        const updates = [];
+        for (let r = 0; r < _matrix.length; r++) {
+            const rowIdx = startRowIdx + r;
+            if (rowIdx >= filteredRows.length) break;
+            const row = filteredRows[rowIdx];
+            if (!row || row.is_deleted) continue;
+            for (let c = 0; c < _matrix[r].length; c++) {
+                const colIdx = startColIdx + c;
+                if (colIdx >= editableCols.length) break;
+                updates.push({ rowId: row.id, slug: editableCols[colIdx].slug, value: _matrix[r][c] });
             }
         }
-        _cfg.render();
-        showToast(
-            errors.length ? `${okCount} updated, ${errors.length} errors.` : `${okCount} cells updated.`,
-            errors.length ? 'error' : 'success'
-        );
+
+        await _doBatchPaste(updates);
     }
+
+    // ---- Tab: Transpose ----
+
+    async function _confirmTranspose() {
+        const filteredRows = _cfg.getFilteredRows();
+        const editableCols = ColumnsManager.getColumns().filter(c => c.slug !== 'rev' && c.slug !== 'log');
+        const ranges       = SelectionManager.getRanges();
+        const startRowIdx  = ranges.length > 0 ? Math.min(ranges[0].start.r, ranges[0].end.r) : 0;
+        const startColIdx  = ranges.length > 0 ? Math.min(ranges[0].start.c, ranges[0].end.c) : 0;
+
+        // Transpose: _matrix[srcRow][srcCol] → dest row=(startRow+srcCol), col=(startCol+srcRow)
+        const updates = [];
+        for (let srcRow = 0; srcRow < _matrix.length; srcRow++) {
+            for (let srcCol = 0; srcCol < _matrix[srcRow].length; srcCol++) {
+                const rowIdx = startRowIdx + srcCol;
+                const colIdx = startColIdx + srcRow;
+                if (rowIdx >= filteredRows.length) continue;
+                if (colIdx >= editableCols.length) continue;
+                const row = filteredRows[rowIdx];
+                if (!row || row.is_deleted) continue;
+                updates.push({ rowId: row.id, slug: editableCols[colIdx].slug, value: _matrix[srcRow][srcCol] });
+            }
+        }
+
+        await _doBatchPaste(updates);
+    }
+
+    // ---- Shared paste executor ----
+
+    async function _doBatchPaste(updates) {
+        close();
+        if (!updates.length) { showToast('No cells to update.', 'info'); return; }
+        showToast(`Updating ${updates.length} cells...`, 'info');
+        const cells = updates.map(u => ({ row_id: u.rowId, col_slug: u.slug, value: u.value }));
+        try {
+            const res = await ApiClient.batchUpdate(cells);
+            (res.updated || []).forEach(upd => _cfg.updateRowData(upd.id ?? upd.__id, upd));
+            document.dispatchEvent(new CustomEvent('undo:updated'));
+            _cfg.render();
+            showToast(`${updates.length} cells updated.`, 'success');
+        } catch (err) {
+            document.dispatchEvent(new CustomEvent('undo:updated'));
+            _cfg.render();
+            showToast('Paste failed: ' + err.message, 'error');
+        }
+    }
+
+    // ---- Modal render ----
 
     function _renderModal() {
         const overlay = document.getElementById('ps-modal');
@@ -105,7 +178,32 @@ const PasteSpecial = (() => {
         document.getElementById('ps-mapper').innerHTML      = _buildMapper(incomingLen, sheetCols, hasHeader);
         _updateRowCount();
 
+        // Reset to mapper tab
+        _activeTab = 'mapper';
+        ['mapper', 'text', 'transpose'].forEach(t => {
+            const btn   = document.getElementById(`ps-tab-btn-${t}`);
+            const panel = document.getElementById(`ps-tab-${t}`);
+            if (btn)   btn.classList.toggle('ps-tab-active', t === 'mapper');
+            if (panel) panel.style.display = t === 'mapper' ? '' : 'none';
+        });
+
         overlay.style.display = 'flex';
+    }
+
+    function _renderTextInfo() {
+        const el = document.getElementById('ps-text-info');
+        if (!el || !_matrix) return;
+        const rows = _matrix.length;
+        const cols = _matrix[0]?.length ?? 0;
+        el.textContent = `Clipboard: ${rows} row${rows !== 1 ? 's' : ''} × ${cols} column${cols !== 1 ? 's' : ''}`;
+    }
+
+    function _renderTransposeInfo() {
+        const el = document.getElementById('ps-transpose-info');
+        if (!el || !_matrix) return;
+        const srcRows = _matrix.length;
+        const srcCols = _matrix[0]?.length ?? 0;
+        el.textContent = `Clipboard: ${srcRows}×${srcCols} → will paste as ${srcCols}×${srcRows}`;
     }
 
     function _detectHeaderRow(sheetCols) {
@@ -129,10 +227,10 @@ const PasteSpecial = (() => {
         const firstRow = _matrix[0] || [];
         const rows = [];
         for (let i = 0; i < incomingLen; i++) {
-            const label     = hasHeader ? Utils.escHtml(String(firstRow[i] || `Col ${i + 1}`)) : `Column ${i + 1}`;
-            const autoSlug  = hasHeader ? _autoMatch(firstRow[i], sheetCols)
-                                        : (i < sheetCols.length ? sheetCols[i].slug : '__ignore__');
-            const options   = sheetCols.map(c =>
+            const label    = hasHeader ? Utils.escHtml(String(firstRow[i] || `Col ${i + 1}`)) : `Column ${i + 1}`;
+            const autoSlug = hasHeader ? _autoMatch(firstRow[i], sheetCols)
+                                       : (i < sheetCols.length ? sheetCols[i].slug : '__ignore__');
+            const options  = sheetCols.map(c =>
                 `<option value="${Utils.escAttr(c.slug)}"${autoSlug === c.slug ? ' selected' : ''}>${Utils.escHtml(c.name || c.slug)}</option>`
             ).join('');
             rows.push(`
@@ -186,6 +284,6 @@ const PasteSpecial = (() => {
         return result;
     }
 
-    return { configure, init, open, close, confirm, _updateRowCount };
+    return { configure, init, open, close, confirm, switchTab, _updateRowCount };
 
 })();

@@ -82,18 +82,22 @@ const GridManager = (() => {
                 reloadData,
             });
             ContextMenu.configure({
-                getRows:         () => _rows,
-                getFilteredRows: () => _filteredRows,
-                applyFilters:    _applyFilters,
+                getRows:             () => _rows,
+                getFilteredRows:     () => _filteredRows,
+                applyFilters:        _applyFilters,
                 render,
-                softDeleteRow:   RowOps.softDeleteRow,
-                restoreRow:      RowOps.restoreRow,
-                hardDeleteRow:   RowOps.hardDeleteRow,
-                keepRow:         RowOps.keepRow,
-                removeOverride:  RowOps.removeOverride,
-                insertRowAbove:  RowOps.insertRowAbove,
-                insertRowBelow:  RowOps.insertRowBelow,
-                copyRowInsert:   RowOps.copyRowInsert,
+                softDeleteRow:       RowOps.softDeleteRow,
+                restoreRow:          RowOps.restoreRow,
+                hardDeleteRow:       RowOps.hardDeleteRow,
+                keepRow:             RowOps.keepRow,
+                removeOverride:      RowOps.removeOverride,
+                insertRowAbove:      RowOps.insertRowAbove,
+                insertRowBelow:      RowOps.insertRowBelow,
+                copyRowInsert:       RowOps.copyRowInsert,
+                cutSelection:        () => CutPaste.triggerCut(),
+                copySelection:       () => ClipboardManager.triggerCopy(),
+                pasteFromClipboard:  () => PasteManager.triggerPaste(),
+                openPasteSpecial:    () => PasteSpecial.open(),
             });
             ContextMenu.init();
             RowDrag.configure({ reloadData });
@@ -300,8 +304,6 @@ const GridManager = (() => {
         document.addEventListener('keydown', e => {
             if (!(e.ctrlKey || e.metaKey) || e.key !== 'h') return;
             if (CellKeyboard.isEditing()) return;
-            const active = document.activeElement;
-            if (active && active.tagName !== 'BODY' && !active.closest('#data-grid, #grid-scroll-container, #fr-panel')) return;
             e.preventDefault();
             FindReplace.isOpen() ? FindReplace.close() : FindReplace.open();
         });

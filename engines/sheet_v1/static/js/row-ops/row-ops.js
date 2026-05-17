@@ -36,10 +36,8 @@ const RowOps = (() => {
         if (!confirm(msg)) return;
 
         try {
-            for (const id of rowIds) {
-                const updated = await ApiClient.softDeleteRow(id);
-                _updateRow(id, updated);
-            }
+            const res = await ApiClient.batchRowOp("soft_delete", rowIds);
+            for (const row of res.updated) _updateRow(row.id, row);
             _applyFilters();
             _render();
             document.dispatchEvent(new CustomEvent('undo:updated'));
@@ -58,14 +56,12 @@ const RowOps = (() => {
         const rowIds = selected.length > 0 ? selected : [rowId];
 
         try {
-            for (const id of rowIds) {
-                const updated = await ApiClient.restoreRow(id);
-                _updateRow(id, updated);
-            }
+            const res = await ApiClient.batchRowOp("restore", rowIds);
+            for (const row of res.updated) _updateRow(row.id, row);
             _applyFilters();
             _render();
             Utils.showToast(
-                rowIds.length === 1 ? "Row restored." : `${rowIds.length} rows restored.`,
+                res.updated.length === 1 ? "Row restored." : `${res.updated.length} rows restored.`,
                 "success"
             );
         } catch (err) {
@@ -88,15 +84,13 @@ const RowOps = (() => {
         if (!confirm(msg)) return;
 
         try {
-            for (const id of rowIds) {
-                await ApiClient.hardDeleteRow(id);
-            }
-            _removeRows(new Set(rowIds));
+            const res = await ApiClient.batchRowOp("hard_delete", rowIds);
+            _removeRows(new Set(res.deleted_ids));
             _render();
             Utils.showToast(
-                rowIds.length === 1
+                res.deleted_ids.length === 1
                     ? "Row permanently deleted."
-                    : `${rowIds.length} rows permanently deleted.`,
+                    : `${res.deleted_ids.length} rows permanently deleted.`,
                 "success"
             );
             document.dispatchEvent(new CustomEvent('undo:updated'));
@@ -116,9 +110,9 @@ const RowOps = (() => {
         const rowIds = selected.length > 0 ? selected : [rowId];
 
         try {
-            for (const id of rowIds) {
-                await ApiClient.keepRow(id);
-                const row = _getRows().find(r => r.id === id);
+            const res = await ApiClient.batchRowOp("keep", rowIds);
+            for (const tag of res.kept) {
+                const row = _getRows().find(r => r.tag === tag);
                 if (row && row.cell_flags && row.cell_flags[""]) {
                     row.cell_flags[""] = row.cell_flags[""].filter(f => f.name !== "ETL: Eliminated");
                 }
@@ -126,9 +120,9 @@ const RowOps = (() => {
             _applyFilters();
             _render();
             Utils.showToast(
-                rowIds.length === 1
+                res.kept.length === 1
                     ? "Row kept — ETL: Eliminated flag removed."
-                    : `${rowIds.length} rows kept — ETL: Eliminated flag removed.`,
+                    : `${res.kept.length} rows kept — ETL: Eliminated flag removed.`,
                 "success"
             );
         } catch (err) {
@@ -141,16 +135,17 @@ const RowOps = (() => {
     async function _doRemoveOverride(cells) {
         if (!cells.length) return;
         try {
-            for (const { row_tag, col_slug } of cells) {
+            const payload = cells.map(({ row_tag, col_slug }) => {
                 const row = _getRows().find(r => r.tag === row_tag);
-                if (!row || !col_slug) continue;
-                const updated = await ApiClient.removeOverride(row.id, col_slug);
-                _updateRow(row.id, updated);
-            }
+                return row ? { row_id: row.id, col_slug } : null;
+            }).filter(Boolean);
+            if (!payload.length) return;
+            const res = await ApiClient.batchRemoveOverride(payload);
+            for (const row of res.updated) _updateRow(row.id, row);
             _applyFilters();
             _render();
             Utils.showToast(
-                cells.length === 1 ? "Manual edit removed." : `${cells.length} overrides removed.`,
+                res.updated.length === 1 ? "Manual edit removed." : `${res.updated.length} overrides removed.`,
                 "success"
             );
         } catch (err) {

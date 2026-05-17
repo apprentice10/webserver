@@ -95,6 +95,21 @@ const ApiClient = (() => {
             { method: "PATCH", body: JSON.stringify({ slug, value }) });
     }
 
+    async function batchUpdate(cells) {
+        return request(`/api/engines/${TOOL_ID}/rows/batch-update?db=${_db()}`,
+            { method: "POST", body: JSON.stringify({ cells }) });
+    }
+
+    async function batchRowOp(operation, rowIds) {
+        return request(`/api/engines/${TOOL_ID}/rows/batch-op?db=${_db()}`,
+            { method: "POST", body: JSON.stringify({ operation, row_ids: rowIds }) });
+    }
+
+    async function batchRemoveOverride(cells) {
+        return request(`/api/engines/${TOOL_ID}/rows/batch-remove-override?db=${_db()}`,
+            { method: "POST", body: JSON.stringify({ cells }) });
+    }
+
     async function softDeleteRow(rowId) {
         return request(`/api/engines/${TOOL_ID}/rows/${rowId}/delete?db=${_db()}`,
             { method: "POST" });
@@ -393,7 +408,9 @@ const ApiClient = (() => {
         listFlags, createFlag, updateFlag, deleteFlag, toggleCellFlags, updateCellFlagNote,
         listFlagRules, createFlagRule, deleteFlagRule,
         loadColumns, addColumn, updateColumn, deleteColumn, updateColumnWidth, reorderColumns,
-        loadRows, createRow, updateCell, softDeleteRow, restoreRow, hardDeleteRow,
+        loadRows, createRow, updateCell, batchUpdate,
+        batchRowOp, batchRemoveOverride,
+        softDeleteRow, restoreRow, hardDeleteRow,
         removeOverride, keepRow, pasteRows,
         insertRow, copyRowInsert, reorderRow,
         runSql, exportExcel,

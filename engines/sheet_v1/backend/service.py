@@ -389,6 +389,112 @@ def update_cell(
     return result_row
 
 
+def batch_update_cells(
+    conn: sqlite3.Connection,
+    tool_id: int,
+    items: list,          # list of {row_id, col_slug, value}
+) -> dict:
+    """Write N cells in one transaction, one undo entry. Returns {updated: [row, ...]}."""
+    tool      = get_engine(conn, tool_id)
+    tool_slug = tool["slug"]
+    rev       = get_current_revision(conn)
+
+    undo_cells = []
+    changed_row_ids = []
+
+    for item in items:
+        row_id   = item["row_id"]
+        col_slug = item["col_slug"]
+        new_value = item["value"]
+
+        if col_slug in ("rev", "log"):
+            continue
+        if not conn.execute(
+            "SELECT 1 FROM _columns WHERE tool_id = ? AND slug = ?", (tool_id, col_slug)
+        ).fetchone():
+            continue
+
+        row = conn.execute(
+            f'SELECT * FROM "{tool_slug}" WHERE __id = ?', (row_id,)
+        ).fetchone()
+        if not row:
+            continue
+        row = dict(row)
+
+        old_value = row.get(col_slug)
+        new_value = new_value.strip() if new_value else None
+
+        if str(old_value or "") == str(new_value or ""):
+            continue
+
+        if col_slug == "tag":
+            if not new_value:
+                continue
+            try:
+                _validate_tag_unique(conn, tool_slug, new_value, exclude_id=row_id)
+            except Exception:
+                continue
+
+        tag_val = row.get("tag", "")
+
+        conn.execute(
+            f'UPDATE "{tool_slug}" SET "{col_slug}" = ?, rev = ? WHERE __id = ?',
+            (new_value, rev, row_id)
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO _overrides (tool_slug, row_tag, col_slug, etl_value) VALUES (?,?,?,?)",
+            (tool_slug, tag_val, col_slug, str(old_value) if old_value is not None else None)
+        )
+
+        log_entry   = _format_log_entry(rev, col_slug, old_value, new_value)
+        existing_log = row.get("__log")
+        new_log     = _append_log(existing_log, log_entry)
+        conn.execute(
+            f'UPDATE "{tool_slug}" SET __log = ? WHERE __id = ?', (new_log, row_id)
+        )
+
+        if col_slug == "tag" and new_value and old_value:
+            conn.execute(
+                "UPDATE _overrides SET row_tag = ? WHERE tool_slug = ? AND row_tag = ?",
+                (new_value, tool_slug, old_value)
+            )
+
+        audit(conn, tool_slug, "UPDATE", row_tag=tag_val, col_slug=col_slug,
+              old_val=old_value, new_val=new_value, change_type="manual_edit", revision=rev)
+
+        undo_cells.append({
+            "row_id": row_id, "col_slug": col_slug,
+            "old_val": old_value, "new_val": new_value, "row_tag": tag_val,
+        })
+        if row_id not in changed_row_ids:
+            changed_row_ids.append(row_id)
+
+    if changed_row_ids:
+        mark_tool_stale(conn, tool_slug)
+        mark_dependents_stale(conn, tool_slug)
+
+    conn.commit()
+
+    if undo_cells:
+        push_undo(tool_id, {
+            "type": "batch_edit", "tool_slug": tool_slug, "tool_id": tool_id,
+            "cells": undo_cells,
+        })
+
+    updated_rows = []
+    for row_id in changed_row_ids:
+        updated = conn.execute(
+            f'SELECT * FROM "{tool_slug}" WHERE __id = ?', (row_id,)
+        ).fetchone()
+        if not updated:
+            continue
+        tag_after = dict(updated).get("tag", "")
+        overrides = get_row_overrides(conn, tool_slug, tag_after)
+        result_row = serialize_active_row(updated, tool_id, None, overrides)
+        result_row["cell_flags"] = _get_row_cell_flags(conn, tool_slug, tag_after, result_row)
+        updated_rows.append(result_row)
+
+    return {"updated": updated_rows}
 
 
 # ============================================================

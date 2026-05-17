@@ -13,14 +13,15 @@ from typing import Optional
 logger = logging.getLogger("engine.routes")
 
 from dashboard.project_db import get_project_conn, audit
-from . import service, service_columns, service_row_ops, service_row_position, service_templates
+from . import service, service_columns, service_row_ops, service_row_batch, service_row_position, service_templates
 from dashboard.catalog import ENGINE_CATALOG, UTILITY_BY_CATEGORY
 from .schemas import (
     EngineCreate, EngineSettingsUpdate, EnginePositionUpdate, EngineGroupUpdate,
     GroupCreate, GroupUpdate, EngineResponse,
     TemplateCreate, TemplateResponse,
     ColumnCreate, ColumnUpdate, ColumnWidthUpdate, ColumnReorder, ColumnResponse,
-    RowCreate, CellUpdate, PasteData,
+    RowCreate, CellUpdate, PasteData, BatchCellUpdate,
+    BatchRowOp, BatchRemoveOverride,
     SqlQuery, InsertRowRequest, ReorderRowRequest, SortFilterStateUpdate,
 )
 
@@ -374,6 +375,35 @@ def update_cell(
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
     return service.update_cell(conn, tool_id, row_id, None, data.slug, data.value)
+
+
+@router.post("/{tool_id}/rows/batch-update")
+def batch_update_cells(
+    tool_id: int,
+    data: BatchCellUpdate = ...,
+    conn: sqlite3.Connection = Depends(get_project_conn)
+):
+    items = [{"row_id": c.row_id, "col_slug": c.col_slug, "value": c.value} for c in data.cells]
+    return service.batch_update_cells(conn, tool_id, items)
+
+
+@router.post("/{tool_id}/rows/batch-op")
+def batch_row_op(
+    tool_id: int,
+    data: BatchRowOp = ...,
+    conn: sqlite3.Connection = Depends(get_project_conn)
+):
+    return service_row_batch.batch_row_op(conn, tool_id, data.operation, data.row_ids)
+
+
+@router.post("/{tool_id}/rows/batch-remove-override")
+def batch_remove_override(
+    tool_id: int,
+    data: BatchRemoveOverride = ...,
+    conn: sqlite3.Connection = Depends(get_project_conn)
+):
+    cells = [{"row_id": c.row_id, "col_slug": c.col_slug} for c in data.cells]
+    return service_row_batch.batch_remove_override(conn, tool_id, cells)
 
 
 @router.post("/{tool_id}/rows/{row_id}/delete")

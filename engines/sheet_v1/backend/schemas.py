@@ -192,3 +192,22 @@ class FindReplaceRequest(BaseModel):
 class SortFilterStateUpdate(BaseModel):
     sort:    list[dict] = []
     filters: dict       = {}
+
+
+class BatchCellItem(BaseModel):
+    row_id:   int
+    col_slug: str
+    value:    Optional[str] = None
+
+
+class BatchCellUpdate(BaseModel):
+    cells: list[BatchCellItem]
+
+
+class BatchRowOp(BaseModel):
+    operation: Literal["soft_delete", "hard_delete", "restore", "keep"]
+    row_ids: list[int]
+
+
+class BatchRemoveOverride(BaseModel):
+    cells: list[BatchCellItem]  # row_id + col_slug; value ignored

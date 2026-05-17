@@ -62,6 +62,43 @@ const ClipboardManager = (() => {
         });
     }
 
-    return { configure, init };
+    async function triggerCopy() {
+        const ranges = _getRanges();
+        if (!ranges.length || _isEditing()) return;
+        const columns      = _getColumns();
+        const filteredRows = _getFilteredRows();
+        let rMin = Infinity, rMax = -Infinity, cMin = Infinity, cMax = -Infinity;
+        for (const range of ranges) {
+            rMin = Math.min(rMin, range.start.r, range.end.r);
+            rMax = Math.max(rMax, range.start.r, range.end.r);
+            cMin = Math.min(cMin, range.start.c, range.end.c);
+            cMax = Math.max(cMax, range.start.c, range.end.c);
+        }
+        const lines = [];
+        for (let r = rMin; r <= rMax; r++) {
+            const row = filteredRows[r];
+            if (!row) continue;
+            const cells = [];
+            for (let c = cMin; c <= cMax; c++) {
+                const inRange = ranges.some(range => {
+                    const r0 = Math.min(range.start.r, range.end.r), r1 = Math.max(range.start.r, range.end.r);
+                    const c0 = Math.min(range.start.c, range.end.c), c1 = Math.max(range.start.c, range.end.c);
+                    return r >= r0 && r <= r1 && c >= c0 && c <= c1;
+                });
+                const col = columns[c];
+                cells.push(inRange && col ? String(row[col.slug] ?? "") : "");
+            }
+            lines.push(cells.join("\t"));
+        }
+        try {
+            await navigator.clipboard.writeText(lines.join("\n"));
+            const count = (rMax - rMin + 1) * (cMax - cMin + 1);
+            Utils.showToast(`${count} cell${count === 1 ? "" : "s"} copied.`, "success");
+        } catch {
+            Utils.showToast("Cannot access clipboard.", "error");
+        }
+    }
+
+    return { configure, init, triggerCopy };
 
 })();

@@ -24,7 +24,7 @@ const RowDrag = (() => {
     }
 
     function init() {
-        const table = document.getElementById("grid-table");
+        const table = document.getElementById("data-grid");
         if (!table) return;
         table.addEventListener("mousedown", _onMousedown);
     }
@@ -57,7 +57,7 @@ const RowDrag = (() => {
         }
 
         const rows = Array.from(
-            document.querySelectorAll("#grid-table tbody tr[data-row-id]:not(.row-deleted)")
+            document.querySelectorAll("#data-grid tbody tr[data-row-id]:not(.row-deleted)")
         );
         if (!rows.length) return;
 

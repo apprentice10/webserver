@@ -17,7 +17,6 @@
     display: inline-block;
     font-size: 11px;
     color: var(--accent, #3b7aff);
-    margin-left: 2px;
     min-width: 10px;
 }
 
@@ -27,7 +26,6 @@
     font-weight: 700;
     color: var(--accent, #3b7aff);
     vertical-align: super;
-    margin-left: 1px;
 }
 
 .th-filter-btn {
@@ -40,7 +38,6 @@
     line-height: 1;
     border-radius: 3px;
     flex-shrink: 0;
-    margin-left: 2px;
     transition: color .15s, background .15s;
 }
 
@@ -100,6 +97,59 @@
 
 .sf-dd-search:focus {
     border-color: var(--accent, #3b7aff);
+}
+
+.sf-search-terms {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.sf-search-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.sf-term-input {
+    flex: 1;
+    padding: 4px 8px;
+    border: 1px solid var(--border, #d0d0d0);
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: monospace;
+    background: var(--canvas, #fafafa);
+    color: var(--ink, #222);
+    outline: none;
+    min-width: 0;
+}
+
+.sf-term-input:focus {
+    border-color: var(--accent, #3b7aff);
+}
+
+.sf-add-term,
+.sf-rm-term {
+    background: none;
+    border: 1px solid var(--border, #d0d0d0);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 2px 6px;
+    color: var(--ink-dim, #999);
+    flex-shrink: 0;
+    transition: color .15s, border-color .15s;
+}
+
+.sf-add-term:hover {
+    color: var(--accent, #3b7aff);
+    border-color: var(--accent, #3b7aff);
+}
+
+.sf-rm-term:hover {
+    color: var(--color-danger, #c00);
+    border-color: var(--color-danger, #c00);
 }
 
 .sf-cb-list {

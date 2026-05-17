@@ -8,7 +8,8 @@
 
 ## Active plans
 
-*(none)*
+| Task | Plan file |
+|------|-----------|
 
 ---
 
@@ -22,3 +23,4 @@
 | DuckDB compatibility study | Document in `infra/` |
 | Bug — Intermittent 500 on columns endpoint | No consistent repro; diagnostic logging in place |
 | AI assistant — cross-engine access | AI with access to all engines, database, and engine ai_prompt field for context; needs /grill-me |
+| Insert Row — Excel-like multi-row insert | Insert N rows based on selection count (like Excel); needs /grill-me |

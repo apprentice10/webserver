@@ -182,6 +182,16 @@ def do_undo(conn: sqlite3.Connection, tool_id: int) -> dict:
         return {**get_stack_sizes(tool_id),
                 "type": "cell_edit", "row_id": entry["row_id"], "col_slug": entry["col_slug"]}
 
+    if t == "batch_edit":
+        for c in reversed(entry["cells"]):
+            _apply_cell(conn, tool_slug, c["row_id"], c["col_slug"],
+                        c["old_val"], rev, c["row_tag"],
+                        old_for_audit=c["new_val"], new_for_audit=c["old_val"],
+                        change_type="undo")
+        conn.commit()
+        _push_redo(tool_id, entry)
+        return {**get_stack_sizes(tool_id), "type": "batch_edit"}
+
     if t == "row_insert":
         _delete_active_row(conn, tool_slug, entry["row_id"], entry["row_tag"], rev)
         conn.commit()
@@ -210,6 +220,56 @@ def do_undo(conn: sqlite3.Connection, tool_id: int) -> dict:
         return {**get_stack_sizes(tool_id),
                 "type": "hard_delete_undone", "row_id": new_id, "row_tag": tag}
 
+    if t == "batch_soft_delete":
+        new_ids = []
+        for item in entry["items"]:
+            new_id, tag = _restore_from_trash(conn, tool_slug, item["trash_id"], rev)
+            new_ids.append({"new_id": new_id, "row_tag": tag})
+        conn.commit()
+        _push_redo(tool_id, {
+            "type": "batch_soft_delete_redo", "tool_slug": tool_slug, "tool_id": tool_id,
+            "items": new_ids,
+        })
+        return {**get_stack_sizes(tool_id), "type": "batch_soft_delete_undone"}
+
+    if t == "batch_restore":
+        trash_items = []
+        for item in entry["items"]:
+            trash_id, tag = _soft_delete_to_trash(conn, tool_slug, item["new_id"], rev)
+            trash_items.append({"trash_id": trash_id, "row_tag": tag})
+        conn.commit()
+        _push_redo(tool_id, {
+            "type": "batch_restore_redo", "tool_slug": tool_slug, "tool_id": tool_id,
+            "items": trash_items,
+        })
+        return {**get_stack_sizes(tool_id), "type": "batch_restore_undone"}
+
+    if t == "batch_keep":
+        flag_id = entry.get("flag_id")
+        if flag_id:
+            for item in entry["items"]:
+                conn.execute(
+                    "INSERT OR IGNORE INTO _cell_flags (tool_slug, row_tag, col_slug, flag_id) VALUES (?,?,?,?)",
+                    (tool_slug, item["row_tag"], "", flag_id)
+                )
+        conn.commit()
+        _push_redo(tool_id, entry)
+        return {**get_stack_sizes(tool_id), "type": "batch_keep_undone"}
+
+    if t == "batch_remove_override":
+        for item in entry["items"]:
+            conn.execute(
+                f'UPDATE "{tool_slug}" SET "{item["col_slug"]}" = ? WHERE __id = ?',
+                (item["manual_value"], item["row_id"])
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO _overrides (tool_slug, row_tag, col_slug, etl_value) VALUES (?,?,?,?)",
+                (tool_slug, item["row_tag"], item["col_slug"], item["etl_value"])
+            )
+        conn.commit()
+        _push_redo(tool_id, entry)
+        return {**get_stack_sizes(tool_id), "type": "batch_remove_override_undone"}
+
     raise HTTPException(status_code=500, detail=f"Unknown undo type: {t}")
 
 
@@ -231,6 +291,16 @@ def do_redo(conn: sqlite3.Connection, tool_id: int) -> dict:
         _push_undo_internal(tool_id, entry)
         return {**get_stack_sizes(tool_id),
                 "type": "cell_edit", "row_id": entry["row_id"], "col_slug": entry["col_slug"]}
+
+    if t == "batch_edit":
+        for c in entry["cells"]:
+            _apply_cell(conn, tool_slug, c["row_id"], c["col_slug"],
+                        c["new_val"], rev, c["row_tag"],
+                        old_for_audit=c["old_val"], new_for_audit=c["new_val"],
+                        change_type="redo")
+        conn.commit()
+        _push_undo_internal(tool_id, entry)
+        return {**get_stack_sizes(tool_id), "type": "batch_edit"}
 
     if t == "row_insert":
         row_data = entry["row_snapshot"]
@@ -260,5 +330,57 @@ def do_redo(conn: sqlite3.Connection, tool_id: int) -> dict:
         })
         return {**get_stack_sizes(tool_id),
                 "type": "hard_delete_redone", "row_tag": tag}
+
+    if t == "batch_soft_delete_redo":
+        trash_items = []
+        for item in entry["items"]:
+            trash_id, tag = _soft_delete_to_trash(conn, tool_slug, item["new_id"], rev)
+            trash_items.append({"trash_id": trash_id, "row_tag": tag})
+        conn.commit()
+        _push_undo_internal(tool_id, {
+            "type": "batch_soft_delete", "tool_slug": tool_slug, "tool_id": tool_id,
+            "items": trash_items,
+        })
+        return {**get_stack_sizes(tool_id), "type": "batch_soft_delete_redone"}
+
+    if t == "batch_restore_redo":
+        new_ids = []
+        for item in entry["items"]:
+            new_id, tag = _restore_from_trash(conn, tool_slug, item["trash_id"], rev)
+            new_ids.append({"new_id": new_id, "row_tag": tag})
+        conn.commit()
+        _push_undo_internal(tool_id, {
+            "type": "batch_restore", "tool_slug": tool_slug, "tool_id": tool_id,
+            "items": new_ids,
+        })
+        return {**get_stack_sizes(tool_id), "type": "batch_restore_redone"}
+
+    if t == "batch_keep":
+        # redo = re-remove the ETL:Eliminated flag
+        flag_id = entry.get("flag_id")
+        if flag_id:
+            for item in entry["items"]:
+                conn.execute(
+                    "DELETE FROM _cell_flags WHERE tool_slug=? AND row_tag=? AND col_slug='' AND flag_id=?",
+                    (tool_slug, item["row_tag"], flag_id)
+                )
+        conn.commit()
+        _push_undo_internal(tool_id, entry)
+        return {**get_stack_sizes(tool_id), "type": "batch_keep_redone"}
+
+    if t == "batch_remove_override":
+        # redo = re-apply the override removal
+        for item in entry["items"]:
+            conn.execute(
+                f'UPDATE "{tool_slug}" SET "{item["col_slug"]}" = ? WHERE __id = ?',
+                (item["etl_value"], item["row_id"])
+            )
+            conn.execute(
+                "DELETE FROM _overrides WHERE tool_slug=? AND row_tag=? AND col_slug=?",
+                (tool_slug, item["row_tag"], item["col_slug"])
+            )
+        conn.commit()
+        _push_undo_internal(tool_id, entry)
+        return {**get_stack_sizes(tool_id), "type": "batch_remove_override_redone"}
 
     raise HTTPException(status_code=500, detail=f"Unknown redo type: {t}")

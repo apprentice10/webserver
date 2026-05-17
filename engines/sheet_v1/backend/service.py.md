@@ -16,9 +16,11 @@
 | 157–200 | `get_rows(conn, tool_id, ...)` | Returns rows with optional filters; handles deleted/all modes |
 | 201–248 | `create_row(conn, tool_id, data)` | Inserts row; respects position, ghost-row semantics |
 | 249–335 | `update_cell(conn, tool_id, row_id, data)` | Updates cell; writes audit log; marks stale; enforces tag uniqueness |
-| 340–end | `_validate_tag_unique(...)` | Ensures TAG column values remain project-unique |
+| 336–430 | `batch_update_cells(conn, tool_id, items)` | Writes N cells in one transaction; one `push_undo("batch_edit")`; returns `{updated: [row, ...]}` |
+| 440–end | `_validate_tag_unique(...)` | Ensures TAG column values remain project-unique |
 
 ## Decisions
 
 - **No HTTP imports**: this file is pure business logic; it raises `HTTPException` only because FastAPI treats it as the error boundary. All DB access goes through `conn` passed in from the route.
-- **Staleness on cell update**: `mark_tool_stale` / `mark_dependents_stale` called inside `update_cell` so every write path triggers ETL invalidation without callers knowing.
+- **Staleness on cell update**: `mark_tool_stale` / `mark_dependents_stale` called inside `update_cell` and `batch_update_cells` so every write path triggers ETL invalidation without callers knowing.
+- **`batch_update_cells` skips silently**: invalid col_slug, missing row, or tag collision are skipped without aborting the batch. Only cells that actually changed appear in the undo entry and the response.

@@ -121,8 +121,10 @@ const ColumnsManager = (() => {
                     ${lineageTitle}>
                     <div class="th-content th-draggable">
                         <span class="th-label${sortableClass}" data-slug="${col.slug}">${_escHtml(col.name)}</span>
-                        ${lineageTitle ? '<span class="th-lineage-dot" aria-hidden="true">⬡</span>' : ""}
-                        ${sortArrow}${filterBtn}
+                        <div class="th-controls">
+                            ${lineageTitle ? '<span class="th-lineage-dot" aria-hidden="true">⬡</span>' : ""}
+                            <span class="th-right-controls">${sortArrow}${filterBtn}</span>
+                        </div>
                     </div>
                     <div class="resize-handle" data-column-id="${col.id}" draggable="false"></div>
                 </th>`;

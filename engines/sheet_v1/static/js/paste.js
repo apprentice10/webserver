@@ -247,24 +247,23 @@ const PasteManager = (() => {
 
         showToast(`Updating ${updates.length} cells...`, "info");
 
+        const cells = updates.map(u => ({ row_id: u.rowId, col_slug: u.slug, value: u.value }));
         let successCount = 0;
-        for (const upd of updates) {
-            try {
-                const updatedRow = await ApiClient.updateCell(upd.rowId, upd.slug, upd.value);
-                GridManager.updateRowData(upd.rowId, updatedRow);
-                successCount++;
-            } catch (err) {
-                errors.push(`Row ${upd.rowId} / ${upd.slug}: ${err.message}`);
-            }
+        try {
+            const res = await ApiClient.batchUpdate(cells);
+            (res.updated || []).forEach(upd => { GridManager.updateRowData(upd.id ?? upd.__id, upd); successCount++; });
+        } catch (err) {
+            errors.push(err.message);
         }
 
+        document.dispatchEvent(new CustomEvent('undo:updated'));
         GridManager.render();
 
         if (errors.length > 0) {
             console.warn("Paste errors:", errors);
-            showToast(`${successCount} cells updated, ${errors.length} errors.`, "error");
+            showToast(`${successCount} cells updated, errors occurred.`, "error");
         } else {
-            showToast(`${successCount} cells updated.`, "success");
+            showToast(`${updates.length} cells updated.`, "success");
         }
     }
 
@@ -386,6 +385,23 @@ const PasteManager = (() => {
     // API PUBBLICA
     // --------------------------------------------------------
 
-    return { init };
+    async function triggerPaste() {
+        try {
+            const text = await navigator.clipboard.readText();
+            if (!text) { showToast('Clipboard is empty.', 'info'); return; }
+            const matrix = _parseClipboard(text);
+            if (!matrix.length) return;
+            const { ranges, filteredRows } = GridManager.getSelectionForPaste();
+            if (ranges.length > 0) {
+                await _pasteRange(matrix);
+            } else {
+                await _pasteNewRows(matrix);
+            }
+        } catch {
+            showToast('Cannot read clipboard.', 'error');
+        }
+    }
+
+    return { init, triggerPaste };
 
 })();

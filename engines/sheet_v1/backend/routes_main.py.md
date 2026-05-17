@@ -1,7 +1,7 @@
 ---
 # engines/sheet_v1/backend/routes_main.py
 
-**Description:** Core Sheet V1 HTTP endpoints — engine CRUD, column CRUD, row CRUD, cell updates, audit, and SQL query. Thin layer over `service.py`, `service_columns.py`, `service_row_ops.py`, `service_templates.py`.
+**Description:** Core Sheet V1 HTTP endpoints — engine CRUD, column CRUD, row CRUD, cell updates, audit, and SQL query. Thin layer over `service.py`, `service_columns.py`, `service_row_ops.py`, `service_row_batch.py`, `service_templates.py`.
 
 ## Index
 
@@ -12,7 +12,7 @@
 | 80–110 | Template endpoints | `GET/POST /templates`, `DELETE /templates/{id}` |
 | 115–163 | Engine CRUD | `GET /project`, `POST /project`, `GET /{id}`, `PATCH /{id}/settings` |
 | 168–236 | Column CRUD | list, add, reorder, update, delete, width |
-| 242–330 | Row CRUD | list, create, paste, cell update, soft-delete, restore, remove-override, keep |
+| 242–330 | Row CRUD | list, create, paste, cell update, batch-update, batch-op, batch-remove-override, soft-delete, restore, remove-override, keep |
 | 430–end | Row position | insert-at-position, copy-insert, reorder (delegates to `service_row_position`) |
 | 330–end | Audit + SQL | `GET /{id}/audit`, `POST /{id}/query` |
 | ~602–636 | Sort / Filter | `GET /{id}/sort-filter-state`, `PATCH /{id}/sort-filter-state` — JSON blob in `_tools.sort_filter_state` |

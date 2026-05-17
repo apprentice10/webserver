@@ -1,10 +1,13 @@
-GRILL-ME TEXT:
+GRILL-ME TEXT FOR A NEW ENGINE:
+Before you create a new engine check _context/infra/ENGINE_AUTHORING.md
+
+
+GRILL-ME END TEXT:
 The end result I want is a carefully detailed plan bronken into steps keeping in mind that each step is going to start from a new session. you're going to link this plan into CURRENT_STATE.md to keep track of it. when asking something use language I can understand, I'm not a programmer, (I know the basics) but don't beat me up with really complex language.
 
 
 
-
--New engine type ExternalStructuredSource:
+-New engine type External Structured Source:
     A new type of engine that creates a table from External Structured Sources (CSV, Excel, AutoCADDXF, API):
         -Load a DXF file (Can load many files), for each DXF file:
             -Dwg gets added to a list, user can enter date (date default=today), design number, design name, Path
@@ -33,7 +36,7 @@ The end result I want is a carefully detailed plan bronken into steps keeping in
             -User can change the path of the file.
 
 
--New engine type SemiStructuredDocumentSource:
+-New engine type Semi Structured Document Source:
     A new type of engine that creates a table from Semi Structured Document Sources (PDF):
         -Load a PDF file (Can load many files), for each PDF file:
             -PDF gets added to a list, user can enter date (date default=today), design number, design name, Path
@@ -307,3 +310,13 @@ The end result I want is a carefully detailed plan bronken into steps keeping in
     - maintainability
     - future extensibility
     - avoiding tight coupling between templates and ETL sources
+
+
+
+
+
+
+
+
+
+

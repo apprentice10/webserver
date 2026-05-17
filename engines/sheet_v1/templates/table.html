@@ -156,6 +156,11 @@
     <div class="ctx-item ctx-gutter-only" data-action="insert-below" style="display:none"><span class="ctx-icon">⬇</span><span>Insert row below</span><span class="ctx-shortcut"></span></div>
     <div class="ctx-item ctx-gutter-only" data-action="copy-insert" style="display:none"><span class="ctx-icon">⧉</span><span>Copy and insert below</span><span class="ctx-shortcut"></span></div>
     <div class="ctx-separator ctx-sep-gutter" style="display:none"></div>
+    <div class="ctx-item" data-action="ctx-copy"><span class="ctx-icon">⎘</span><span>Copy</span><span class="ctx-shortcut">Ctrl+C</span></div>
+    <div class="ctx-item" data-action="ctx-cut"><span class="ctx-icon">✂</span><span>Cut</span><span class="ctx-shortcut">Ctrl+X</span></div>
+    <div class="ctx-item" data-action="ctx-paste"><span class="ctx-icon">⧉</span><span>Paste</span><span class="ctx-shortcut">Ctrl+V</span></div>
+    <div class="ctx-item" data-action="ctx-paste-special"><span class="ctx-icon">⊞</span><span>Paste Special…</span><span class="ctx-shortcut">Ctrl+Shift+V</span></div>
+    <div class="ctx-separator ctx-sep-clipboard"></div>
     <div class="ctx-item" data-action="delete"><span class="ctx-icon">✕</span><span data-i18n="ctx.delete">Delete row</span><span class="ctx-shortcut">Del</span></div>
     <div class="ctx-item" data-action="restore"><span class="ctx-icon">↩</span><span data-i18n="ctx.restore">Restore row</span><span class="ctx-shortcut"></span></div>
     <div class="ctx-item ctx-danger" data-action="hard-delete"><span class="ctx-icon">🗑</span><span data-i18n="ctx.hard_delete">Delete permanently</span><span class="ctx-shortcut"></span></div>
@@ -198,21 +203,43 @@
 
 <!-- MODAL: PASTE SPECIAL (Ctrl+Shift+V) -->
 <div class="modal-overlay" id="ps-modal" style="display:none" onclick="if(event.target===this)PasteSpecial.close()">
-    <div class="modal" style="width:520px;max-width:95vw">
+    <div class="modal" style="width:560px;max-width:95vw">
         <div class="modal-header">
             <h2>Paste Special</h2>
             <button class="modal-close" onclick="PasteSpecial.close()">✕</button>
         </div>
+        <div class="ps-tab-bar">
+            <button class="ps-tab ps-tab-active" id="ps-tab-btn-mapper"    onclick="PasteSpecial.switchTab('mapper')">Column mapper</button>
+            <button class="ps-tab"               id="ps-tab-btn-text"      onclick="PasteSpecial.switchTab('text')">Paste text</button>
+            <button class="ps-tab"               id="ps-tab-btn-transpose" onclick="PasteSpecial.switchTab('transpose')">Transpose</button>
+        </div>
         <div class="modal-body" style="max-height:65vh;overflow-y:auto">
-            <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px">
-                <input type="checkbox" id="ps-header-toggle" onchange="PasteSpecial._updateRowCount()">
-                First row is a header (skip when pasting)
-            </label>
-            <div style="font-size:12px;color:var(--ink-muted);margin-bottom:4px">Preview</div>
-            <div id="ps-preview"></div>
-            <div style="font-size:12px;color:var(--ink-muted);margin-bottom:6px;margin-top:8px">Column mapping</div>
-            <div id="ps-mapper"></div>
-            <div id="ps-row-count" style="font-size:12px;color:var(--ink-muted);margin-top:8px"></div>
+            <!-- Tab: Column mapper -->
+            <div id="ps-tab-mapper">
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px">
+                    <input type="checkbox" id="ps-header-toggle" onchange="PasteSpecial._updateRowCount()">
+                    First row is a header (skip when pasting)
+                </label>
+                <div style="font-size:12px;color:var(--ink-muted);margin-bottom:4px">Preview</div>
+                <div id="ps-preview"></div>
+                <div style="font-size:12px;color:var(--ink-muted);margin-bottom:6px;margin-top:8px">Column mapping</div>
+                <div id="ps-mapper"></div>
+                <div id="ps-row-count" style="font-size:12px;color:var(--ink-muted);margin-top:8px"></div>
+            </div>
+            <!-- Tab: Paste text -->
+            <div id="ps-tab-text" style="display:none">
+                <p style="font-size:13px;color:var(--ink-muted);margin:0 0 12px">
+                    Pastes clipboard data positionally into the sheet starting at the selection anchor. No column mapping — data is written cell by cell, left to right, top to bottom.
+                </p>
+                <div id="ps-text-info" style="font-size:12px;color:var(--ink-muted)"></div>
+            </div>
+            <!-- Tab: Transpose -->
+            <div id="ps-tab-transpose" style="display:none">
+                <p style="font-size:13px;color:var(--ink-muted);margin:0 0 12px">
+                    Pastes clipboard data with rows and columns swapped. Each clipboard row becomes a column and each clipboard column becomes a row.
+                </p>
+                <div id="ps-transpose-info" style="font-size:12px;color:var(--ink-muted)"></div>
+            </div>
         </div>
         <div class="modal-footer">
             <button class="btn btn-outline" onclick="PasteSpecial.close()">Cancel</button>
