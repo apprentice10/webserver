@@ -44,7 +44,25 @@
 | `engines/sheet_v1/backend/service_row_ops.py` | Row mutations: soft/hard delete, restore, paste, rollback, override |
 | `engines/sheet_v1/backend/service_row_position.py` | Row position ops: insert above/below, copy-insert, reorder |
 | `engines/sheet_v1/backend/service_templates.py` | ETL template CRUD |
+| `engines/sheet_v1/backend/routes_find_replace.py` | Find/replace + column autocomplete endpoints |
+| `engines/sheet_v1/backend/routes_undo.py` | Undo/redo endpoints |
+| `engines/sheet_v1/backend/service_row_batch.py` | Batch row/cell ops: `batch_row_op`, `batch_remove_override` |
+| `engines/sheet_v1/backend/service_find_replace.py` | Find/replace business logic: `find_replace_cells`, `get_column_values` |
+| `engines/sheet_v1/backend/service_undo.py` | Undo/redo stack: `do_undo`, `do_redo`, `get_stack_sizes` |
 | `engines/sheet_v1/engine.json` | Plugin manifest for Sheet engine |
+
+## Backend — MTO V1 Engine (`engines/mto_v1/backend/`)
+
+| Module | Responsibility |
+|--------|---------------|
+| `engines/mto_v1/backend/routes.py` | Combined router — aggregates MTO sub-routers under `/api/engines/mto` |
+| `engines/mto_v1/backend/routes_tools.py` | MTO tool instance CRUD: create, open, delete |
+| `engines/mto_v1/backend/routes_typicals.py` | Typical CRUD: list, create, rename, delete |
+| `engines/mto_v1/backend/service_etl.py` | MTO ETL apply/run: write to `mto_utilities`, sync `mto_typicals` |
+| `engines/mto_v1/static/js/mto_shell.js` | MTO tab bar, page switching, typical CRUD, utilities load |
+| `engines/mto_v1/static/js/mto_materials.js` | Materials table IIFE: render, cell-edit, add/delete row, drag-to-reorder |
+| `engines/mto_v1/static/js/mto_import.js` | Import panel IIFE: slide-in drawer to browse and import typicals from an external project DB |
+| `engines/mto_v1/engine.json` | Plugin manifest for MTO engine |
 | `_legacy/instrument_list/` | Dead code — **do not read** |
 
 ---
@@ -101,6 +119,10 @@
 | `panels/panel-floats.js` | Float panel create/drag/resize/proximity-snap |
 | `panels/panel-tab-bar.js` | Tab HTML, render, drag-reorder, drag-to-float |
 | `revision-picker/revision-picker.js` | Revision selector UI component |
+| `autocomplete/autocomplete.js` | Column value autocomplete dropdown |
+| `find-replace/find-replace.js` | Find/replace dialog: search, replace, match options |
+| `sort-filter/sort-filter.js` | Sort and filter panel: multi-column sort, wildcard live-filter |
+| `undo/undo-manager.js` | Undo/redo state machine: stack management, Ctrl+Z/Y dispatch |
 
 ---
 

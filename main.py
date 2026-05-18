@@ -87,3 +87,10 @@ async def etl_canvas_page(request: Request, db: str = Query(...), tool: int = Qu
     return templates.TemplateResponse(
         request, "etl_canvas.html", {"db": db, "tool_id": tool}
     )
+
+
+@app.get("/mto", response_class=HTMLResponse)
+async def mto_page(request: Request, db: str = Query(...), tool: int = Query(...)):
+    return templates.TemplateResponse(
+        request, "mto_table.html", {"db": db, "tool_id": tool}
+    )

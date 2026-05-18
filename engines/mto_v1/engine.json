@@ -1,0 +1,12 @@
+{
+  "name": "MTO",
+  "version": "1.0",
+  "type": "engine",
+  "slug": "mto",
+  "description": "Typical Assembly and Material Take-Off.",
+  "icon": "🔩",
+  "dashboard_uses": ["grid-api v1", "etl-api v1"],
+  "uses_utilities": ["etl"],
+  "ai_prompt": "This engine manages typical assemblies for material take-off. Each typical is a reusable engineering design template with a materials table, an image, and ETL-driven utilities.",
+  "supports_template": false
+}

@@ -489,7 +489,7 @@ function _renderSidebarTool(tool, idx, dbPath, currentToolId, inGroupId) {
         <a href="#" class="side-item${tool.id === currentToolId ? ' active' : ''}"
            data-tool-id="${tool.id}" data-index="${idx}"${groupAttr}
            draggable="true"
-           onclick="openToolById(${tool.id}, '${escapeAttr(dbPath)}'); return false;"
+           onclick="openToolById(${tool.id}, '${escapeAttr(dbPath)}', '${escapeAttr(tool.tool_type || '')}'); return false;"
            ondragstart="_onEngineDragStart(event, ${tool.id})">
             <span class="si-icon">${escapeHtml(tool.icon || '📄')}</span>
             <span class="si-label">${escapeHtml(tool.name)}</span>
@@ -689,8 +689,10 @@ async function _permanentDelete(toolId, toolName, dbPath) {
 
 // ── Navigation ────────────────────────────────────────────────────────
 
-function openToolById(toolId, dbPath) {
-    window.location.href = `/tool?db=${encodeURIComponent(dbPath)}&tool=${toolId}`;
+function openToolById(toolId, dbPath, toolType) {
+    const ENGINE_PAGES = { mto: '/mto' };
+    const page = ENGINE_PAGES[toolType] || '/tool';
+    window.location.href = `${page}?db=${encodeURIComponent(dbPath)}&tool=${toolId}`;
 }
 
 

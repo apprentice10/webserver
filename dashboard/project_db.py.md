@@ -9,7 +9,7 @@
 |--------|-------------|
 | `DATA_DIR` | `Path` → `data/` in the project root |
 | `BACKUPS_DIR` | `Path` → `data/backups/` — pre-migration safety copies |
-| `SCHEMA_VERSION` | Current schema version integer — bump whenever DDL changes (see rule below) |
+| `SCHEMA_VERSION` | Current schema version integer — bump whenever DDL changes (see rule below). Currently 10. |
 | `SYSTEM_COLUMNS` | Set `{"tag", "rev", "log"}` — slugs reserved for system columns |
 | `INTERNAL_PREFIX` | `"__"` — prefix for internal columns (`__id`, `__position`, `__log`, `__created_at`) |
 | `DDL_SYSTEM_TABLES` | SQL to create `_tools`, `_columns`, `_trash`, `_overrides`, `_audit`, `_flags`, `_cell_flags`, `_templates`, `_revisions`, `_revision_snapshots` |
@@ -20,6 +20,12 @@
 | `_migrate_to_v2(conn)` | v1→v2: adds `_revisions` + `_revision_snapshots`; seeds rev-0; resets TEXT `rev` column values to 0 on all tool tables |
 | `_migrate_to_v3(conn)` | v2→v3: renames `instrument-list` type_slug → `sheet` in `_tools` and `_templates` |
 | `_migrate_to_v4(conn)` | v3→v4: adds `engine_version TEXT NOT NULL DEFAULT '1.0'` column to `_tools` |
+| `_migrate_to_v5(conn)` | v4→v5: adds `position` column to `_tools`; seeds from id order |
+| `_migrate_to_v6(conn)` | v5→v6: creates `_tool_groups`; adds `group_id` column to `_tools` |
+| `_migrate_to_v7(conn)` | v6→v7: adds `is_trashed`, `trashed_at` columns to `_tools` |
+| `_migrate_to_v8(conn)` | v7→v8: adds `sort_filter_state` column to `_tools` |
+| `_migrate_to_v9(conn)` | v8→v9: adds `note` to `_cell_flags`; creates `_conditional_flag_rules` |
+| `_migrate_to_v10(conn)` | v9→v10: creates MTO engine tables — `mto_typicals`, `mto_materials`, `mto_images`, `mto_utilities`, `mto_tag_placements` |
 | `_run_migrations(conn, db_path)` | Versioned migration runner: each step in a transaction, backup before |
 | `logger` | `logging.getLogger("engine.project_db")` — DEBUG on every open, ERROR with full traceback on any unhandled exception |
 | `get_project_conn(request)` | FastAPI dependency: opens connection, returns 403 on non-GET if DB is newer than server; logs db_path, method, and any unhandled exception |

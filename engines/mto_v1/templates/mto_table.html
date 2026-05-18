@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}MTO — Typical Assembly{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/engine/css/layout.css">
+<link rel="stylesheet" href="/static/engine/css/toolbar.css">
+<link rel="stylesheet" href="/engines/mto_v1/static/css/mto.css">
+{% endblock %}
+
+{% block topbar_crumbs %}
+<span class="crumb-project" id="project-name">No project open</span>
+<span class="crumb-sep">/</span>
+<button class="tool-pill" id="topbar-engine-pill" title="MTO tool">
+    <span class="tool-icon">🔩</span>
+    <span class="pill-name" id="mto-tool-name">Loading…</span>
+</button>
+{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-ghost btn-sm" id="btn-run-etl">&#9654; Run ETL</button>
+<a class="btn btn-ghost btn-sm" id="btn-etl-editor"
+   href="/etl?db={{ db | urlencode }}&tool={{ tool_id }}">&#9881; ETL Editor</a>
+<button class="btn btn-ghost btn-sm" id="btn-import-typical">&#8659; Import</button>
+<button class="btn btn-ghost btn-sm" id="btn-export-typical">&#8657; Export</button>
+{% endblock %}
+
+{% block content %}
+<div class="tool-container" id="tool-container">
+
+    <!-- SECONDARY TOOLBAR -->
+    <div class="tool-toolbar">
+        <div class="tool-toolbar-left">
+            <a href="/?db={{ db | urlencode }}" class="btn btn-ghost btn-sm back-btn">← Projects</a>
+        </div>
+        <div class="tool-toolbar-right"></div>
+    </div>
+
+    <!-- TAB BAR -->
+    <div class="mto-tab-bar" id="mto-tab-bar">
+        <!-- populated by mto_shell.js -->
+    </div>
+
+    <!-- PAGE AREA -->
+    <div class="mto-pages" id="mto-pages">
+        <!-- placeholder divs inserted by mto_shell.js -->
+    </div>
+
+    <!-- EMPTY STATE -->
+    <div class="mto-empty" id="mto-empty" style="display:none">
+        <p>No typicals yet. Add one with the <strong>+</strong> button or run the ETL to import from utilities.</p>
+    </div>
+
+</div>
+
+<script>
+    const MTO_DB   = {{ db | tojson }};
+    const MTO_TOOL = {{ tool_id }};
+</script>
+<script src="/static/engine/js/utils.js"></script>
+<script src="/engines/mto_v1/static/js/mto_annotation.js"></script>
+<script src="/engines/mto_v1/static/js/mto_image.js"></script>
+<script src="/engines/mto_v1/static/js/mto_materials.js"></script>
+<script src="/engines/mto_v1/static/js/mto_shell.js"></script>
+<script src="/engines/mto_v1/static/js/mto_import.js"></script>
+<script src="/engines/mto_v1/static/js/mto_export.js"></script>
+{% endblock %}

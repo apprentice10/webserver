@@ -10,6 +10,15 @@
 
 | Task | Plan file |
 |------|-----------|
+| Group G — Shared Grid Toolkit | [plan_group_g_shared_grid.md](../project/plan_group_g_shared_grid.md) |
+
+---
+
+## Blocked (waiting on dependency)
+
+| Task | Plan file | Blocked on |
+|------|-----------|------------|
+| MTO Revision — Full Feature Set | [plan_mto_revision.md](../project/plan_mto_revision.md) | Group G complete |
 
 ---
 
@@ -18,9 +27,5 @@
 | Task | Notes |
 |------|-------|
 | Group P — Dark theme legibility + mid-ground theme | Needs /grill-me |
-| Cable List tool | New type_slug, custom system columns |
-| I/O List tool | New type_slug |
-| DuckDB compatibility study | Document in `infra/` |
-| Bug — Intermittent 500 on columns endpoint | No consistent repro; diagnostic logging in place |
 | AI assistant — cross-engine access | AI with access to all engines, database, and engine ai_prompt field for context; needs /grill-me |
 | Insert Row — Excel-like multi-row insert | Insert N rows based on selection count (like Excel); needs /grill-me |

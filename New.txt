@@ -316,7 +316,63 @@ The end result I want is a carefully detailed plan bronken into steps keeping in
 
 
 
+Help me write a raw prompt for claude code, don't suggest any code yet, let claude code do it, I just need a good, understandable description of this:
 
+"
+This is big, so I think you should divide this in more grill-me sessions.
+Read _context/infra/ENGINE_AUTHORING.md for reference
+We're making a new engine. its purpose is a typical assembly and Material Take Off:
+-we're going to use the same grid and the ETL sheet v1 uses
+-it has to be multipurpose (not just for instrumentation)
+-it will consist in many typical assembly (normally a page for typical), each one with:
+    -a name.
+    -a description of the tipical
+    -an image (originally a DWG, but if is not possible PDF and DXF, prefer scalable formats that don't loose resolution, but I guess it has to support also JPEG, PNG and other comon formats too)
+    -a material table (created from ETL)
+    -a utilities table (created from ETL) utilities assing to that typical
+    -the user needs to "link" each material in the desing, we need to discuss this but basically the user drags a row from the table to the desing, it shows the TAG (since is a system column that already exist) inside a circle or rectangle with an arrow pointing where the user decides to point inside the desing, this is saved in the project database. the end result has to be able to export this desing in excel with the those tags in the right position.
+    -it has a panel that enables the user to import other typicals from an external database (another project database or another library database that contains typicals) the panel has to show the preview of each typical as the user imports it, suggest me how to adress difrent tables structures. but basically the material ussually have a TAG, REV and LOG as system columns and part description, size, material, unit of meassurement, quantity, and total (not sure if total can be calculated in the ETL, "quantity"*"the number of rows in the utilities table".
 
+here are some real world scenarios as an example:
+    -User creates a new typical sheet engine.
+    -opens the typical sheet engine, is empty.
+    -utilities table: uses the ETL to load the utilities assinged to each typical: TT01: TYPICAL01, FT03: TIPICAL02, LT02: TYPICAL01, AT02: TYPICAL03, ect, from the project database. User decides how many columns to make, that's not important the Engine cares only for the TAG and how many rows it has.
+        -the utilities table will have same functionality as the grid in "sheet_v1", FLAGS, LOGS, REV, be able to manual edit, ad new rows, ect.
+    -the engine shows one page for each unique typical. user can select the page from a dropbox with the tipicals name (TYPICAL01, TIPICAL02, TYPICAL03) in the "tool-toolbar", each page has its own utilities table for that especific typical (filtered).
+    -material table: the user writes the ETL (or loads a template) that will import all parts required for each typical from the project database or just creates an empty table if there's none.
+        -there should be a material catalog, where the materials TAG (all system comlumns, REV and LOG), part description, size and UOM are stored.
+        -the engine database (material table) will import a material part description, size and UOM from the catalog when the user writes adds a new line with a TAG.
+        -the table will suggest entries from the catalog while the user writes in the cell.
+        -if the user adds a new line that the catalog doesn't have this material will be added to te catalog.
+        -if the user edits a material with the same TAG this material will be updated to the catalog.
+        -if the user changes a tag in the material table, the values will be re-imported from the catalog.
+        -catalog and material table have to be synched between each other.
+        -The material table will save in the database all values inserted or imported from the catalog plus the name, description, quantity of each material and the note.
+    **the angine already has created some tables, see how to fit this description into them, or lets discuss it so you can suggest a better approach**
+    -Since there are 2 tables (material and utilities) the there will be 2 ETL working simultaniusly.
+    -Fisrt page: TYPICAL01 is new, empty (no materials, no image, just the utilities assinged to TYPICAL01)
+        -user loads image
+        -fills the material list: assing TAG, writes part description, size, material, unit of meassurement and quantity the total is calculated multiplying the quantity times the number of rows in utitlities (probably from the ETL).
+        -drags each row from the material list to the image, shows the TAG of that row as a preview until user release the mouse button, after the TAG is placed, the user then clicks again to position the arrow pointing somewhere in the image. tag and arrow can be move afterwards
+    -Second page: TYPICAL02 already has its material list imported from the project database.
+    -Third page: TYPICAL03 is empty (no materials, no image, just the utilities assinged to TYPICAL01)
+        -user uses the import typical panel
+        -clicks on "import from database"
+        -selects the database to import from (can be another project or a catalog database both made from this engine they will have the same structure so it won't matter)
+        -the panel shows a list of typicals (made with the same engine and compatible version)
+        -the user selects TYPICAL03
+        -import
+        -the panel shows it has imported TYPICAL03 successfully
+    -If the user adds a new utiliti with a new typical
+        -refresh the ETL
+        -Engine shows a new page with the new typical (emmty or not)
+    -The user export this typical into another project database used as a catalog.
+        -clicks export typical
+        -Selects the typical/s to export
+        -Engine checks if the typical name already exist: if yes - ask user for a new name / if no - saves the typical
 
-
+The end result I want is a carefully detailed plan bronken into steps keeping in mind that each step is going to
+start from a new session. you're going to link this plan into CURRENT_STATE.md to keep track of it. when asking
+something use language I can understand, I'm not a programmer, (I know the basics) but don't beat me up with really
+complex language.
+"

@@ -1,0 +1,172 @@
+{
+  "sources": [
+    {
+      "id": "xa1b2c3d1",
+      "type": "table",
+      "name": "instrument_list",
+      "alias": "il",
+      "sql": ""
+    },
+    {
+      "id": "xa1b2c3d2",
+      "type": "table",
+      "name": "std_cable",
+      "alias": "sc",
+      "sql": ""
+    }
+  ],
+  "transformations": [
+    {
+      "id": "xb1c2d3e4",
+      "type": "join",
+      "inputs": ["xa1b2c3d1", "xa1b2c3d2"],
+      "join_type": "INNER",
+      "left_input": "xa1b2c3d1",
+      "right_source": "xa1b2c3d2",
+      "alias": "sc",
+      "columns": [
+        {
+          "id": "xpj01",
+          "alias": "il_tag",
+          "expr": {
+            "type": "column_ref",
+            "column_name": "tag",
+            "table_alias": "il"
+          }
+        },
+        {
+          "id": "xpj02",
+          "alias": "tipico",
+          "expr": {
+            "type": "column_ref",
+            "column_name": "tipico",
+            "table_alias": "sc"
+          }
+        }
+      ],
+      "condition": {
+        "type": "binary_op",
+        "op": "=",
+        "left": {
+          "type": "function",
+          "name": "TRIM",
+          "args": [
+            {
+              "type": "function",
+              "name": "CONCAT_WS",
+              "args": [
+                { "type": "literal", "value": " " },
+                {
+                  "type": "function",
+                  "name": "COALESCE",
+                  "args": [
+                    { "type": "column_ref", "column_name": "tipo_strumento", "table_alias": "il" },
+                    { "type": "literal", "value": "" }
+                  ]
+                },
+                {
+                  "type": "function",
+                  "name": "COALESCE",
+                  "args": [
+                    { "type": "column_ref", "column_name": "intervallo", "table_alias": "il" },
+                    { "type": "literal", "value": "" }
+                  ]
+                },
+                {
+                  "type": "function",
+                  "name": "COALESCE",
+                  "args": [
+                    { "type": "column_ref", "column_name": "classe_linea", "table_alias": "il" },
+                    { "type": "literal", "value": "" }
+                  ]
+                },
+                {
+                  "type": "function",
+                  "name": "COALESCE",
+                  "args": [
+                    { "type": "column_ref", "column_name": "attacco_processo", "table_alias": "il" },
+                    { "type": "literal", "value": "" }
+                  ]
+                },
+                {
+                  "type": "function",
+                  "name": "COALESCE",
+                  "args": [
+                    { "type": "column_ref", "column_name": "classificazione_area", "table_alias": "il" },
+                    { "type": "literal", "value": "" }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "right": {
+          "type": "column_ref",
+          "column_name": "tag",
+          "table_alias": "sc"
+        }
+      }
+    },
+    {
+      "id": "xc1d2e3f4",
+      "type": "filter",
+      "inputs": ["xb1c2d3e4"],
+      "mode": "where",
+      "condition": {
+        "type": "is_not_null",
+        "expr": {
+          "type": "column_ref",
+          "table_alias": "",
+          "column_name": "tipico"
+        }
+      }
+    },
+    {
+      "id": "xd1e2f3a4",
+      "type": "select",
+      "inputs": ["xc1d2e3f4"],
+      "columns": [
+        {
+          "id": "xsc01",
+          "alias": "tag",
+          "expr": {
+            "type": "column_ref",
+            "table_alias": "",
+            "column_name": "il_tag"
+          }
+        },
+        {
+          "id": "xsc02",
+          "alias": "typical_name",
+          "expr": {
+            "type": "column_ref",
+            "table_alias": "",
+            "column_name": "tipico"
+          }
+        }
+      ]
+    }
+  ],
+  "final_relation_id": "xd1e2f3a4",
+  "order_by": [
+    {
+      "expr": {
+        "type": "column_ref",
+        "table_alias": "",
+        "column_name": "typical_name"
+      },
+      "direction": "asc"
+    },
+    {
+      "expr": {
+        "type": "column_ref",
+        "table_alias": "",
+        "column_name": "tag"
+      },
+      "direction": "asc"
+    }
+  ],
+  "meta": {
+    "schema_version": 1
+  }
+}

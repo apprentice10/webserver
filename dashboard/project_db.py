@@ -23,7 +23,7 @@ BACKUPS_DIR = DATA_DIR / "backups"
 
 # Bump this whenever DDL_SYSTEM_TABLES or any system table structure changes.
 # See engine/project_db.py.md for the full rule.
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 SYSTEM_COLUMNS = {"tag", "rev", "log"}
 INTERNAL_PREFIX = "__"
@@ -363,10 +363,52 @@ def _migrate_to_v9(conn: sqlite3.Connection) -> None:
             operator TEXT NOT NULL, value TEXT NOT NULL DEFAULT '')""")
 
 
+def _migrate_to_v10(conn: sqlite3.Connection) -> None:
+    """Create MTO engine tables: typicals, materials, images, utilities, tag_placements."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS mto_typicals (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        tool_id     INTEGER NOT NULL,
+        name        TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        position    INTEGER NOT NULL DEFAULT 0)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS mto_materials (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        typical_id       INTEGER NOT NULL REFERENCES mto_typicals(id) ON DELETE CASCADE,
+        tag              TEXT NOT NULL DEFAULT '',
+        rev              INTEGER NOT NULL DEFAULT 0,
+        log              TEXT NOT NULL DEFAULT '',
+        part_description TEXT NOT NULL DEFAULT '',
+        size             TEXT NOT NULL DEFAULT '',
+        material         TEXT NOT NULL DEFAULT '',
+        uom              TEXT NOT NULL DEFAULT '',
+        quantity         REAL NOT NULL DEFAULT 0,
+        position         INTEGER NOT NULL DEFAULT 0)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS mto_images (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        typical_id  INTEGER NOT NULL REFERENCES mto_typicals(id) ON DELETE CASCADE,
+        filename    TEXT NOT NULL DEFAULT '',
+        format      TEXT NOT NULL DEFAULT '',
+        content     BLOB NOT NULL)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS mto_utilities (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        tool_id      INTEGER NOT NULL,
+        tag          TEXT NOT NULL DEFAULT '',
+        typical_name TEXT NOT NULL DEFAULT '')""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS mto_tag_placements (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        typical_id INTEGER NOT NULL REFERENCES mto_typicals(id) ON DELETE CASCADE,
+        tag        TEXT NOT NULL DEFAULT '',
+        label_x    REAL NOT NULL DEFAULT 0,
+        label_y    REAL NOT NULL DEFAULT 0,
+        arrow_x    REAL NOT NULL DEFAULT 0,
+        arrow_y    REAL NOT NULL DEFAULT 0)""")
+
+
 _MIGRATIONS: dict = {
     1: _migrate_to_v1, 2: _migrate_to_v2, 3: _migrate_to_v3,
     4: _migrate_to_v4, 5: _migrate_to_v5, 6: _migrate_to_v6,
     7: _migrate_to_v7, 8: _migrate_to_v8, 9: _migrate_to_v9,
+    10: _migrate_to_v10,
 }
 
 

@@ -43,6 +43,11 @@ def etl_apply(
     data: EtlModelBody = ...,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
+    from engines.sheet_v1.backend.service import get_engine
+    tool = get_engine(conn, tool_id)
+    if tool.get("tool_type") == "mto":
+        from engines.mto_v1.backend.service_etl import mto_etl_apply
+        return mto_etl_apply(conn, tool_id, data.model)
     from dashboard.etl import etl_apply as _apply
     return _apply(conn, tool_id, data.model)
 
@@ -52,6 +57,11 @@ def etl_run(
     tool_id: int,
     conn: sqlite3.Connection = Depends(get_project_conn)
 ):
+    from engines.sheet_v1.backend.service import get_engine
+    tool = get_engine(conn, tool_id)
+    if tool.get("tool_type") == "mto":
+        from engines.mto_v1.backend.service_etl import mto_etl_run_saved
+        return mto_etl_run_saved(conn, tool_id)
     from dashboard.etl import etl_run_saved
     return etl_run_saved(conn, tool_id)
 

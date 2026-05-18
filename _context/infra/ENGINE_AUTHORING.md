@@ -64,6 +64,7 @@ Convention: folder name is `<slug>_v<N>` (e.g. `sheet_v1`). The `slug` field in 
 | `dashboard_uses` | no | Declare which versioned toolkit APIs this engine relies on |
 | `uses_utilities` | no | Which utility categories this engine can activate |
 | `ai_prompt` | no | Context for the AI assistant (future feature) |
+| `utility_category` | no | Required when `type` is `"utility"` — groups utilities in `UTILITY_BY_CATEGORY` for fast lookup |
 | `supports_template` | no | If `true`, shows "Load from file" in the modal |
 
 ---
@@ -74,10 +75,19 @@ Convention: folder name is `<slug>_v<N>` (e.g. `sheet_v1`). The `slug` field in 
 
 ```python
 from fastapi import APIRouter
-router = APIRouter(prefix="/api/engines/<slug>", tags=["<Name>"])
+router = APIRouter()   # aggregator — no prefix here
 ```
 
 `main.py` imports this module and calls `app.include_router(router)` automatically. Sub-routers are included inside `routes.py` using `router.include_router(...)`.
+
+Each sub-router (or the main router for simple single-file engines) declares its own prefix. Use a slug-namespaced prefix to avoid collisions with other engines:
+
+```python
+# routes_main.py (or routes.py for a single-file engine)
+router = APIRouter(prefix="/api/engines/<slug>", tags=["<Name>"])
+```
+
+> **Note:** Sheet V1 uses the legacy prefix `"/api/engines"` (no slug) across all its sub-routers because it pre-dates multi-engine namespacing. New engines **must** include the slug in the prefix (e.g. `"/api/engines/cable"`) to prevent route conflicts.
 
 Import shared infrastructure from `dashboard`:
 ```python
