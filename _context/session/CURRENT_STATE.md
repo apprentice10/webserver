@@ -10,6 +10,7 @@
 
 | Task | Plan file |
 |------|-----------|
+| Shared Toolkit Engine — Reframed Architecture | `~/.claude/plans/shared-toolkit-engine-reframed-bubbly-otter.md` |
 
 ---
 
@@ -17,7 +18,6 @@
 
 | Task | Plan file | Blocked on |
 |------|-----------|------------|
-| MTO Revision — Full Feature Set | [plan_mto_revision.md](../project/plan_mto_revision.md) | Group G complete |
 
 ---
 
