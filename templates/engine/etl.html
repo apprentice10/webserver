@@ -745,6 +745,7 @@
     }
 
     document.addEventListener("DOMContentLoaded", async () => {
+        ApiClient.configure({ endpointBase: '/api/engines/' + TOOL_ID });
         // Tool name/rev and ETL model load are independent — run in parallel.
         const [, ] = await Promise.all([
             ApiClient.loadTool().then(tool => {

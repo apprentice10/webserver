@@ -42,9 +42,10 @@
 
 **Column object shape**: returned by `ColumnsManager.getColumns()` — `{slug, name, type, position, …}`. Index in the array == `data-col-idx` on `<td>`.
 
-## `init()` call sequence
+## `init({ endpointBase })` call sequence
 
 ```
+ApiClient.configure({ endpointBase })  ← stores base for all grid-contract fetch calls
 ColumnsManager.loadColumns()
 ColumnsManager.renderHeader()
 ApiClient.loadRows(true)   → _rows
@@ -71,7 +72,7 @@ To add a new global keyboard shortcut: create a new `_initXxx()` and call it fro
 ## Public API
 
 ```js
-GridManager.init()
+GridManager.init({ endpointBase })     // required — passed down to ApiClient.configure
 GridManager.render()
 GridManager.appendRows(newRows)        // used by PasteManager after paste
 GridManager.updateRowData(rowId, row)  // patch local cache without re-render

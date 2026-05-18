@@ -10,7 +10,6 @@
 
 | Task | Plan file |
 |------|-----------|
-| Group G — Shared Grid Toolkit | [plan_group_g_shared_grid.md](../project/plan_group_g_shared_grid.md) |
 
 ---
 

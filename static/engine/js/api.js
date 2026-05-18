@@ -5,9 +5,20 @@
  * Only module allowed to fetch() the backend.
  *
  * DB_PATH and TOOL_ID are injected by the Jinja2 template.
+ *
+ * Call ApiClient.configure({ endpointBase }) before any grid method.
+ * Grid-contract endpoints resolve against _endpointBase.
+ * Sheet-specific endpoints (ETL, SQL, utilities, templates) continue using
+ * the global TOOL_ID directly and are not part of the shared grid contract.
  */
 
 const ApiClient = (() => {
+
+    let _endpointBase = '';
+
+    function configure({ endpointBase }) {
+        _endpointBase = endpointBase;
+    }
 
     function _db() { return encodeURIComponent(DB_PATH); }
 
@@ -32,11 +43,11 @@ const ApiClient = (() => {
     // ── Tool ──────────────────────────────────────────────────
 
     async function loadTool() {
-        return request(`/api/engines/${TOOL_ID}?db=${_db()}`);
+        return request(`${_endpointBase}?db=${_db()}`);
     }
 
     async function updateToolSettings(data) {
-        return request(`/api/engines/${TOOL_ID}/settings?db=${_db()}`, {
+        return request(`${_endpointBase}/settings?db=${_db()}`, {
             method: "PATCH",
             body: JSON.stringify(data)
         });
@@ -46,33 +57,33 @@ const ApiClient = (() => {
     // ── Columns ───────────────────────────────────────────────
 
     async function loadColumns() {
-        return request(`/api/engines/${TOOL_ID}/columns?db=${_db()}`);
+        return request(`${_endpointBase}/columns?db=${_db()}`);
     }
 
     async function addColumn(data) {
-        return request(`/api/engines/${TOOL_ID}/columns?db=${_db()}`, {
+        return request(`${_endpointBase}/columns?db=${_db()}`, {
             method: "POST",
             body: JSON.stringify(data)
         });
     }
 
     async function updateColumn(columnId, data) {
-        return request(`/api/engines/${TOOL_ID}/columns/${columnId}?db=${_db()}`,
+        return request(`${_endpointBase}/columns/${columnId}?db=${_db()}`,
             { method: "PATCH", body: JSON.stringify(data) });
     }
 
     async function deleteColumn(columnId) {
-        return request(`/api/engines/${TOOL_ID}/columns/${columnId}?db=${_db()}`,
+        return request(`${_endpointBase}/columns/${columnId}?db=${_db()}`,
             { method: "DELETE" });
     }
 
     async function updateColumnWidth(columnId, width) {
-        return request(`/api/engines/${TOOL_ID}/columns/${columnId}/width?db=${_db()}`,
+        return request(`${_endpointBase}/columns/${columnId}/width?db=${_db()}`,
             { method: "PATCH", body: JSON.stringify({ width }) });
     }
 
     async function reorderColumns(orderedIds) {
-        return request(`/api/engines/${TOOL_ID}/columns/reorder?db=${_db()}`,
+        return request(`${_endpointBase}/columns/reorder?db=${_db()}`,
             { method: "PUT", body: JSON.stringify({ order: orderedIds }) });
     }
 
@@ -80,90 +91,90 @@ const ApiClient = (() => {
     // ── Rows ──────────────────────────────────────────────────
 
     async function loadRows(includeDeleted = false) {
-        return request(`/api/engines/${TOOL_ID}/rows?db=${_db()}&include_deleted=${includeDeleted}`);
+        return request(`${_endpointBase}/rows?db=${_db()}&include_deleted=${includeDeleted}`);
     }
 
     async function createRow(cells) {
-        return request(`/api/engines/${TOOL_ID}/rows?db=${_db()}`, {
+        return request(`${_endpointBase}/rows?db=${_db()}`, {
             method: "POST",
             body: JSON.stringify({ cells })
         });
     }
 
     async function updateCell(rowId, slug, value) {
-        return request(`/api/engines/${TOOL_ID}/rows/${rowId}/cell?db=${_db()}`,
+        return request(`${_endpointBase}/rows/${rowId}/cell?db=${_db()}`,
             { method: "PATCH", body: JSON.stringify({ slug, value }) });
     }
 
     async function batchUpdate(cells) {
-        return request(`/api/engines/${TOOL_ID}/rows/batch-update?db=${_db()}`,
+        return request(`${_endpointBase}/rows/batch-update?db=${_db()}`,
             { method: "POST", body: JSON.stringify({ cells }) });
     }
 
     async function batchRowOp(operation, rowIds) {
-        return request(`/api/engines/${TOOL_ID}/rows/batch-op?db=${_db()}`,
+        return request(`${_endpointBase}/rows/batch-op?db=${_db()}`,
             { method: "POST", body: JSON.stringify({ operation, row_ids: rowIds }) });
     }
 
     async function batchRemoveOverride(cells) {
-        return request(`/api/engines/${TOOL_ID}/rows/batch-remove-override?db=${_db()}`,
+        return request(`${_endpointBase}/rows/batch-remove-override?db=${_db()}`,
             { method: "POST", body: JSON.stringify({ cells }) });
     }
 
     async function softDeleteRow(rowId) {
-        return request(`/api/engines/${TOOL_ID}/rows/${rowId}/delete?db=${_db()}`,
+        return request(`${_endpointBase}/rows/${rowId}/delete?db=${_db()}`,
             { method: "POST" });
     }
 
     async function restoreRow(rowId) {
-        return request(`/api/engines/${TOOL_ID}/rows/${rowId}/restore?db=${_db()}`,
+        return request(`${_endpointBase}/rows/${rowId}/restore?db=${_db()}`,
             { method: "POST" });
     }
 
     async function hardDeleteRow(rowId) {
-        return request(`/api/engines/${TOOL_ID}/rows/${rowId}/hard-delete?db=${_db()}`,
+        return request(`${_endpointBase}/rows/${rowId}/hard-delete?db=${_db()}`,
             { method: "POST" });
     }
 
     async function removeOverride(rowId, colSlug) {
         return request(
-            `/api/engines/${TOOL_ID}/rows/${rowId}/override?col=${encodeURIComponent(colSlug)}&db=${_db()}`,
+            `${_endpointBase}/rows/${rowId}/override?col=${encodeURIComponent(colSlug)}&db=${_db()}`,
             { method: "DELETE" });
     }
 
     async function keepRow(rowId) {
-        return request(`/api/engines/${TOOL_ID}/rows/${rowId}/keep?db=${_db()}`,
+        return request(`${_endpointBase}/rows/${rowId}/keep?db=${_db()}`,
             { method: "POST" });
     }
 
     async function insertRow(rowId, placement) {
-        return request(`/api/engines/${TOOL_ID}/rows/${rowId}/insert?db=${_db()}`, {
+        return request(`${_endpointBase}/rows/${rowId}/insert?db=${_db()}`, {
             method: "POST",
             body: JSON.stringify({ placement })
         });
     }
 
     async function copyRowInsert(rowId) {
-        return request(`/api/engines/${TOOL_ID}/rows/${rowId}/copy-insert?db=${_db()}`,
+        return request(`${_endpointBase}/rows/${rowId}/copy-insert?db=${_db()}`,
             { method: "POST" });
     }
 
     async function reorderRow(rowId, anchorRowId, placement) {
-        return request(`/api/engines/${TOOL_ID}/rows/${rowId}/reorder?db=${_db()}`, {
+        return request(`${_endpointBase}/rows/${rowId}/reorder?db=${_db()}`, {
             method: "POST",
             body: JSON.stringify({ anchor_row_id: anchorRowId, placement })
         });
     }
 
     async function pasteRows(rows) {
-        return request(`/api/engines/${TOOL_ID}/rows/paste?db=${_db()}`, {
+        return request(`${_endpointBase}/rows/paste?db=${_db()}`, {
             method: "POST",
             body: JSON.stringify({ rows })
         });
     }
 
 
-    // ── SQL Editor ────────────────────────────────────────────
+    // ── SQL Editor (Sheet-specific, not in shared grid contract) ──
 
     async function runSql(sql) {
         return request(`/api/engines/${TOOL_ID}/sql?db=${_db()}`, {
@@ -176,11 +187,11 @@ const ApiClient = (() => {
     // ── Export ────────────────────────────────────────────────
 
     function exportExcel() {
-        window.location.href = `/api/engines/${TOOL_ID}/export/excel?db=${_db()}`;
+        window.location.href = `${_endpointBase}/export/excel?db=${_db()}`;
     }
 
 
-    // ── ETL ───────────────────────────────────────────────────
+    // ── ETL (Sheet-specific, not in shared grid contract) ─────
 
     async function etlCompile(model) {
         return request(`/api/engines/${TOOL_ID}/etl/compile?db=${_db()}`, {
@@ -227,7 +238,7 @@ const ApiClient = (() => {
     }
 
 
-    // ── Flags ─────────────────────────────────────────────────
+    // ── Flags — project-scoped (fixed paths, no endpointBase) ─
 
     async function listFlags() {
         return request(`/api/engines/flags?db=${_db()}`);
@@ -251,37 +262,40 @@ const ApiClient = (() => {
         return request(`/api/engines/flags/${flagId}?db=${_db()}`, { method: "DELETE" });
     }
 
+
+    // ── Cell Flags — tool-scoped (use endpointBase) ───────────
+
     async function toggleCellFlags(flagId, cells, note = "") {
-        return request(`/api/engines/${TOOL_ID}/cell-flags/toggle?db=${_db()}`, {
+        return request(`${_endpointBase}/cell-flags/toggle?db=${_db()}`, {
             method: "POST",
             body: JSON.stringify({ flag_id: flagId, cells, note })
         });
     }
 
     async function updateCellFlagNote(flagId, cells, note) {
-        return request(`/api/engines/${TOOL_ID}/cell-flags/note?db=${_db()}`, {
+        return request(`${_endpointBase}/cell-flags/note?db=${_db()}`, {
             method: "PATCH",
             body: JSON.stringify({ flag_id: flagId, cells, note })
         });
     }
 
     async function listFlagRules() {
-        return request(`/api/engines/${TOOL_ID}/flag-rules?db=${_db()}`);
+        return request(`${_endpointBase}/flag-rules?db=${_db()}`);
     }
 
     async function createFlagRule(rule) {
-        return request(`/api/engines/${TOOL_ID}/flag-rules?db=${_db()}`, {
+        return request(`${_endpointBase}/flag-rules?db=${_db()}`, {
             method: "POST",
             body: JSON.stringify(rule)
         });
     }
 
     async function deleteFlagRule(ruleId) {
-        return request(`/api/engines/${TOOL_ID}/flag-rules/${ruleId}?db=${_db()}`, { method: "DELETE" });
+        return request(`${_endpointBase}/flag-rules/${ruleId}?db=${_db()}`, { method: "DELETE" });
     }
 
 
-    // ── Templates ─────────────────────────────────────────────
+    // ── Templates (Sheet-specific, fixed paths) ───────────────
 
     async function saveTemplate(data) {
         return request(`/api/engines/templates?db=${_db()}`, {
@@ -308,7 +322,7 @@ const ApiClient = (() => {
         });
     }
 
-    // ── Revisions ─────────────────────────────────────────────
+    // ── Revisions (project-level, fixed paths) ────────────────
 
     async function getRevisions() {
         return request(`/api/project/revisions?db=${_db()}`);
@@ -337,7 +351,7 @@ const ApiClient = (() => {
     // ── Find & Replace ────────────────────────────────────────
 
     async function findReplace({ search, replacement, match_case, match_entire_cell, scope } = {}) {
-        return request(`/api/engines/${TOOL_ID}/find_replace?db=${_db()}`, {
+        return request(`${_endpointBase}/find_replace?db=${_db()}`, {
             method: "POST",
             body: JSON.stringify({ search, replacement, match_case, match_entire_cell, scope }),
         });
@@ -346,33 +360,33 @@ const ApiClient = (() => {
     async function getColumnValues(colSlug, prefix = "") {
         const p = new URLSearchParams({ db: DB_PATH });
         if (prefix) p.set("prefix", prefix);
-        return request(`/api/engines/${TOOL_ID}/column_values/${encodeURIComponent(colSlug)}?${p}`);
+        return request(`${_endpointBase}/column_values/${encodeURIComponent(colSlug)}?${p}`);
     }
 
 
     // ── Undo / Redo ───────────────────────────────────────────
 
     async function undo() {
-        return request(`/api/engines/${TOOL_ID}/undo?db=${_db()}`, { method: "POST" });
+        return request(`${_endpointBase}/undo?db=${_db()}`, { method: "POST" });
     }
 
     async function redo() {
-        return request(`/api/engines/${TOOL_ID}/redo?db=${_db()}`, { method: "POST" });
+        return request(`${_endpointBase}/redo?db=${_db()}`, { method: "POST" });
     }
 
     async function getUndoState() {
-        return request(`/api/engines/${TOOL_ID}/undo-state?db=${_db()}`);
+        return request(`${_endpointBase}/undo-state?db=${_db()}`);
     }
 
 
     // ── Sort / Filter ─────────────────────────────────────────
 
     async function getSortFilterState() {
-        return request(`/api/engines/${TOOL_ID}/sort-filter-state?db=${_db()}`);
+        return request(`${_endpointBase}/sort-filter-state?db=${_db()}`);
     }
 
     async function setSortFilterState(state) {
-        return request(`/api/engines/${TOOL_ID}/sort-filter-state?db=${_db()}`, {
+        return request(`${_endpointBase}/sort-filter-state?db=${_db()}`, {
             method: "PATCH",
             body: JSON.stringify(state),
         });
@@ -388,13 +402,15 @@ const ApiClient = (() => {
         if (colSlug)       p.set("col_slug", colSlug);
         if (colSlugs)      p.set("col_slugs", colSlugs);
         if (revision != null) p.set("revision", revision);
-        return request(`/api/engines/${TOOL_ID}/audit?${p}`);
+        return request(`${_endpointBase}/audit?${p}`);
     }
 
     async function rollbackCell(rowId, col, entryId) {
         const p = new URLSearchParams({ db: DB_PATH, col, entry_id: entryId });
-        return request(`/api/engines/${TOOL_ID}/rows/${rowId}/rollback?${p}`, { method: "POST" });
+        return request(`${_endpointBase}/rows/${rowId}/rollback?${p}`, { method: "POST" });
     }
+
+    // ── Utilities (Sheet-specific, fixed path) ────────────────
 
     async function getUtilities(category) {
         const p = new URLSearchParams();
@@ -404,6 +420,7 @@ const ApiClient = (() => {
 
 
     return {
+        configure,
         loadTool, updateToolSettings,
         listFlags, createFlag, updateFlag, deleteFlag, toggleCellFlags, updateCellFlagNote,
         listFlagRules, createFlagRule, deleteFlagRule,

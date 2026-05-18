@@ -1,29 +1,35 @@
----
 # routes_materials.py
 
-**Description:** MTO V1 — backend CRUD for the `mto_materials` table. Handles list, add, cell-update, delete, and reorder for a specific typical's materials rows.
+**Description:** MTO V1 — grid-api v1 core contract for `mto_materials`, scoped to a `typical_id`. Implements the mandatory endpoint set the shared grid frontend requires.
 
 ## Index
 
-| Symbol | Lines | Description |
-|--------|-------|-------------|
-| `_EDITABLE` | 12 | Set of column names the frontend may write — system columns excluded |
-| `_ALL_COLUMNS` | 13 | Ordered column list for consistent API response shape |
-| `_require_typical` | 20 | Guard: raises 404 if typical doesn't belong to the given tool |
-| `_require_row` | 29 | Guard: raises 404 if row doesn't belong to the given typical |
-| `_utility_count` | 37 | Counts `mto_utilities` rows matching `tool_id + typical_name` — used for `total` computation |
-| `_row_to_dict` | 42 | Merges a row dict with computed `total = quantity × utility_count` |
-| `list_materials` | 51 | `GET /{tool_id}/materials/{typical_id}` — returns columns, rows (with total), utility_count |
-| `add_material_row` | 66 | `POST /{tool_id}/materials/{typical_id}` — inserts new row, sets TAG = row id string |
-| `update_material_cell` | 86 | `PATCH /{tool_id}/materials/{typical_id}/{row_id}` — updates one editable column, updates rev + log |
-| `delete_material_row` | 112 | `DELETE /{tool_id}/materials/{typical_id}/{row_id}` — hard delete |
-| `reorder_materials` | 122 | `POST /{tool_id}/materials/{typical_id}/reorder` — accepts `{ordered_ids:[...]}`, updates position |
+| Symbol | Line | Purpose |
+|--------|------|---------|
+| `_EDITABLE` | 12 | Set of slugs users may edit: `part_description, size, material, uom, quantity` |
+| `_DEFAULT_COLUMNS` | 14 | Seven default column definitions auto-inserted on first access |
+| `_require_typical` | 29 | Guard — 404 if `tool_id`/`typical_id` mismatch |
+| `_require_row` | 39 | Guard — 404 if `row_id`/`typical_id` mismatch |
+| `_utility_count` | 49 | Counts rows in `mto_utilities` for this typical — used to compute `total` |
+| `_serialize_row` | 56 | Maps DB row → grid contract shape; computes `total = quantity × utility_count` |
+| `_ensure_columns` | 75 | Auto-initializes `mto_material_columns` from `_DEFAULT_COLUMNS` if empty |
+| `list_columns` | 94 | GET `/{tool_id}/materials/{typical_id}/columns` |
+| `update_column` | 116 | PATCH `…/columns/{col_id}` — rename or change col_type/width |
+| `set_column_width` | 149 | PATCH `…/columns/{col_id}/width` — resize shortcut |
+| `reorder_columns` | 166 | PUT `…/columns/reorder` — positional reorder |
+| `list_rows` | 191 | GET `…/rows` — returns all rows ordered by position then id |
+| `create_row` | 208 | POST `…/rows` — inserts at end, auto-sets `tag = str(id)` |
+| `update_cell` | 255 | PATCH `…/rows/{row_id}/cell` — validates slug in `_EDITABLE`, logs change |
+| `soft_delete_row` | 288 | POST `…/rows/{row_id}/delete` — hard deletes (no soft-delete in MTO) |
+| `restore_row` | 302 | POST `…/rows/{row_id}/restore` — always 404 (no soft-delete concept) |
+| `hard_delete_row` | 313 | POST `…/rows/{row_id}/hard-delete` |
+| `reorder_row` | 336 | POST `…/rows/{row_id}/reorder` — drag-reorder with `anchor_row_id`/`placement` |
 
 ## Decisions
 
-- **TAG = row id string**: generated after INSERT by updating `tag = str(lastrowid)`. Stable, unique, used as drag-source identifier for image annotation in Steps 12–15.
-- **`total` is computed on every read**: `quantity × utility_count`. Never stored. Recomputed each fetch as utility count can change via ETL.
-- **`_EDITABLE` whitelist**: column name validated server-side to prevent injection via the PATCH body. Only the five user-owned columns are writable.
-- **`f"UPDATE ... SET {body.column} = ?"` is safe** because `body.column` is checked against `_EDITABLE` before use — no raw user string reaches the SQL template.
-- **Hard delete only**: no soft-delete for materials. Materials are low-risk data; reverting is out of scope for MTO at this stage.
-- **Reorder uses position integers**: `ordered_ids` list from frontend determines the new `position` values (0-based index). Gaps are fine — display always re-sorts by `position, id`.
+- **`total` is computed, not stored:** `quantity × utility_count` computed in `_serialize_row` on every response. `total` slug is excluded from `_EDITABLE` so the grid cannot write it.
+- **No soft-delete:** MTO materials are hard-deleted. `soft_delete_row` delegates to `DELETE` immediately; `restore_row` always raises 404. Both endpoints exist to satisfy the grid contract.
+- **`tag = str(id)`:** Auto-assigned at creation time without user input.
+- **`rev` as string:** Serialized as `str(rev)` with `is not None` guard (not `or ""`) because `rev=0` is falsy and would produce `""` without the explicit None check.
+- **`mto_material_columns` shared across typicals:** Columns are keyed by `tool_id` only — all typicals in the same MTO tool share the same column schema.
+- **Schema dependency:** Requires migration v11 (`mto_material_columns`, `mto_sf_state` tables). See `dashboard/project_db.py`.

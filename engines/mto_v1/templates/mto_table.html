@@ -5,6 +5,12 @@
 {% block extra_css %}
 <link rel="stylesheet" href="/static/engine/css/layout.css">
 <link rel="stylesheet" href="/static/engine/css/toolbar.css">
+<link rel="stylesheet" href="/engines/sheet_v1/static/css/grid.css">
+<link rel="stylesheet" href="/engines/sheet_v1/static/css/sort-filter.css">
+<link rel="stylesheet" href="/static/engine/css/modal.css">
+<link rel="stylesheet" href="/engines/sheet_v1/static/css/sidebar.css">
+<link rel="stylesheet" href="/static/engine/css/panel_system.css">
+<link rel="stylesheet" href="/engines/sheet_v1/static/css/panels.css">
 <link rel="stylesheet" href="/engines/mto_v1/static/css/mto.css">
 {% endblock %}
 
@@ -32,8 +38,21 @@
     <div class="tool-toolbar">
         <div class="tool-toolbar-left">
             <a href="/?db={{ db | urlencode }}" class="btn btn-ghost btn-sm back-btn">← Projects</a>
+            <div class="toolbar-separator"></div>
+            <div class="search-wrap">
+                <input type="text" id="search-input" class="search-input"
+                    placeholder="Search materials…"
+                    oninput="GridManager.search(this.value)">
+                <kbd class="search-kbd">/</kbd>
+            </div>
         </div>
-        <div class="tool-toolbar-right"></div>
+        <div class="tool-toolbar-right">
+            <button class="btn btn-ghost btn-sm" id="btn-panels-toggle"
+                onclick="PanelSystem.togglePanel('sort-filter')">⇅ Sort &amp; Filter</button>
+            <div class="toolbar-separator"></div>
+            <button class="btn btn-ghost btn-sm"
+                onclick="ApiClient.exportExcel()">↓ Excel</button>
+        </div>
     </div>
 
     <!-- TAB BAR -->
@@ -41,26 +60,199 @@
         <!-- populated by mto_shell.js -->
     </div>
 
-    <!-- PAGE AREA -->
+    <!-- PER-TYPICAL CONTENT (image + utilities) -->
     <div class="mto-pages" id="mto-pages">
         <!-- placeholder divs inserted by mto_shell.js -->
     </div>
 
-    <!-- EMPTY STATE -->
+    <!-- EMPTY STATE (no typicals) -->
     <div class="mto-empty" id="mto-empty" style="display:none">
         <p>No typicals yet. Add one with the <strong>+</strong> button or run the ETL to import from utilities.</p>
     </div>
 
+    <!-- MATERIALS GRID SECTION -->
+    <div id="mto-materials-section" style="display:none">
+
+        <div class="mto-materials-grid-header">
+            <h3 class="mto-section-title">Materials</h3>
+        </div>
+
+        <!-- TOOL BODY: grid + sidebar -->
+        <div class="tool-body">
+
+            <div class="tool-main">
+                <div class="grid-wrapper" id="grid-wrapper">
+                    <div class="grid-scroll-container" id="grid-scroll-container">
+                        <table class="data-grid" id="data-grid">
+                            <thead>
+                                <tr id="grid-header-row"></tr>
+                            </thead>
+                            <tbody id="grid-body">
+                                <tr class="grid-loading">
+                                    <td colspan="20">Loading…</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT SIDEBAR -->
+            <div class="sidebar-panel sidebar-closed" id="sidebar-panel">
+                <div class="sidebar-resize-handle" id="sidebar-resize-handle"></div>
+                <div class="sidebar-header">
+                    <span class="sidebar-title" id="sidebar-title">Panels</span>
+                    <button class="btn btn-ghost btn-sm" onclick="SidebarManager.close()">✕</button>
+                </div>
+                <div class="sidebar-body" id="sidebar-body">
+                    <p class="sidebar-empty">Select a panel.</p>
+                </div>
+            </div>
+
+        </div><!-- /.tool-body -->
+
+        <!-- BOTTOM DOCK -->
+        <div id="bottom-dock" class="bottom-dock bottom-dock-closed">
+            <div class="bottom-dock-resize-handle" id="bottom-dock-resize-handle"></div>
+            <div class="bottom-dock-header">
+                <span class="bottom-dock-title" id="bottom-dock-title"></span>
+                <button class="btn btn-ghost btn-sm" onclick="PanelSystem.closeBottomDock()">✕</button>
+            </div>
+            <div id="bottom-dock-body" class="bottom-dock-body">
+                <p class="sidebar-empty">No panel open.</p>
+            </div>
+        </div>
+
+    </div><!-- /#mto-materials-section -->
+
 </div>
 
+<!-- CONTEXT MENU — ROW -->
+<div id="row-context-menu" class="context-menu">
+    <div class="ctx-item ctx-gutter-only" data-action="insert-above" style="display:none"><span class="ctx-icon">⬆</span><span>Insert row above</span></div>
+    <div class="ctx-item ctx-gutter-only" data-action="insert-below" style="display:none"><span class="ctx-icon">⬇</span><span>Insert row below</span></div>
+    <div class="ctx-item ctx-gutter-only" data-action="copy-insert" style="display:none"><span class="ctx-icon">⧉</span><span>Copy and insert below</span></div>
+    <div class="ctx-separator ctx-sep-gutter" style="display:none"></div>
+    <div class="ctx-item" data-action="ctx-copy"><span class="ctx-icon">⎘</span><span>Copy</span><span class="ctx-shortcut">Ctrl+C</span></div>
+    <div class="ctx-item" data-action="ctx-cut"><span class="ctx-icon">✂</span><span>Cut</span><span class="ctx-shortcut">Ctrl+X</span></div>
+    <div class="ctx-item" data-action="ctx-paste"><span class="ctx-icon">⧉</span><span>Paste</span><span class="ctx-shortcut">Ctrl+V</span></div>
+    <div class="ctx-item" data-action="ctx-paste-special"><span class="ctx-icon">⊞</span><span>Paste Special…</span><span class="ctx-shortcut">Ctrl+Shift+V</span></div>
+    <div class="ctx-separator ctx-sep-clipboard"></div>
+    <div class="ctx-item" data-action="delete"><span class="ctx-icon">✕</span><span>Delete row</span><span class="ctx-shortcut">Del</span></div>
+    <div class="ctx-item" data-action="restore" style="display:none"><span class="ctx-icon">↩</span><span>Restore row</span></div>
+    <div class="ctx-item ctx-danger" data-action="hard-delete"><span class="ctx-icon">🗑</span><span>Delete permanently</span></div>
+    <div class="ctx-separator"></div>
+</div>
+
+<!-- CONTEXT MENU — COLUMN -->
+<div id="col-context-menu" class="context-menu">
+    <div class="ctx-item" data-action="rename"><span class="ctx-icon">✏</span><span>Rename column</span></div>
+    <div class="ctx-separator"></div>
+    <div class="ctx-item" data-action="hide-col"><span class="ctx-icon">◌</span><span>Hide column</span></div>
+    <div class="ctx-separator ctx-sep-show-hidden" style="display:none"></div>
+    <div class="ctx-item ctx-item-has-sub" data-action="show-hidden-trigger" style="display:none">
+        <span class="ctx-icon">◉</span><span>Show hidden</span><span class="ctx-submenu-arrow">▶</span>
+        <div class="ctx-submenu" id="ctx-hidden-cols-submenu">
+            <div id="ctx-hidden-cols-list"></div>
+        </div>
+    </div>
+    <div class="ctx-separator"></div>
+    <div class="ctx-item" data-action="fit-all-cols"><span class="ctx-icon">⇔</span><span>Fit all to content</span></div>
+</div>
+
+<!-- MODAL: PASTE SPECIAL -->
+<div class="modal-overlay" id="ps-modal" style="display:none" onclick="if(event.target===this)PasteSpecial.close()">
+    <div class="modal" style="width:560px;max-width:95vw">
+        <div class="modal-header">
+            <h2>Paste Special</h2>
+            <button class="modal-close" onclick="PasteSpecial.close()">✕</button>
+        </div>
+        <div class="ps-tab-bar">
+            <button class="ps-tab ps-tab-active" id="ps-tab-btn-mapper"    onclick="PasteSpecial.switchTab('mapper')">Column mapper</button>
+            <button class="ps-tab"               id="ps-tab-btn-text"      onclick="PasteSpecial.switchTab('text')">Paste text</button>
+            <button class="ps-tab"               id="ps-tab-btn-transpose" onclick="PasteSpecial.switchTab('transpose')">Transpose</button>
+        </div>
+        <div class="modal-body" style="max-height:65vh;overflow-y:auto">
+            <div id="ps-tab-mapper">
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px">
+                    <input type="checkbox" id="ps-header-toggle" onchange="PasteSpecial._updateRowCount()">
+                    First row is a header (skip when pasting)
+                </label>
+                <div style="font-size:12px;color:var(--ink-muted);margin-bottom:4px">Preview</div>
+                <div id="ps-preview"></div>
+                <div style="font-size:12px;color:var(--ink-muted);margin-bottom:6px;margin-top:8px">Column mapping</div>
+                <div id="ps-mapper"></div>
+                <div id="ps-row-count" style="font-size:12px;color:var(--ink-muted);margin-top:8px"></div>
+            </div>
+            <div id="ps-tab-text" style="display:none">
+                <div id="ps-text-info" style="font-size:12px;color:var(--ink-muted)"></div>
+            </div>
+            <div id="ps-tab-transpose" style="display:none">
+                <div id="ps-transpose-info" style="font-size:12px;color:var(--ink-muted)"></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="PasteSpecial.close()">Cancel</button>
+            <button class="btn btn-primary" onclick="PasteSpecial.confirm()">Paste</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: ROW LOG -->
+<div class="modal-overlay" id="modal-row-log">
+    <div class="modal modal-wide">
+        <div class="modal-header">
+            <h2>History — <span id="modal-log-tag"></span></h2>
+            <button class="modal-close" onclick="closeModal('modal-row-log')">✕</button>
+        </div>
+        <div class="modal-body" id="modal-log-content"></div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeModal('modal-row-log')">Close</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
 <script>
-    const MTO_DB   = {{ db | tojson }};
-    const MTO_TOOL = {{ tool_id }};
+    const DB_PATH  = {{ db | tojson }};
+    const TOOL_ID  = {{ tool_id }};
+    const MTO_DB   = DB_PATH;
+    const MTO_TOOL = TOOL_ID;
 </script>
 <script src="/static/engine/js/utils.js"></script>
+<script src="/static/engine/js/api.js"></script>
+<script src="/static/engine/js/grid/columns.js"></script>
+<script src="/static/engine/js/grid/resize.js"></script>
+<script src="/static/engine/js/grid/paste.js"></script>
+<script src="/static/engine/js/grid/history/history-api.js"></script>
+<script src="/static/engine/js/grid/history/history-renderer.js"></script>
+<script src="/static/engine/js/grid/history/history-panel.js"></script>
+<script src="/static/engine/js/grid/history/rollback-service.js"></script>
+<script src="/static/engine/js/grid/history/history-actions.js"></script>
+<script src="/static/engine/js/grid/selection/selection-manager.js"></script>
+<script src="/static/engine/js/grid/keyboard/cell-keyboard.js"></script>
+<script src="/static/engine/js/grid/context-menu/context-menu.js"></script>
+<script src="/static/engine/js/grid/rendering/grid-renderer.js"></script>
+<script src="/static/engine/js/grid/row-ops/row-ops.js"></script>
+<script src="/static/engine/js/grid/row-ops/row-drag.js"></script>
+<script src="/static/engine/js/grid/clipboard/clipboard-manager.js"></script>
+<script src="/static/engine/js/grid/cell-save/cell-save.js"></script>
+<script src="/static/engine/js/grid/find-replace/find-replace.js"></script>
+<script src="/static/engine/js/grid/autocomplete/autocomplete.js"></script>
+<script src="/static/engine/js/grid/sort-filter/sort-filter.js"></script>
+<script src="/static/engine/js/grid/cut-paste/cut-paste.js"></script>
+<script src="/static/engine/js/grid/paste-special/paste-special.js"></script>
+<script src="/static/engine/js/grid/fill/fill-handle.js"></script>
+<script src="/static/engine/js/grid/panels/panel-floats.js"></script>
+<script src="/static/engine/js/grid/panels/panel-tab-bar.js"></script>
+<script src="/static/engine/js/panel_system.js"></script>
+<script src="/static/engine/js/grid/sidebar.js"></script>
+<script src="/static/engine/js/grid/revision-picker/revision-picker.js"></script>
+<script src="/static/engine/js/grid/grid.js"></script>
 <script src="/engines/mto_v1/static/js/mto_annotation.js"></script>
 <script src="/engines/mto_v1/static/js/mto_image.js"></script>
-<script src="/engines/mto_v1/static/js/mto_materials.js"></script>
 <script src="/engines/mto_v1/static/js/mto_shell.js"></script>
 <script src="/engines/mto_v1/static/js/mto_import.js"></script>
 <script src="/engines/mto_v1/static/js/mto_export.js"></script>

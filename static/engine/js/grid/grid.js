@@ -36,7 +36,8 @@ const GridManager = (() => {
     // INIT
     // --------------------------------------------------------
 
-    async function init() {
+    async function init({ endpointBase = '' } = {}) {
+        ApiClient.configure({ endpointBase });
         try {
             await ColumnsManager.loadColumns();
             ColumnsManager.renderHeader();

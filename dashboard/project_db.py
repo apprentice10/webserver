@@ -23,7 +23,7 @@ BACKUPS_DIR = DATA_DIR / "backups"
 
 # Bump this whenever DDL_SYSTEM_TABLES or any system table structure changes.
 # See engine/project_db.py.md for the full rule.
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 SYSTEM_COLUMNS = {"tag", "rev", "log"}
 INTERNAL_PREFIX = "__"
@@ -404,11 +404,32 @@ def _migrate_to_v10(conn: sqlite3.Connection) -> None:
         arrow_y    REAL NOT NULL DEFAULT 0)""")
 
 
+def _migrate_to_v11(conn: sqlite3.Connection) -> None:
+    """Add mto_material_columns (per-tool column defs) and mto_sf_state (per-typical sort/filter)."""
+    existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "mto_material_columns" not in existing:
+        conn.execute("""CREATE TABLE mto_material_columns (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            tool_id   INTEGER NOT NULL,
+            name      TEXT NOT NULL,
+            slug      TEXT NOT NULL,
+            col_type  TEXT NOT NULL DEFAULT 'text',
+            width     INTEGER NOT NULL DEFAULT 120,
+            position  INTEGER NOT NULL DEFAULT 0,
+            is_system INTEGER NOT NULL DEFAULT 0
+        )""")
+    if "mto_sf_state" not in existing:
+        conn.execute("""CREATE TABLE mto_sf_state (
+            typical_id INTEGER PRIMARY KEY,
+            state      TEXT NOT NULL DEFAULT '{}'
+        )""")
+
+
 _MIGRATIONS: dict = {
     1: _migrate_to_v1, 2: _migrate_to_v2, 3: _migrate_to_v3,
     4: _migrate_to_v4, 5: _migrate_to_v5, 6: _migrate_to_v6,
     7: _migrate_to_v7, 8: _migrate_to_v8, 9: _migrate_to_v9,
-    10: _migrate_to_v10,
+    10: _migrate_to_v10, 11: _migrate_to_v11,
 }
 
 

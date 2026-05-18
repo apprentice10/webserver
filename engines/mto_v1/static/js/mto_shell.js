@@ -4,6 +4,8 @@ const MtoShell = (() => {
     let _db = null;
     let _typicals = [];
     let _activeId = null;
+    let _gridInitialized = false;
+    let _panelSystemInitialized = false;
 
     // ── DOM refs ────────────────────────────────────────────────────────
 
@@ -195,7 +197,11 @@ const MtoShell = (() => {
                 '</div>';
             container.appendChild(div);
         });
-        if (_activeId) { _loadUtilities(_activeId); _loadMaterials(_activeId); _loadImage(_activeId); }
+        if (_activeId) {
+            _loadUtilities(_activeId);
+            _loadImage(_activeId);
+            _loadMaterials(_activeId);
+        }
     }
 
     // ── Utilities fetch + render ─────────────────────────────────────────
@@ -208,13 +214,28 @@ const MtoShell = (() => {
         return res.json();
     }
 
-    function _loadMaterials(typicalId) {
-        const pageDiv = document.getElementById(`mto-page-${typicalId}`);
-        if (!pageDiv) return;
-        const panel = pageDiv.querySelector('.mto-content-panel') || pageDiv;
-        MtoMaterials.load(_toolId, typicalId, _db, panel).catch(err =>
-            console.error('[MtoShell] materials load error:', err)
-        );
+    async function _loadMaterials(typicalId) {
+        const endpointBase = `/api/engines/mto/${_toolId}/materials/${typicalId}`;
+        window._mtoGridEndpointBase = endpointBase;
+
+        const section = document.getElementById('mto-materials-section');
+        if (section) section.style.display = '';
+
+        try {
+            if (!_gridInitialized) {
+                _gridInitialized = true;
+                if (!_panelSystemInitialized) {
+                    _panelSystemInitialized = true;
+                    PanelSystem.init();
+                }
+                await GridManager.init({ endpointBase });
+            } else {
+                ApiClient.configure({ endpointBase });
+                await GridManager.reloadData();
+            }
+        } catch (err) {
+            console.error('[MtoShell] materials grid error:', err);
+        }
     }
 
     function _loadImage(typicalId) {
@@ -262,9 +283,11 @@ const MtoShell = (() => {
     function _updateEmptyState() {
         const empty = _empty();
         const pagesEl = _pages();
+        const section = document.getElementById('mto-materials-section');
         const has = _typicals.length > 0;
         if (empty) empty.style.display = has ? 'none' : '';
         if (pagesEl) pagesEl.style.display = has ? '' : 'none';
+        if (section && !has) section.style.display = 'none';
     }
 
     // ── Tab switch ──────────────────────────────────────────────────────
@@ -278,8 +301,8 @@ const MtoShell = (() => {
             div.style.display = div.id === `mto-page-${typicalId}` ? '' : 'none';
         });
         _loadUtilities(typicalId);
-        _loadMaterials(typicalId);
         _loadImage(typicalId);
+        _loadMaterials(typicalId);
     }
 
     // ── ETL run ─────────────────────────────────────────────────────────
@@ -319,6 +342,7 @@ const MtoShell = (() => {
         if (!_typicals.find(t => t.id === _activeId)) {
             _activeId = _typicals.length ? _typicals[0].id : null;
         }
+        _gridInitialized = false;  // force full re-init on next load
         _renderTabBar();
         _renderPages();
         _updateEmptyState();

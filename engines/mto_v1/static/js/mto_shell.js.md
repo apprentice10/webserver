@@ -19,17 +19,17 @@
 | `_startRename` | 111 | Replaces tab button with an inline input; commits on blur/Enter, cancels on Escape |
 | `_renderTabBar` | 133 | Builds tab buttons + `+` add button |
 | `_renderPages` | 152 | Builds `<div class="mto-page">` elements with utilities section; fires `_loadUtilities` for active tab |
-| `_loadMaterials` | 199 | Delegates to `MtoMaterials.load(toolId, typicalId, db, contentPanel)` — passes `.mto-content-panel` inside the page div |
-| `_loadImage` | 207 | Delegates to `MtoImage.load(toolId, typicalId, db, imagePanel)` for the `.mto-image-panel` in the active page |
-| `_fetchUtilities` | 215 | GET `/api/engines/mto/{tool_id}/utilities?typical_name=...` |
-| `_loadUtilities` | 213 | Finds typical by id, fetches data, renders table into page's `.mto-utilities-wrap` |
-| `_renderUtilitiesTable` | 211 | Renders read-only HTML table from `{columns, rows}` payload |
-| `_esc` | 225 | HTML-escape helper |
-| `_updateEmptyState` | 229 | Shows/hides empty state and pages container |
-| `_switchTab` | 237 | Sets `.active` on tab, shows/hides page divs, calls `_loadUtilities` |
-| `_runEtl` | 249 | Click handler for "▶ Run ETL" button — calls `etl/run`, shows toast, calls `reloadTabs` |
-| `reloadTabs` | 277 | Public — re-fetches typicals and re-renders tab bar without full page reload |
-| `_init` | 286 | DOMContentLoaded entry point |
+| `_loadMaterials` | 217 | Sets `endpointBase` for shared grid; calls `GridManager.init()` on first load, `ApiClient.configure()+GridManager.reloadData()` on tab switch |
+| `_loadImage` | 241 | Delegates to `MtoImage.load(toolId, typicalId, db, imagePanel)` for the `.mto-image-panel` in the active page |
+| `_fetchUtilities` | 209 | GET `/api/engines/mto/{tool_id}/utilities?typical_name=...` |
+| `_loadUtilities` | 251 | Finds typical by id, fetches data, renders table into page's `.mto-utilities-wrap` |
+| `_renderUtilitiesTable` | 263 | Renders read-only HTML table from `{columns, rows}` payload |
+| `_esc` | 279 | HTML-escape helper |
+| `_updateEmptyState` | 283 | Shows/hides empty state, pages container, and `#mto-materials-section` |
+| `_switchTab` | 295 | Sets `.active` on tab, shows/hides page divs, calls load functions |
+| `_runEtl` | 310 | Click handler for "▶ Run ETL" button — calls `etl/run`, shows toast, calls `reloadTabs` |
+| `reloadTabs` | 340 | Public — re-fetches typicals, sets `_gridInitialized=false` to force full re-init, re-renders |
+| `_init` | 353 | DOMContentLoaded entry point |
 
 ## Decisions
 
@@ -43,3 +43,5 @@
 - `_switchTab` calls `_loadUtilities`, `_loadMaterials`, and `_loadImage` on every tab switch — all panels are re-fetched; no stale-data tracking needed at this stage.
 - Each `.mto-page` now has two children: `.mto-image-panel` (left, 400px fixed) and `.mto-content-panel` (right, flex 1). Materials go into the content panel, not the page div directly.
 - Utilities column list is dynamic: the backend uses `PRAGMA table_info` and returns whatever columns exist beyond the fixed internal ones.
+- `_loadMaterials` uses two flags: `_gridInitialized` (prevents double `GridManager.init()` across tab switches) and `_panelSystemInitialized` (prevents double `PanelSystem.init()`). `reloadTabs` resets `_gridInitialized` so ETL re-runs get a fresh grid.
+- The shared grid lives in a single DOM (`#data-grid`, `#grid-body`, etc.) below `#mto-materials-section` — not inside any per-typical `mto-page`. All typicals share one grid instance; tab switch reconfigures `endpointBase`.

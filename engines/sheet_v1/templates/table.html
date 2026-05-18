@@ -271,38 +271,38 @@
 </script>
 <script src="/static/engine/js/utils.js"></script>
 <script src="/static/engine/js/api.js"></script>
-<script src="/engines/sheet_v1/static/js/columns.js"></script>
-<script src="/engines/sheet_v1/static/js/resize.js"></script>
-<script src="/engines/sheet_v1/static/js/paste.js"></script>
+<script src="/static/engine/js/grid/columns.js"></script>
+<script src="/static/engine/js/grid/resize.js"></script>
+<script src="/static/engine/js/grid/paste.js"></script>
 <!-- history subsystem — load order: history-api → history-renderer → history-panel → rollback-service → history-actions -->
-<script src="/engines/sheet_v1/static/js/history/history-api.js"></script>
-<script src="/engines/sheet_v1/static/js/history/history-renderer.js"></script>
-<script src="/engines/sheet_v1/static/js/history/history-panel.js"></script>
-<script src="/engines/sheet_v1/static/js/history/rollback-service.js"></script>
-<script src="/engines/sheet_v1/static/js/history/history-actions.js"></script>
-<script src="/engines/sheet_v1/static/js/selection/selection-manager.js"></script>
-<script src="/engines/sheet_v1/static/js/keyboard/cell-keyboard.js"></script>
-<script src="/engines/sheet_v1/static/js/context-menu/context-menu.js"></script>
-<script src="/engines/sheet_v1/static/js/rendering/grid-renderer.js"></script>
-<script src="/engines/sheet_v1/static/js/row-ops/row-ops.js"></script>
-<script src="/engines/sheet_v1/static/js/row-ops/row-drag.js"></script>
-<script src="/engines/sheet_v1/static/js/clipboard/clipboard-manager.js"></script>
-<script src="/engines/sheet_v1/static/js/cell-save/cell-save.js"></script>
-<script src="/engines/sheet_v1/static/js/find-replace/find-replace.js"></script>
-<script src="/engines/sheet_v1/static/js/autocomplete/autocomplete.js"></script>
-<script src="/engines/sheet_v1/static/js/sort-filter/sort-filter.js"></script>
-<script src="/engines/sheet_v1/static/js/cut-paste/cut-paste.js"></script>
-<script src="/engines/sheet_v1/static/js/paste-special/paste-special.js"></script>
-<script src="/engines/sheet_v1/static/js/fill/fill-handle.js"></script>
-<script src="/engines/sheet_v1/static/js/undo/undo-manager.js"></script>
-<script src="/engines/sheet_v1/static/js/grid.js"></script>
+<script src="/static/engine/js/grid/history/history-api.js"></script>
+<script src="/static/engine/js/grid/history/history-renderer.js"></script>
+<script src="/static/engine/js/grid/history/history-panel.js"></script>
+<script src="/static/engine/js/grid/history/rollback-service.js"></script>
+<script src="/static/engine/js/grid/history/history-actions.js"></script>
+<script src="/static/engine/js/grid/selection/selection-manager.js"></script>
+<script src="/static/engine/js/grid/keyboard/cell-keyboard.js"></script>
+<script src="/static/engine/js/grid/context-menu/context-menu.js"></script>
+<script src="/static/engine/js/grid/rendering/grid-renderer.js"></script>
+<script src="/static/engine/js/grid/row-ops/row-ops.js"></script>
+<script src="/static/engine/js/grid/row-ops/row-drag.js"></script>
+<script src="/static/engine/js/grid/clipboard/clipboard-manager.js"></script>
+<script src="/static/engine/js/grid/cell-save/cell-save.js"></script>
+<script src="/static/engine/js/grid/find-replace/find-replace.js"></script>
+<script src="/static/engine/js/grid/autocomplete/autocomplete.js"></script>
+<script src="/static/engine/js/grid/sort-filter/sort-filter.js"></script>
+<script src="/static/engine/js/grid/cut-paste/cut-paste.js"></script>
+<script src="/static/engine/js/grid/paste-special/paste-special.js"></script>
+<script src="/static/engine/js/grid/fill/fill-handle.js"></script>
+<script src="/static/engine/js/grid/undo/undo-manager.js"></script>
+<script src="/static/engine/js/grid/grid.js"></script>
 <script src="/engines/sheet_v1/static/js/toolbar.js"></script>
-<script src="/engines/sheet_v1/static/js/revision-picker/revision-picker.js"></script>
-<script src="/engines/sheet_v1/static/js/panels/panel-floats.js"></script>
-<script src="/engines/sheet_v1/static/js/panels/panel-tab-bar.js"></script>
+<script src="/static/engine/js/grid/revision-picker/revision-picker.js"></script>
+<script src="/static/engine/js/grid/panels/panel-floats.js"></script>
+<script src="/static/engine/js/grid/panels/panel-tab-bar.js"></script>
 <script src="/static/engine/js/panel_system.js"></script>
-<script src="/engines/sheet_v1/static/js/sidebar.js"></script>
-<script src="/engines/sheet_v1/static/js/flags.js"></script>
+<script src="/static/engine/js/grid/sidebar.js"></script>
+<script src="/static/engine/js/grid/flags.js"></script>
 <script src="/engines/sheet_v1/static/js/sql_editor.js"></script>
 <script>
     document.addEventListener("DOMContentLoaded", async () => {
@@ -691,11 +691,12 @@
             onActivate: body => SqlEditor.renderInto(body)
         });
 
+        ApiClient.configure({ endpointBase: '/api/engines/' + TOOL_ID });
         PanelSystem.init();
         UndoManager.init();
         await ToolbarManager.init();
         await RevisionPicker.init();
-        await GridManager.init();
+        await GridManager.init({ endpointBase: '/api/engines/' + TOOL_ID });
     });
 </script>
 {% endblock %}

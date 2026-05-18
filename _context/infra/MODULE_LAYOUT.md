@@ -58,9 +58,10 @@
 | `engines/mto_v1/backend/routes.py` | Combined router — aggregates MTO sub-routers under `/api/engines/mto` |
 | `engines/mto_v1/backend/routes_tools.py` | MTO tool instance CRUD: create, open, delete |
 | `engines/mto_v1/backend/routes_typicals.py` | Typical CRUD: list, create, rename, delete |
+| `engines/mto_v1/backend/routes_materials.py` | grid-api v1 core contract: columns CRUD, rows CRUD, cell update, reorder (scoped to `typical_id`) |
+| `engines/mto_v1/backend/routes_materials_ext.py` | grid-api v1 extended contract: batch ops, paste, audit, find-replace, autocomplete, sort-filter state, Excel export |
 | `engines/mto_v1/backend/service_etl.py` | MTO ETL apply/run: write to `mto_utilities`, sync `mto_typicals` |
-| `engines/mto_v1/static/js/mto_shell.js` | MTO tab bar, page switching, typical CRUD, utilities load |
-| `engines/mto_v1/static/js/mto_materials.js` | Materials table IIFE: render, cell-edit, add/delete row, drag-to-reorder |
+| `engines/mto_v1/static/js/mto_shell.js` | MTO tab bar, page switching, typical CRUD, utilities load, shared grid init |
 | `engines/mto_v1/static/js/mto_import.js` | Import panel IIFE: slide-in drawer to browse and import typicals from an external project DB |
 | `engines/mto_v1/engine.json` | Plugin manifest for MTO engine |
 | `_legacy/instrument_list/` | Dead code — **do not read** |
@@ -87,19 +88,16 @@
 | `etl_canvas_preview.js` | Edge-click partial preview panel |
 | `etl_dsl.js` | Restricted DSL formula bar (recursive-descent parser + serializer) |
 
-## Frontend — Sheet V1 Engine (`engines/sheet_v1/static/js/`)
+## Frontend — Shared Grid Toolkit (`static/engine/js/grid/`)
 
 | Module | Responsibility |
 |--------|---------------|
 | `grid.js` | Grid orchestration: render, virtual scroll, init, public API |
-| `toolbar.js` | Toolbar actions, settings, ETL run |
 | `columns.js` | Column management IIFE |
 | `sidebar.js` | Thin adapter over PanelSystem for sidebar open/close/toggle |
 | `flags.js` | Flag management sidebar IIFE |
 | `paste.js` | Excel/CSV paste (range + append) |
 | `resize.js` | Column resize + auto-fit |
-| `sql_editor.js` | Power SQL Editor panel |
-| `etl_editor.js` | ETL Editor standalone page orchestration |
 | `history/history-api.js` | Thin wrappers over `ApiClient.getAudit` + `rollbackCell` |
 | `history/history-renderer.js` | `renderAuditEntries`, `exportLog` — pure HTML generators |
 | `history/history-panel.js` | `showRowLog`, `showCellLog`, `showRangeLog` — owns `_logSidebarCtx` |
@@ -123,6 +121,14 @@
 | `find-replace/find-replace.js` | Find/replace dialog: search, replace, match options |
 | `sort-filter/sort-filter.js` | Sort and filter panel: multi-column sort, wildcard live-filter |
 | `undo/undo-manager.js` | Undo/redo state machine: stack management, Ctrl+Z/Y dispatch |
+
+## Frontend — Sheet V1 Engine (`engines/sheet_v1/static/js/`)
+
+| Module | Responsibility |
+|--------|---------------|
+| `toolbar.js` | Toolbar actions, settings, ETL run (Sheet-specific) |
+| `sql_editor.js` | Power SQL Editor panel (Sheet-specific) |
+| `etl_editor.js` | ETL Editor standalone page orchestration (Sheet-specific) |
 
 ---
 

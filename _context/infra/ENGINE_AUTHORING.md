@@ -137,18 +137,123 @@ All three loops run at module import time (before the app starts serving). Dynam
 
 ## Dashboard toolkit
 
-Engines that declare `"dashboard_uses": ["grid-api v1"]` opt into the shared grid infrastructure. This is a declaration only — no runtime enforcement today. Its purpose is compatibility checking when a DB is opened on a Dashboard where the engine is missing or version-mismatched (see D-R3, D-R4).
+Engines that declare `"dashboard_uses": ["grid-api v1"]` opt into the shared grid infrastructure. This is now an enforced declaration: any engine listing it must implement the full backend contract defined in `_context/grid/GRID_API_CONTRACT.md`.
 
 Engines that bring their own UI and do not use the grid or ETL can omit `dashboard_uses` entirely.
+
+---
+
+## Using the shared grid
+
+### 1. Declare intent in engine.json
+
+```json
+"dashboard_uses": ["grid-api v1"]
+```
+
+This tells the dashboard loader that your engine depends on the shared grid toolkit.
+
+### 2. Implement the backend contract
+
+Your backend must implement every endpoint listed in `_context/grid/GRID_API_CONTRACT.md`, mounted under a slug-namespaced prefix:
+
+```
+/api/engines/<slug>/{toolId}/...
+```
+
+The full contract covers: tool metadata GET/PATCH, columns CRUD, rows CRUD, cell update, reorder, batch ops, paste, flags, undo/redo, audit, find-replace, autocomplete, sort-filter state, Excel export.
+
+Reference implementation: `engines/sheet_v1/backend/` (full contract) and `engines/mto_v1/backend/routes_materials.py` + `routes_materials_ext.py` (sub-table pattern).
+
+**Required system columns** — every row returned must include:
+
+| Field | Notes |
+|-------|-------|
+| `__id` | Internal PK, used as `rowId` in all mutation endpoints |
+| `__position` | Sort order, managed by backend on reorder |
+| `__created_at` | ISO 8601 creation timestamp |
+| `tag` | Human-visible unique row key |
+| `rev` | Revision stamp (may be `null` if revisions not enabled) |
+| `log` | Serialized audit log (may be `null` if history not enabled) |
+| `is_deleted` | Soft-delete flag (may be omitted if soft-delete not used) |
+
+See `_context/grid/GRID_API_CONTRACT.md` for full field and response schemas.
+
+### 3. Load the shared grid scripts in your template
+
+The grid toolkit lives at `static/engine/js/grid/`. Load scripts in this order (after `api.js` and `utils.js`):
+
+```html
+<!-- shared grid modules (load order matters) -->
+<script src="/static/engine/js/grid/columns.js"></script>
+<script src="/static/engine/js/grid/rendering/grid-renderer.js"></script>
+<script src="/static/engine/js/grid/selection/selection-manager.js"></script>
+<script src="/static/engine/js/grid/keyboard/cell-keyboard.js"></script>
+<script src="/static/engine/js/grid/cell-save/cell-save.js"></script>
+<script src="/static/engine/js/grid/row-ops/row-ops.js"></script>
+<script src="/static/engine/js/grid/row-ops/row-drag.js"></script>
+<script src="/static/engine/js/grid/context-menu/context-menu.js"></script>
+<script src="/static/engine/js/grid/clipboard/clipboard-manager.js"></script>
+<script src="/static/engine/js/grid/cut-paste/cut-paste.js"></script>
+<script src="/static/engine/js/grid/fill/fill-handle.js"></script>
+<script src="/static/engine/js/grid/paste.js"></script>
+<script src="/static/engine/js/grid/resize.js"></script>
+<script src="/static/engine/js/grid/autocomplete/autocomplete.js"></script>
+<script src="/static/engine/js/grid/find-replace/find-replace.js"></script>
+<script src="/static/engine/js/grid/sort-filter/sort-filter.js"></script>
+<script src="/static/engine/js/grid/undo/undo-manager.js"></script>
+<script src="/static/engine/js/grid/flags.js"></script>
+<script src="/static/engine/js/grid/history/history-api.js"></script>
+<script src="/static/engine/js/grid/history/history-renderer.js"></script>
+<script src="/static/engine/js/grid/history/history-panel.js"></script>
+<script src="/static/engine/js/grid/history/rollback-service.js"></script>
+<script src="/static/engine/js/grid/history/history-actions.js"></script>
+<script src="/static/engine/js/grid/sidebar.js"></script>
+<script src="/static/engine/js/grid/panels/panel-floats.js"></script>
+<script src="/static/engine/js/grid/panels/panel-tab-bar.js"></script>
+<script src="/static/engine/js/grid/revision-picker/revision-picker.js"></script>
+<script src="/static/engine/js/grid/paste-special/paste-special.js"></script>
+<script src="/static/engine/js/grid/grid.js"></script>  <!-- orchestrator, always last -->
+```
+
+See `engines/sheet_v1/templates/table.html` or `engines/mto_v1/templates/mto_table.html` for a working reference.
+
+### 4. Initialize the grid
+
+Call `Grid.init(config)` after the DOM is ready. The only required field is `endpointBase`:
+
+```js
+Grid.init({
+  endpointBase: `/api/engines/cable/${toolId}`,
+  db: currentDbPath,   // URL-encoded path to the SQLite file
+});
+```
+
+**Sub-table grids** (a grid scoped to a child entity, e.g. materials inside a typical) encode the filter directly in `endpointBase`:
+
+```js
+Grid.init({
+  endpointBase: `/api/engines/mto/${toolId}/materials/${typicalId}`,
+  db: currentDbPath,
+});
+```
+
+The grid has no knowledge of the filter — the backend routes handle scoping. See `engines/mto_v1/static/js/mto_shell.js` for a live example.
+
+### 5. Optional features
+
+Features are enabled or disabled by the presence of the corresponding backend endpoints. If your backend omits the undo endpoints, the undo UI is simply inactive. If you omit revision endpoints, the REV chip does not appear. The grid degrades gracefully — do not stub missing endpoints.
 
 ---
 
 ## Checklist for a new engine
 
 - [ ] Create `engines/<slug>_v<N>/` with `__init__.py`
-- [ ] Write `engine.json` with all required fields
+- [ ] Write `engine.json` with all required fields; add `"dashboard_uses": ["grid-api v1"]` if using the shared grid
 - [ ] If backend needed: create `backend/__init__.py` and `backend/routes.py` with `router = APIRouter(prefix="/api/engines/<slug>", ...)`
+- [ ] If using the shared grid: implement the backend contract from `_context/grid/GRID_API_CONTRACT.md`; ensure all required system columns are returned in every row
 - [ ] If static files: create `static/js/` and/or `static/css/`; reference them in HTML as `/engines/<folder>/static/...`
 - [ ] If HTML page needed: create `templates/<page>.html`; add a `@app.get(...)` route in `main.py` if the path is new
+- [ ] If using the shared grid: load scripts from `/static/engine/js/grid/` in the correct order; call `Grid.init({ endpointBase, db })` after DOM ready
 - [ ] Create companion `.md` file for every new source file
 - [ ] Smoke test: restart `uvicorn main:app --reload`, check no import errors, verify `GET /api/engines/catalog` lists the new engine
