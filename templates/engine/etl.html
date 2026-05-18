@@ -745,12 +745,17 @@
     }
 
     document.addEventListener("DOMContentLoaded", async () => {
-        try {
-            const tool = await ApiClient.loadTool();
-            document.getElementById("etl-tool-name").textContent = `— ${tool.name}`;
-            document.getElementById("rev-badge").textContent = `REV ${tool.current_rev}`;
-            document.title = `ETL — ${tool.name}`;
-        } catch (e) {}
+        // Tool name/rev and ETL model load are independent — run in parallel.
+        const [, ] = await Promise.all([
+            ApiClient.loadTool().then(tool => {
+                document.getElementById("etl-tool-name").textContent = `— ${tool.name}`;
+                document.getElementById("rev-badge").textContent = `REV ${tool.current_rev}`;
+                document.title = `ETL — ${tool.name}`;
+            }).catch(() => {}),
+            EtlEditor.init(),
+        ]);
+        // Canvas IDs must be set before activate() so _loadToolCols() has a valid path.
+        EtlCanvasEditor.init(DB_PATH, TOOL_ID);
 
         // Utility discovery — builds the view-switcher from installed ETL utilities.
         try {
@@ -774,9 +779,6 @@
         } catch (e) {
             console.warn("Could not load ETL utilities:", e);
         }
-
-        await EtlEditor.init();
-        EtlCanvasEditor.init(DB_PATH, TOOL_ID);
     });
 </script>
 {% endblock %}
