@@ -47,7 +47,7 @@ Apply after every completed step:
 | Event | Action |
 |-------|--------|
 | Step completed | Check it off in the plan file |
-| Task fully done | Append one bullet to `session/DONE/<category>.md` + remove from `session/CURRENT_STATE.md` + delete plan file |
+| Task fully done | Append one bullet to `session/DONE/<category>.md` + remove from `session/CURRENT_STATE.md` + move plan file to `_context/archive/` |
 | Cross-cutting decision made | Append to `infra/DECISIONS.md` |
 | New domain term introduced | Append to `infra/GLOSSARY.md` |
 
@@ -77,7 +77,7 @@ _context/
 - If a rule only applies to one feature, it lives in that feature's plan file.
 - If a decision constrains the whole system, it goes in `infra/DECISIONS.md`.
 - Risks live inside each plan file — no standalone RISKS.md.
-- Completed plan files: extract cross-cutting decisions → record in `session/DONE/` → delete the plan file.
+- Completed plan files: extract cross-cutting decisions → record in `session/DONE/` → move plan file to `_context/archive/`.
 - No duplication: if information exists in one file, other files link to it.
 
 ---
