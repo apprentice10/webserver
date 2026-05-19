@@ -49,6 +49,8 @@ Apply after every completed step:
 | Step completed | Check it off in the plan file |
 | Task fully done | Append one bullet to `session/DONE/<category>.md` + remove from `session/CURRENT_STATE.md` + move plan file to `_context/archive/` |
 | Cross-cutting decision made | Append to `infra/DECISIONS.md` |
+| Any file modified | Add/update `Updated: YYYY-MM-DD HH:mm` at the top of the file |
+| Any notable change | Append short timestamped entry near the changed section using format `[YY-MM-DD HH:mm]` |
 | New domain term introduced | Append to `infra/GLOSSARY.md` |
 
 Skipping write-back corrupts project memory and forces reconstruction at the start of the next session. No exceptions.
@@ -79,7 +81,7 @@ _context/
 - Risks live inside each plan file — no standalone RISKS.md.
 - Completed plan files: extract cross-cutting decisions → record in `session/DONE/` → move plan file to `_context/archive/`.
 - No duplication: if information exists in one file, other files link to it.
-
+- Every `.md` file must contain an `Updated: YYYY-MM-DD HH:mm` field at the top:
 ---
 
 ## Plan File Format

@@ -27,7 +27,8 @@ See decisions in `_context/project/shared-grid-toolkit.md`.
 ## Decisions
 
 - **Outer API vs instance API**: `window.Grid` exposes only `{ init }`. `init()` returns the full adapter API object (what `host.getToolkit(id)` returns). This separates the toolkit constructor from the runtime instance.
-- **`_ownedColumns` set**: Phase 3 owns this set locally. Phase 2 wires `SortFilterManager.setGroupingOwned` as the authoritative lock. Until Phase 2 ships, ownership is tracked in the adapter but not enforced on the grid header.
+- **Synchronous `init`**: `init()` is NOT async. It fires `GridManager.init({ endpointBase })` as a background promise (`.catch` for error logging) and returns the API object immediately. This is required so ToolkitHost stores the real instance synchronously — Grouping.init (the next toolkit in declaration order) can then call `ctx.getToolkit('grid')` and get the live API, not a Promise.
+- **`_ownedColumns` set**: tracks locally which column slugs are owned by Grouping. Delegates enforcement to `SortFilterManager.setGroupingOwned` (wired in Phase 2).
 - **`setGroupingFilter` term format**: Uses `{ type: 'values', values: [value] }` — the same format written by the SortFilterManager checkbox UI. Ensures state is interoperable with `persistState()`.
 - **`setEndpointBase` order**: Follows D-SGT-04 exactly — clear filters → clear selection → release owned columns → clear local set → emit `grid:endpointChanged` → reconfigure `ApiClient` → `reloadData()`. Callers must assume the grid is fully reset after this call.
 - **PanelSystem guard**: `if (typeof PanelSystem !== 'undefined')` — allows the adapter to load in test environments without the full shell.

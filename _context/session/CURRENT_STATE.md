@@ -11,7 +11,6 @@
 | Task | Plan file |
 |------|-----------|
 | Shared Toolkit Engine — Reframed Architecture | `_context/project/shared-toolkit-engine-reframed.md` |
-| Grouping Toolkit (Phase 2) | `_context/project/grouping-toolkit.md` |
 
 ---
 

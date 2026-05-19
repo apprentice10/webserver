@@ -15,6 +15,18 @@
         "endpointBase": "/api/engines/mto/{toolId}/materials",
         "featureLevel": "extended"
       }
+    },
+    {
+      "id": "grouping",
+      "type": "grouping",
+      "version": "1",
+      "order": 2,
+      "config": {
+        "source_toolkit_id": "grid",
+        "source_column": "material",
+        "target_toolkit_ids": ["grid"],
+        "slot": "[data-toolkit-slot='grouping']"
+      }
     }
   ],
   "uses_utilities": ["etl"],

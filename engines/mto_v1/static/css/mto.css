@@ -1,4 +1,25 @@
-/* MTO engine — tab bar and page layout */
+/* MTO engine — tab bar, grouping bar, and page layout */
+
+.mto-grouping-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-1);
+    flex-shrink: 0;
+}
+
+.grouping-combobox {
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    min-width: 160px;
+}
 
 .mto-tab-bar {
     display: flex;

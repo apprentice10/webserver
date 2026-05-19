@@ -27,7 +27,7 @@ const Grid = (() => {
     // INIT (D-SGT-02)
     // --------------------------------------------------------
 
-    async function init(ctx, decl) {
+    function init(ctx, decl) {
         _ctx  = ctx;
         _decl = decl;
         _id   = decl?.id ?? 'grid';
@@ -38,8 +38,9 @@ const Grid = (() => {
         // PanelSystem before GridManager (D-SGT-02 step 2)
         if (typeof PanelSystem !== 'undefined') PanelSystem.init();
 
-        // Grid startup — adapter owns this call, not the page template (D-SGT-02 step 3)
-        await GridManager.init({ endpointBase });
+        // Grid startup fires in background so ToolkitHost receives the real instance
+        // synchronously — Grouping.init can then subscribe to grid:loaded before data arrives.
+        GridManager.init({ endpointBase }).catch(e => console.error('[Grid] init error', e));
 
         // Return adapter instance — ToolkitHost registers it under _id (D-SGT-02 step 4)
         return {

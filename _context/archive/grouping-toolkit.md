@@ -8,18 +8,14 @@ Implement a generic, configuration-driven Grouping Toolkit that presents a combo
 
 ## Steps
 
-- [ ] Step 1 — Add `grid:loaded` DOM event to `grid.js` `reloadData` (one `dispatchEvent` line after rows are set)
-- [ ] Step 2 — Add `_groupingOwned` ownership set to `SortFilterManager`: `setGroupingOwned(slug, bool)` method + guard in header click listener and filter dropdown open
-- [ ] Step 3 — Create minimal Grid Toolkit adapter: `static/engine/js/toolkits/grid/grid.js` IIFE exposing `setGroupingFilter`, `clearGroupingFilter`, `setGroupingOwned`, `releaseGroupingOwned` on its returned object; wires to `SortFilterManager` and `GridManager`
-- [ ] Step 4 — Create `static/engine/js/toolkits/grouping/grouping.js` IIFE
-  - On `init(ctx)`: parse config, mount combobox into `ctx.config.slot`, subscribe to `grid:loaded` on source toolkit
-  - On `grid:loaded`: read `getAllRows()` from source toolkit, extract distinct non-empty values, render `(All)` + sorted options
-  - On combobox change: call `setGroupingFilter(slug, value)` on each target toolkit (or `clearGroupingFilter` for `(All)`)
-  - On init: call `setGroupingOwned(slug)` on each target toolkit
-- [ ] Step 5 — Create companion `.md` files for `grouping.js` and `grid.js` (Grid adapter)
-- [ ] Step 6 — Update `engines/mto_v1/engine.json`: declare `grouping` toolkit and `grid` adapter toolkit with correct config
-- [ ] Step 7 — Update MTO engine HTML template: add `[data-toolkit-slot="grouping"]` in the correct position, remove old tab-bar typical-switching DOM if superseded
-- [ ] Step 8 — Smoke-test: verify `(All)` shows full dataset, selecting a value filters all target grids, owned column absent from sort-filter header, multiple instances compose correctly
+- [x] Step 1 — Add `grid:loaded` DOM event to `grid.js` `reloadData` (one `dispatchEvent` line after rows are set) — also added to `init()` end-of-setup
+- [x] Step 2 — Add `_groupingOwned` ownership set to `SortFilterManager`: `setGroupingOwned(slug, bool)` method + guard in header click listener and filter dropdown open
+- [x] Step 3 — Grid Toolkit adapter already existed (Phase 3 of shared-toolkit plan); fixed async `init` → synchronous so ToolkitHost stores real instance before Grouping.init runs
+- [x] Step 4 — Created `static/engine/js/toolkits/grouping/grouping.js` IIFE
+- [x] Step 5 — Created companion `.md` for `grouping.js`; updated `grid.js.md` with sync-init decision
+- [x] Step 6 — Updated `engines/mto_v1/engine.json`: added `grouping` toolkit with `source_column: "material"`, `target_toolkit_ids: ["grid"]`, `slot: "[data-toolkit-slot='grouping']"`
+- [x] Step 7 — Added `[data-toolkit-slot="grouping"]` div above tab-bar in `mto_table.html`; tab-bar left intact (image/utilities loading still depends on mto_shell.js)
+- [x] Step 8 — Smoke-test: static files served correctly, grid:loaded dispatched at both init and reloadData, setGroupingOwned in SortFilter API, Grid.init synchronous. Manual browser test pending (user to verify combobox populates and filters grid).
 
 ---
 

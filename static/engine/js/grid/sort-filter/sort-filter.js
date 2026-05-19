@@ -14,6 +14,7 @@ const SortFilterManager = (() => {
     let _persistTimer     = null;
     let _outsideClick     = null;
     let _outsideKey       = null;
+    const _groupingOwned  = new Set(); // column slugs locked by Grouping Toolkit
 
     // ── State ─────────────────────────────────────────────────
 
@@ -76,6 +77,7 @@ const SortFilterManager = (() => {
 
     function isFilterActive(slug)           { return !!(_columnFilters[slug]?.length); }
     function getFilterTerms(slug)           { return _columnFilters[slug] || []; }
+    function setGroupingOwned(slug, owned)  { if (owned) _groupingOwned.add(slug); else _groupingOwned.delete(slug); }
 
     function setColumnFilter(slug, terms) {
         if (!terms || !terms.length) delete _columnFilters[slug]; else _columnFilters[slug] = terms;
@@ -115,6 +117,7 @@ const SortFilterManager = (() => {
     }
 
     function openFilterDropdown(slug, anchorEl, allRows) {
+        if (_groupingOwned.has(slug)) return;
         closeFilterDropdown();
         const col     = ColumnsManager.getColumns().find(c => c.slug === slug);
         const uniq    = [...new Set(allRows.map(r => String(r[slug] ?? '')))].sort();
@@ -220,6 +223,7 @@ const SortFilterManager = (() => {
             const filterBtn = e.target.closest('.th-filter-btn');
             if (filterBtn) {
                 e.stopPropagation();
+                if (_groupingOwned.has(filterBtn.dataset.slug)) return;
                 openFilterDropdown(filterBtn.dataset.slug, filterBtn, GridManager.getAllRows().filter(r => !r.is_deleted));
                 return;
             }
@@ -280,6 +284,7 @@ const SortFilterManager = (() => {
         loadState, getState, persistState, applyToRows,
         getSortDir, getSortIndex, setSortLevel, clearAllSort,
         isFilterActive, getFilterTerms, setColumnFilter, clearColumnFilter, clearAll,
+        setGroupingOwned,
         openFilterDropdown, closeFilterDropdown,
         updateHeaderIndicators, attachHeaderListeners, registerPanel,
     };

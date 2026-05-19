@@ -127,6 +127,7 @@ const GridManager = (() => {
                 SortFilterManager.updateHeaderIndicators();
             }
             document.addEventListener('grid:rowUpdated', e => refreshRowDOM(e.detail.rowId, e.detail.row));
+            document.dispatchEvent(new CustomEvent('grid:loaded'));
         } catch (err) {
             _showError(err.message);
         }
@@ -406,6 +407,7 @@ const GridManager = (() => {
         _searchQuery = "";
         _applyFilters();
         render();
+        document.dispatchEvent(new CustomEvent('grid:loaded'));
     }
 
     function setReadOnly(isReadOnly) {
