@@ -186,3 +186,62 @@
 **Decision:** `im.prefs.density` is now an integer (9–16). `setDensity(px)` looks up `_DENSITY_TABLE` and sets `--row-h`, `--cell-pad-y`, `--cell-pad-x` CSS vars directly on the root element. Legacy string values `'dense'`/`'comfortable'` are migrated to 12/14 on read. The `[data-density="comfortable"]` CSS block is deleted.
 **Rationale:** A slider gives fine-grained control; the old two-button segmented control was too coarse. CSS vars are already used by the grid for row height and cell padding.
 **Rejected:** Keeping the CSS `[data-density]` attribute approach — would need N attribute values instead of a JS lookup table; also prevents fractional intermediate sizes.
+
+---
+
+## D20 — Toolkit definition (Phase 1: Toolkit System Core)
+
+**Decision:** A toolkit is a configurable behavior layer on top of fixed engine infrastructure (grid-api, etl-api, DB). It defines UI behavior, data usage rules, and ETL/catalog configuration. It cannot create new backend routes or change DB structure directly.
+**Rationale:** Clear boundary prevents toolkit scope creep. Engine infrastructure stays stable; toolkits compose on top of it without forking anything.
+**Rejected:** Toolkit as full backend plugin — would duplicate engine infrastructure and break the separation between fixed platform and configurable behavior.
+
+## D21 — Host is a frontend orchestrator only (Phase 1)
+
+**Decision:** The Host (`static/engine/js/toolkit_host.js`) is a frontend-only module. It loads toolkit configs, instantiates toolkits, manages shared in-memory state, and routes events. It uses existing backend APIs (grid-api, etl-api) for persistence — it creates no new backend logic.
+**Rationale:** Backend infrastructure is already complete. The Host's job is wiring, not extending infrastructure.
+
+## D22 — Unified `toolkits` array in `engine.json` replaces `dashboard_uses` (Phase 1)
+
+**Decision:** `engine.json` uses a single `toolkits` array: `[{ "id", "version", "order", "type" }]`. `type` is `"frontend"` or `"backend+frontend"`. `dashboard_uses` is retired.
+**Rationale:** `grid-api v1` IS a toolkit — the split was artificial. One array covers all declarations uniformly.
+**Rejected:** Keeping `dashboard_uses` alongside a new `toolkits` array — two arrays for the same concept creates ambiguity.
+
+## D23 — Toolkit JS path resolved by convention (Phase 1)
+
+**Decision:** Toolkit with `"id": "grouping"` maps to `static/engine/js/toolkits/grouping/grouping.js`. No explicit `src` field in `engine.json`.
+**Rationale:** Convention over configuration. Consistent with existing grid toolkit path structure. Host derives path from ID.
+
+## D24 — Jinja2 renders toolkit `<script>` tags; Host never loads scripts dynamically (Phase 1)
+
+**Decision:** Engine templates emit `<script>` tags for declared toolkits in declaration `order` at render time. Host init runs after all scripts are already loaded.
+**Rationale:** Dynamic script injection introduces async race conditions and loader complexity. Static tags keep load order deterministic, consistent with existing grid script discipline.
+
+## D25 — `window.__ENGINE_CONFIG__` injected by Jinja2 at render time (Phase 1)
+
+**Decision:** Jinja2 injects `window.__ENGINE_CONFIG__ = { slug, toolInstanceId, dbPath, endpointBase, toolkits: [...] }` into the page. Host init is synchronous — no fetch needed at startup.
+**Rationale:** All data is available server-side at render time. Avoids an extra round-trip and keeps init simple.
+
+## D26 — `toolkit_config` table for per-instance DB config (Phase 1)
+
+**Decision:** Project DB has a `toolkit_config` table: `(tool_id TEXT, toolkit_id TEXT, config_json TEXT, PRIMARY KEY (tool_id, toolkit_id))`. Host fetches all rows for the tool instance in a single call at startup, merges with static defaults, passes merged config to each `init(ctx)`.
+**Rationale:** Instance-specific toolkit settings (grouping columns, catalog bindings) are per-tool, not deploy-time. Single fetch keeps startup simple.
+
+## D27 — Toolkit lifecycle = `init(ctx)` + `destroy()` only (Phase 1)
+
+**Decision:** Toolkits expose exactly two lifecycle methods. State changes use `host.on`. Browser events handle resize/visibility. No additional hooks added until a concrete need arises.
+**Rationale:** Minimal surface prevents over-engineering. Event-driven pattern already proven by existing grid modules.
+
+## D28 — Four-bucket shared state (Phase 1)
+
+**Decision:** Host shared state has four namespaced buckets: `engine` (immutable boot context), `toolkits` (per-toolkit owned state), `filters` (cross-toolkit data signals), `ui` (transient interface state — active toolkit, layout, open dialogs, temporary selections).
+**Rationale:** `filters` stays data-oriented; `ui` captures transient display state that should not mix with business signals.
+
+## D29 — Host event bus for cross-toolkit communication (Phase 1)
+
+**Decision:** Cross-toolkit communication uses `host.emit(event, payload)` / `host.on(event, handler)` exclusively. DOM CustomEvents are reserved for toolkit-internal behavior and existing grid internals.
+**Rationale:** Host is single source of truth for shared state. Routing mutations through the Host keeps state transitions visible and traceable. DOM events as a back channel would bypass Host control.
+
+## D30 — Host public API surface (Phase 1)
+
+**Decision:** The `host` object passed to `init(ctx)` exposes exactly: `emit`, `on`, `off`, `getState`, `setState`, `getToolkit(name)`, `config` (read-only merged static+DB config), `engine` (read-only boot context). No other surface.
+**Rationale:** `getToolkit` enables controlled direct access between toolkits (e.g. request grid refresh) without abusing shared state. Keeping the surface minimal prevents toolkits from coupling to Host internals.

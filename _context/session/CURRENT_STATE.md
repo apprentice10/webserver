@@ -11,6 +11,7 @@
 | Task | Plan file |
 |------|-----------|
 | Shared Toolkit Engine — Reframed Architecture | `~/.claude/plans/shared-toolkit-engine-reframed-bubbly-otter.md` |
+| Phase 1 — Toolkit System Core | `_context/project/plan_toolkit_core.md` |
 
 ---
 
