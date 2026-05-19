@@ -22,7 +22,8 @@ See decisions in `_context/project/shared-grid-toolkit.md`.
 | 91–103 | `getAllRows / getColumns / getActiveFilters` | Read-only snapshots: rows, column metadata, current filter state |
 | 106–124 | `setEndpointBase(newAddress)` | Full grid reset + reload per D-SGT-04 contract |
 | 126–128 | `reload()` | Reloads current endpoint — for ETL updates or external sync |
-| 131–133 | Return | `{ init }` — outer API for ToolkitHost |
+| 131–140 | `saveCellValue(rowId, field, value)` | Delegates to `ApiClient.updateCell`; does NOT update in-memory rows — caller must call `reload()` after all saves |
+| 143–145 | Return | `{ init }` — outer API for ToolkitHost |
 
 ## Decisions
 
@@ -33,3 +34,4 @@ See decisions in `_context/project/shared-grid-toolkit.md`.
 - **`setEndpointBase` order**: Follows D-SGT-04 exactly — clear filters → clear selection → release owned columns → clear local set → emit `grid:endpointChanged` → reconfigure `ApiClient` → `reloadData()`. Callers must assume the grid is fully reset after this call.
 - **PanelSystem guard**: `if (typeof PanelSystem !== 'undefined')` — allows the adapter to load in test environments without the full shell.
 - **`getAllRows()` snapshot**: delegates to `GridManager.getAllRows()` which returns `[..._rows]` (copy). Callers must not mutate the array. See performance note in `ENGINE_AUTHORING.md`.
+- **`saveCellValue` is an extension point for Catalog Toolkit (D-CAT)**: uses `ApiClient.updateCell` which already has the configured `endpointBase`. Caller (Catalog Toolkit) must call `reload()` after all saves to sync in-memory rows. Not part of the core Grid API contract.

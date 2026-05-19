@@ -1,3 +1,5 @@
+Updated: 2026-05-19 10:00
+
 # GLOSSARY.md
 
 *Domain-specific and codebase-specific terms. Read when unsure about naming.*
@@ -57,4 +59,14 @@
 **Self-Contained Engine** — An engine plugin whose Python backend, JS/CSS frontend, HTML template, and manifest all live under `engines/<slug>/`. The dashboard package provides only shared infrastructure; the engine folder can be zipped and redistributed independently.
 
 **Dynamic Loader** — The `main.py` startup routine that scans `engines/*/backend/routes.py` and `engines/*/static/`, imports each router, and mounts each static directory automatically. Adding a new engine requires no changes to `main.py`.
+
+**Catalog Toolkit** — The Phase 4 toolkit that decorates the Grid Toolkit with catalog synchronization. Provides TAG autocomplete, tracked-column autocomplete, automatic fill on TAG match, divergence detection, catalog mode toggle, and Save-to-catalog. Configuration key: `tracked_columns`.
+
+**Catalog Snapshot** — The full `catalog_{tool_id}` table loaded at toolkit init time. Stored in `toolkits.catalog` host state bucket. Shape: `{ [tag]: { col_slug: value, ... } }`. Updated by `Catalog.refreshSnapshot()`.
+
+**Tracked Column** — A column slug listed in the catalog toolkit's `tracked_columns` config. Receives all four catalog behaviors: autocomplete, auto-fill on TAG match, inclusion in Save-to-catalog, and divergence detection. See D-CAT-06.
+
+**Catalog Mode** — A grid view toggle that swaps the grid's dataset from the engine's working data to the catalog table (`catalog_{tool_id}`). Enabled via `Catalog.toggleCatalogMode()`. Grouping Toolkit continues to apply on top of whichever dataset is active.
+
+**catalog-drift** — CSS class applied to a `<td>` when the cell's current value differs from the catalog reference value for that TAG. Visual indicator only — does not block editing. Tooltip shows `data-catalog-tooltip` attribute value.
 

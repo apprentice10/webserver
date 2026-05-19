@@ -11,6 +11,7 @@
 | Task | Plan file |
 |------|-----------|
 | Shared Toolkit Engine — Reframed Architecture | `_context/project/shared-toolkit-engine-reframed.md` |
+| Phase 4 — Grid + Catalog Toolkit | `_context/project/catalog-toolkit.md` |
 
 ---
 

@@ -48,7 +48,8 @@ Apply after every completed step:
 |-------|--------|
 | Step completed | Check it off in the plan file |
 | Task fully done | Append one bullet to `session/DONE/<category>.md` + remove from `session/CURRENT_STATE.md` + move plan file to `_context/archive/` |
-| Cross-cutting decision made | Append to `infra/DECISIONS.md` |
+| Cross-cutting decision made | Create or update entry in `infra/DECISIONS.md` |
+| Existing decision changed/superseded | Update existing decision and mark prior state as superseded if needed |
 | Any file modified | Add/update `Updated: YYYY-MM-DD HH:mm` at the top of the file |
 | Any notable change | Append short timestamped entry near the changed section using format `[YY-MM-DD HH:mm]` |
 | New domain term introduced | Append to `infra/GLOSSARY.md` |

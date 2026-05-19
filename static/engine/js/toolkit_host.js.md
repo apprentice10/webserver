@@ -34,3 +34,6 @@ type: reference
 - **`host:ready` event**: emitted after all toolkits have been initialized. Payload: `{ config }`.
 - **Graceful missing toolkits**: if a declared toolkit's global is not found or has no `init()`, a console warning is issued and that toolkit is skipped — the page still loads.
 - **DB config fetch failure**: non-fatal. A console warning is issued and toolkits receive only the static defaults from `engine.json` declarations.
+- **`decl.config` as static defaults**: merged config uses `decl.config ?? decl.defaults ?? {}` as the base before DB overrides. `decl.config` is the engine.json-declared toolkit config (e.g. `tracked_columns`); `decl.defaults` is a legacy fallback.
+- **Catalog snapshot pre-seeded in state**: `_state.toolkits['catalog']` is populated from `data.catalog_snapshot` before any toolkit `init()` is called. `Catalog.init(ctx)` can read it immediately via `ctx.getState('toolkits', 'catalog')`.
+- **Response shape detection**: if the backend response has `typeof data.config === 'object'`, it is the new format. Otherwise it is the old flat format (backward-compat for any deployed engines that haven't migrated).

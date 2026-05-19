@@ -1,6 +1,7 @@
 /**
  * toolkits/grid/grid.js
  * ----------------------
+ * Updated: 2026-05-19 10:00
  * Grid Toolkit adapter IIFE.
  * Wraps the shared GridManager for use inside the ToolkitHost runtime.
  * One instance per engine page (current product constraint — D-SGT-05).
@@ -53,6 +54,7 @@ const Grid = (() => {
             setEndpointBase,
             reload,
             getActiveFilters,
+            saveCellValue,
         };
     }
 
@@ -140,6 +142,16 @@ const Grid = (() => {
 
     async function reload() {
         await GridManager.reloadData();
+    }
+
+    // --------------------------------------------------------
+    // CELL MUTATION (D-CAT — Catalog Toolkit extension point)
+    // --------------------------------------------------------
+
+    // Saves a single cell value via ApiClient (which already holds endpointBase).
+    // Does NOT update in-memory rows — caller must call reload() after all saves.
+    async function saveCellValue(rowId, field, value) {
+        return ApiClient.updateCell(Number(rowId), field, value);
     }
 
 

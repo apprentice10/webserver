@@ -1,0 +1,37 @@
+/* toolkits/catalog/catalog.css — Updated: 2026-05-19 10:00
+   Divergence indicator for tracked cells that differ from the catalog reference.
+   Include this file in any engine template that uses the Catalog Toolkit. */
+
+/* Drifted cell: amber left border + subtle background tint */
+td.catalog-drift {
+    box-shadow: inset 3px 0 0 #f59e0b;
+    background-color: rgba(245, 158, 11, 0.06);
+}
+
+/* Tooltip on hover via data-catalog-tooltip attribute */
+td.catalog-drift[data-catalog-tooltip] {
+    position: relative;
+    cursor: help;
+}
+
+td.catalog-drift[data-catalog-tooltip]::after {
+    content: attr(data-catalog-tooltip);
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 0;
+    z-index: 500;
+    white-space: nowrap;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    background: var(--color-surface-2, #374151);
+    color: var(--color-text-primary, #f9fafb);
+    box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s;
+}
+
+td.catalog-drift[data-catalog-tooltip]:hover::after {
+    opacity: 1;
+}

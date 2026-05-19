@@ -1,6 +1,7 @@
 /**
  * toolkit_host.js
  * ---------------
+ * Updated: 2026-05-19 10:00
  * Host IIFE: wires toolkit declarations from engine.json + DB config,
  * calls init(ctx) on each toolkit in declaration order, provides
  * a shared event bus and four-bucket state store.
@@ -76,20 +77,31 @@ const ToolkitHost = (() => {
         // Freeze engine bucket
         _state.engine = Object.freeze({ slug, toolInstanceId, dbPath, endpointBase });
 
-        // Fetch per-instance DB config
+        // Fetch per-instance DB config + catalog snapshot
+        // Response shape: { config: { [id]: {} }, catalog_snapshot: { [tag]: {} } }
         let dbConfig = {};
         try {
             const url = `${endpointBase}/api/engines/${slug}/tools/${toolInstanceId}/toolkit-config?db=${encodeURIComponent(dbPath)}`;
             const res = await fetch(url);
-            if (res.ok) dbConfig = await res.json();
+            if (res.ok) {
+                const data = await res.json();
+                if (data && typeof data.config === 'object') {
+                    dbConfig = data.config;
+                    if (data.catalog_snapshot) {
+                        _state.toolkits['catalog'] = data.catalog_snapshot;
+                    }
+                } else {
+                    dbConfig = data ?? {};
+                }
+            }
         } catch (e) {
             console.warn("[ToolkitHost] could not load toolkit-config from DB", e);
         }
 
-        // Build merged config: static defaults from declaration, overridden by DB config
+        // Build merged config: engine.json config (decl.config) as base, DB overrides on top
         const merged = {};
         for (const decl of (declarations ?? [])) {
-            merged[decl.id] = Object.assign({}, decl.defaults ?? {}, dbConfig[decl.id] ?? {});
+            merged[decl.id] = Object.assign({}, decl.config ?? decl.defaults ?? {}, dbConfig[decl.id] ?? {});
         }
         _config = Object.freeze(merged);
 

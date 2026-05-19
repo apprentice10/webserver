@@ -1,3 +1,5 @@
+Updated: 2026-05-19 10:00
+
 # Shared Grid Toolkit — Integration Guide
 
 The Shared Grid Toolkit is a set of vanilla-JS modules in `static/engine/js/grid/` that give any engine a fully functional data-grid with zero duplication. Sheet V1 is the reference consumer. MTO V1 (materials sub-table) is the second consumer, added in Group G.
@@ -128,6 +130,25 @@ Modules communicate via DOM `CustomEvent` dispatched on `document`. Prefix conve
 - Engine-specific toolbar buttons — each engine owns its own `toolbar.js`
 
 These are deliberately excluded so the grid stays reusable. See `GRID_API_CONTRACT.md` §"Not Part of This Contract".
+
+---
+
+## Grid Toolkit adapter public API (`toolkits/grid/grid.js`)
+
+When the grid is used through the ToolkitHost, `ctx.getToolkit('grid')` returns:
+
+| Method | Description |
+|--------|-------------|
+| `getAllRows()` | Snapshot of current in-memory rows (copy) |
+| `getColumns()` | Current column definitions |
+| `getActiveFilters()` | Current sort-filter state |
+| `setGroupingFilter(col, val)` | Apply single-value column filter (Grouping Toolkit) |
+| `clearGroupingFilter(col)` | Remove column filter |
+| `setGroupingOwned(col)` | Lock column filter UI |
+| `releaseGroupingOwned(col)` | Unlock column filter UI |
+| `setEndpointBase(url)` | Full grid reset + reload (D-SGT-04) |
+| `reload()` | Reload current endpoint |
+| `saveCellValue(rowId, field, value)` | Direct cell patch via ApiClient — does NOT update in-memory rows; caller must call `reload()` after all saves (Catalog Toolkit extension point) |
 
 ---
 

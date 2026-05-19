@@ -1,3 +1,5 @@
+Updated: 2026-05-19 10:00
+
 # DECISIONS.md
 
 *Architectural decisions and rejected alternatives. Consult before proposing changes.*
@@ -263,3 +265,24 @@
 **Decision:** The `type` field in the toolkit declaration determines the JS file path: `static/engine/js/toolkits/<type>/<type>.js`. The `id` field is the registration key used in `host.getToolkit(id)` and cross-toolkit references. `id` and `type` are equal for single-instance toolkits (e.g. `id: "grid"`, `type: "grid"`).
 **Rationale:** Allows future multi-instance support (two grids with different ids but same type). Current product constraint: one grid per page.
 **Note:** ToolkitHost currently uses `_toPascalCase(decl.id)` for module lookup — safe because `id === type` for all current toolkits. If multi-instance is needed, ToolkitHost must be updated to use `type` for lookup.
+
+## D34 — Catalog Toolkit bootstrap is a GET side-effect, not a migration (Phase 4)
+
+**Decision:** `catalog_{tool_id}` is created by `GET /toolkit-config` (idempotent `CREATE TABLE IF NOT EXISTS`). It is not a versioned migration and not in `DDL_SYSTEM_TABLES`.
+**Rationale:** Catalog table is tool-local, created on demand — not a system concern. Rolling it into migrations would require it to exist in every project DB regardless of whether the engine is used.
+
+## D35 — Catalog table uses JSON blob, not mirrored DDL columns (Phase 4)
+
+**Decision:** `catalog_{tool_id}` schema: `(tag TEXT PRIMARY KEY, data_json TEXT)`. Tracked column values are stored as a JSON object, not as dynamic DDL columns.
+**Rationale:** Avoids schema migration when ETL adds/removes columns. `GET /catalog/rows` expands the JSON into flat row dicts compatible with the grid renderer.
+**Rejected:** Mirrored DDL (`ALTER TABLE ADD COLUMN` per tracked column). Requires knowing column list at bootstrap time and adds schema-drift risk.
+
+## D36 — `decl.config` as static defaults in ToolkitHost (Phase 4)
+
+**Decision:** `ToolkitHost.init()` uses `decl.config ?? decl.defaults ?? {}` as the base layer before DB overrides. `decl.config` is the engine.json-declared toolkit config (e.g. `tracked_columns`).
+**Rationale:** Phase 1 code used `decl.defaults` which never existed in `engine.json`. Catalog Toolkit requires `tracked_columns` from `engine.json` config to be visible in `ctx.config['catalog']`.
+
+## D37 — Catalog snapshot pre-seeded in Host state before toolkit inits (Phase 4)
+
+**Decision:** `ToolkitHost.init()` populates `_state.toolkits['catalog']` from the toolkit-config response before calling any toolkit `init()`. `Catalog.init(ctx)` reads `ctx.getState('toolkits', 'catalog')` synchronously.
+**Rationale:** Catalog snapshot is needed at init time (for datalist population). Requiring Catalog.init to do an async fetch would race with Grid.init's background load.
