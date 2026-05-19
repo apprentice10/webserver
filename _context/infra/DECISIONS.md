@@ -1,4 +1,4 @@
-Updated: 2026-05-19 10:00
+Updated: 2026-05-19 17:00
 
 # DECISIONS.md
 
@@ -281,6 +281,19 @@ Updated: 2026-05-19 10:00
 
 **Decision:** `ToolkitHost.init()` uses `decl.config ?? decl.defaults ?? {}` as the base layer before DB overrides. `decl.config` is the engine.json-declared toolkit config (e.g. `tracked_columns`).
 **Rationale:** Phase 1 code used `decl.defaults` which never existed in `engine.json`. Catalog Toolkit requires `tracked_columns` from `engine.json` config to be visible in `ctx.config['catalog']`.
+
+## D38 — Shared backend services for toolkit-owned system tables (Phase 5)
+
+**Decision:** Image and annotation services (`dashboard/images.py`, `dashboard/annotations.py`) and their routes (`routes_images.py`, `routes_annotations.py`) live in `dashboard/` — the shared platform package — not inside the engine plugin folder. Engine routers include them via `include_router`.
+**Rationale:** Multiple engines can use the Drawing Toolkit. Copying routes into each engine would create N copies with identical logic. Placing them in `dashboard/` makes them engine-agnostic, mounted per-engine via the router include pattern already used for ETL.
+**Rejected:** Routes inside `engines/sheet_v1/backend/` — would require duplication for every engine that declares a `"type": "drawing"` toolkit.
+
+## D39 — Row link by TAG string, not internal ID (Phase 5)
+
+**Decision:** `_annotations.row_key` stores the TAG value (e.g. `"FT-101"`) rather than `__id`. Applies to any future toolkit data that needs to reference a grid row.
+**Rationale:** TAG is the stable domain identity. `__id` is an internal integer that changes across ETL reload cycles and DB exports. A broken TAG link (after a rename) is explicit and observable; a broken `__id` link would be silent data corruption.
+**Constraint:** Empty-TAG rows cannot be linked. TAG rename breaks the link explicitly — callers must handle `row_key` pointing to a non-existent row gracefully (treat as unlinked, not as an error).
+**Rejected:** `__id` FK link — unstable across ETL cycles; `row_tag` JOIN at query time — couples annotation queries to the tool table structure.
 
 ## D37 — Catalog snapshot pre-seeded in Host state before toolkit inits (Phase 4)
 

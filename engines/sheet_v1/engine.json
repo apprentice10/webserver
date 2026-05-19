@@ -5,7 +5,23 @@
   "slug": "sheet",
   "description": "General purpose structured data sheet.",
   "icon": "📋",
-  "toolkits": [],
+  "toolkits": [
+    {
+      "id": "drawing",
+      "type": "drawing",
+      "version": "1",
+      "order": 1,
+      "config": {
+        "displayMode": "float",
+        "styles": {
+          "pin":       { "color": "#e53935", "strokeWidth": 2 },
+          "arrow":     { "color": "#1e88e5", "strokeWidth": 2, "arrowHead": true },
+          "rectangle": { "color": "#43a047", "strokeWidth": 2, "fillColor": "#43a047", "fillOpacity": 0.1 },
+          "text":      { "color": "#6d4c41", "fontSize": 13 }
+        }
+      }
+    }
+  ],
   "uses_utilities": ["etl"],
   "ai_prompt": "This engine is a general-purpose table for structured records. Rows are individual entries, columns are user-defined fields. Supports ETL for automated data population.",
   "supports_template": false

@@ -1,15 +1,17 @@
 """
 dashboard/routes_toolkit.py
 ---------------------------
-Updated: 2026-05-19 10:00
+Updated: 2026-05-20 11:00
 Shared toolkit endpoints — engine-agnostic, project-DB backed.
-Handles per-instance config fetch, catalog table bootstrap, and catalog snapshot.
+Handles per-instance config fetch, catalog table bootstrap, catalog snapshot,
+and per-toolkit config upsert.
 """
 
 import json
 import re
 import sqlite3
-from fastapi import APIRouter, Depends
+from typing import Any, Dict
+from fastapi import APIRouter, Depends, Request
 from dashboard.project_db import get_project_conn
 
 router = APIRouter(prefix="/api/engines", tags=["toolkit"])
@@ -57,3 +59,23 @@ def get_toolkit_config(
             catalog_snapshot[r["tag"]] = {}
 
     return {"config": config, "catalog_snapshot": catalog_snapshot}
+
+
+@router.patch("/{slug}/tools/{tool_id}/toolkit-config/{toolkit_id}")
+async def patch_toolkit_config(
+    slug: str,
+    tool_id: str,
+    toolkit_id: str,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_project_conn),
+):
+    """Upsert the config JSON for one toolkit on a tool instance."""
+    body: Dict[str, Any] = await request.json()
+    conn.execute(
+        """INSERT INTO _toolkit_config (tool_id, toolkit_id, config_json)
+           VALUES (?, ?, ?)
+           ON CONFLICT (tool_id, toolkit_id) DO UPDATE SET config_json = excluded.config_json""",
+        (tool_id, toolkit_id, json.dumps(body))
+    )
+    conn.commit()
+    return {"ok": True}

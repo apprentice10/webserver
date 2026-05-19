@@ -1,4 +1,4 @@
-Updated: 2026-05-19 10:00
+Updated: 2026-05-19 17:00
 
 # GLOSSARY.md
 
@@ -69,4 +69,16 @@ Updated: 2026-05-19 10:00
 **Catalog Mode** — A grid view toggle that swaps the grid's dataset from the engine's working data to the catalog table (`catalog_{tool_id}`). Enabled via `Catalog.toggleCatalogMode()`. Grouping Toolkit continues to apply on top of whichever dataset is active.
 
 **catalog-drift** — CSS class applied to a `<td>` when the cell's current value differs from the catalog reference value for that TAG. Visual indicator only — does not block editing. Tooltip shows `data-catalog-tooltip` attribute value.
+
+**Drawing Toolkit** — Phase 5 toolkit (`window.Drawing`, `type: "drawing"` in `engine.json`). Attaches annotated engineering drawings (P&IDs, layouts, datasheets) to a tool instance. Manages image gallery, SVG annotation overlay, PDF pagination, and cross-toolkit row-highlight events.
+
+**Annotation** — A shape (Pin, Arrow, Rectangle, or Text) placed on a drawing image. Stored in `_annotations` per-project. Position in normalized 0.0–1.0 coordinates relative to image bounds (D-DRW-06). Optionally linked to a grid row via `row_key` (TAG string, D39).
+
+**Normalized Coordinates** — Annotation position stored as `x, y` in the range 0.0–1.0 relative to the rendered image dimensions. Rendering: `x_px = x * renderedWidth`. Format-agnostic, zoom-agnostic, survives container resize.
+
+**Tool Mode** — Interaction state of the Drawing Toolkit canvas. One of: `select`, `pin`, `arrow`, `rectangle`, `text`. Determines cursor style and pointer event behavior (drag = pan in select mode; drag = draw in shape modes).
+
+**`_images` table** — System table in the per-project DB storing image records per tool instance: `(id TEXT PK, tool_id TEXT, name TEXT, mime_type TEXT, blob BLOB, source_width INT, source_height INT, created_at TEXT)`. One row per uploaded image; deletion cascades to `_annotations`.
+
+**`_annotations` table** — System table in the per-project DB: `(id TEXT PK, image_id TEXT FK → _images, type TEXT, props_json TEXT, row_key TEXT, page INT, style_json TEXT, created_at TEXT)`. `props_json` holds shape-specific geometry. `row_key` links to a grid row's TAG value (D39).
 

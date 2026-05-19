@@ -1,3 +1,5 @@
+Updated: 2026-05-19 12:00
+
 # Plan: Shared Toolkit Engine — Reframed Architecture
 
 ## Goal
@@ -15,7 +17,7 @@ Each toolkit is implemented only after a `/grill-me` session locks its behavior.
 - [x] Step 3 — Phase 2: Grouping Toolkit — run `/grill-me`, then write sub-plan → `_context/project/grouping-toolkit.md`
 - [x] Step 4 — Phase 3: Shared Grid Toolkit — integration rules only (no redesign), write sub-plan → `_context/project/shared-grid-toolkit.md`
 - [x] Step 5 — Phase 4: Grid + Catalog Toolkit — implemented → `_context/project/catalog-toolkit.md` ✓
-- [ ] Step 6 — Phase 5: Image Toolkit — run `/grill-me`, then write sub-plan
+- [x] Step 6 — Phase 5: Drawing Toolkit — grill-me done → `_context/project/drawing-toolkit.md` ✓
 - [ ] Step 7 — Phase 6: Cross-Toolkit System — run `/grill-me`, then write sub-plan
 - [ ] Step 8 — Phase 7: Import / Export System — run `/grill-me`, then write sub-plan
 

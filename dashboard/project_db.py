@@ -23,7 +23,7 @@ BACKUPS_DIR = DATA_DIR / "backups"
 
 # Bump this whenever DDL_SYSTEM_TABLES or any system table structure changes.
 # See engine/project_db.py.md for the full rule.
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 SYSTEM_COLUMNS = {"tag", "rev", "log"}
 INTERNAL_PREFIX = "__"
@@ -166,6 +166,28 @@ CREATE TABLE IF NOT EXISTS _toolkit_config (
     toolkit_id TEXT NOT NULL,
     config_json TEXT NOT NULL DEFAULT '{}',
     PRIMARY KEY (tool_id, toolkit_id)
+);
+
+CREATE TABLE IF NOT EXISTS _images (
+    id            TEXT PRIMARY KEY,
+    tool_id       TEXT NOT NULL,
+    name          TEXT NOT NULL DEFAULT '',
+    mime_type     TEXT NOT NULL DEFAULT '',
+    blob          BLOB NOT NULL,
+    source_width  INTEGER,
+    source_height INTEGER,
+    created_at    TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS _annotations (
+    id         TEXT PRIMARY KEY,
+    image_id   TEXT NOT NULL REFERENCES _images(id) ON DELETE CASCADE,
+    type       TEXT NOT NULL,
+    row_key    TEXT,
+    page       INTEGER,
+    props_json TEXT NOT NULL DEFAULT '{}',
+    style_json TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
 );
 """
 
@@ -443,11 +465,37 @@ def _migrate_to_v12(conn: sqlite3.Connection) -> None:
             PRIMARY KEY (tool_id, toolkit_id))""")
 
 
+def _migrate_to_v13(conn: sqlite3.Connection) -> None:
+    """Add _images and _annotations system tables for Drawing Toolkit (Phase 5)."""
+    existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "_images" not in existing:
+        conn.execute("""CREATE TABLE _images (
+            id            TEXT PRIMARY KEY,
+            tool_id       TEXT NOT NULL,
+            name          TEXT NOT NULL DEFAULT '',
+            mime_type     TEXT NOT NULL DEFAULT '',
+            blob          BLOB NOT NULL,
+            source_width  INTEGER,
+            source_height INTEGER,
+            created_at    TEXT DEFAULT (datetime('now')))""")
+    if "_annotations" not in existing:
+        conn.execute("""CREATE TABLE _annotations (
+            id         TEXT PRIMARY KEY,
+            image_id   TEXT NOT NULL REFERENCES _images(id) ON DELETE CASCADE,
+            type       TEXT NOT NULL,
+            row_key    TEXT,
+            page       INTEGER,
+            props_json TEXT NOT NULL DEFAULT '{}',
+            style_json TEXT,
+            created_at TEXT DEFAULT (datetime('now')))""")
+
+
 _MIGRATIONS: dict = {
     1: _migrate_to_v1, 2: _migrate_to_v2, 3: _migrate_to_v3,
     4: _migrate_to_v4, 5: _migrate_to_v5, 6: _migrate_to_v6,
     7: _migrate_to_v7, 8: _migrate_to_v8, 9: _migrate_to_v9,
     10: _migrate_to_v10, 11: _migrate_to_v11, 12: _migrate_to_v12,
+    13: _migrate_to_v13,
 }
 
 

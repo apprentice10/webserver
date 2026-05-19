@@ -9,7 +9,7 @@
 |--------|-------------|
 | `DATA_DIR` | `Path` → `data/` in the project root |
 | `BACKUPS_DIR` | `Path` → `data/backups/` — pre-migration safety copies |
-| `SCHEMA_VERSION` | Current schema version integer — bump whenever DDL changes (see rule below). Currently 10. |
+| `SCHEMA_VERSION` | Current schema version integer — bump whenever DDL changes (see rule below). Currently 13. |
 | `SYSTEM_COLUMNS` | Set `{"tag", "rev", "log"}` — slugs reserved for system columns |
 | `INTERNAL_PREFIX` | `"__"` — prefix for internal columns (`__id`, `__position`, `__log`, `__created_at`) |
 | `DDL_SYSTEM_TABLES` | SQL to create `_tools`, `_columns`, `_trash`, `_overrides`, `_audit`, `_flags`, `_cell_flags`, `_templates`, `_revisions`, `_revision_snapshots` |
@@ -26,6 +26,7 @@
 | `_migrate_to_v8(conn)` | v7→v8: adds `sort_filter_state` column to `_tools` |
 | `_migrate_to_v9(conn)` | v8→v9: adds `note` to `_cell_flags`; creates `_conditional_flag_rules` |
 | `_migrate_to_v10(conn)` | v9→v10: creates MTO engine tables — `mto_typicals`, `mto_materials`, `mto_images`, `mto_utilities`, `mto_tag_placements` |
+| `_migrate_to_v13(conn)` | v12→v13: creates `_images` and `_annotations` system tables for Drawing Toolkit |
 | `_run_migrations(conn, db_path)` | Versioned migration runner: each step in a transaction, backup before |
 | `logger` | `logging.getLogger("engine.project_db")` — DEBUG on every open, ERROR with full traceback on any unhandled exception |
 | `get_project_conn(request)` | FastAPI dependency: opens connection, returns 403 on non-GET if DB is newer than server; logs db_path, method, and any unhandled exception |

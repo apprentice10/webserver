@@ -1,3 +1,5 @@
+Updated: 2026-05-19 17:00
+
 # infra/MODULE_LAYOUT.md
 
 **Description:** Authoritative map of every source module — its responsibility, location, and companion `.md` rule. Read this at the start of every session.
@@ -28,6 +30,10 @@
 | `dashboard/schemas.py` | Shared Pydantic base models (non-Sheet-specific) |
 | `dashboard/utils.py` | `slugify`, `now_str`, `format_log_entry`, `append_log` |
 | `dashboard/catalog.py` | Dynamic scanner: `engines/*/engine.json` → `ENGINE_CATALOG` |
+| `dashboard/images.py` | Image service for Drawing Toolkit: `list_images`, `get_image_blob`, `create_image`, `delete_image`, `replace_image_blob` |
+| `dashboard/routes_images.py` | Image HTTP endpoints (upload, list, blob, delete, replace) at `/api/engines/{slug}/tools/{id}/images/` |
+| `dashboard/annotations.py` | Annotation service for Drawing Toolkit: `list_annotations`, `create_annotation`, `update_annotation`, `delete_annotation` |
+| `dashboard/routes_annotations.py` | Annotation HTTP endpoints (list, create, update, delete) at `.../images/{image_id}/annotations/` |
 
 ## Backend — Sheet V1 Engine (`engines/sheet_v1/backend/`)
 
@@ -88,6 +94,13 @@
 | `etl_canvas_preview.js` | Edge-click partial preview panel |
 | `etl_dsl.js` | Restricted DSL formula bar (recursive-descent parser + serializer) |
 | `toolkit_host.js` | ToolkitHost IIFE: reads `engine.json` toolkit declarations, fetches DB config, merges, calls `init(ctx)` in order; shared event bus + four-bucket state store |
+
+## Frontend — Drawing Toolkit (`static/engine/js/toolkits/drawing/`)
+
+| Module | Responsibility |
+|--------|---------------|
+| `drawing.js` | Drawing Toolkit IIFE: image gallery, canvas rendering (img + SVG overlay), annotation CRUD, PDF rendering via pdf.js, tool mode toolbar, drag-to-move, cross-toolkit events |
+| `drawing.css` | Scoped `.drw-*` styles for panel, gallery strip, canvas area, PDF nav bar; injected dynamically by `drawing.js` |
 
 ## Frontend — Shared Grid Toolkit (`static/engine/js/grid/`)
 

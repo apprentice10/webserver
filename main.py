@@ -12,6 +12,8 @@ from core.routes import router as core_router, fs_router
 from dashboard.routes_etl import router as etl_router
 from dashboard.routes_toolkit import router as toolkit_router
 from dashboard.routes_catalog import router as catalog_router
+from dashboard.routes_images import router as images_router
+from dashboard.routes_annotations import router as annotations_router
 from dashboard.catalog import ENGINE_CATALOG
 
 app = FastAPI(
@@ -55,6 +57,8 @@ app.include_router(fs_router)
 app.include_router(etl_router)
 app.include_router(toolkit_router)
 app.include_router(catalog_router)
+app.include_router(images_router)
+app.include_router(annotations_router)
 
 
 @app.get("/", response_class=HTMLResponse)
