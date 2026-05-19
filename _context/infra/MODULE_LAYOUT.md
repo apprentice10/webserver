@@ -87,6 +87,7 @@
 | `etl_canvas_panel.js` | Type-specific side panels for canvas node editing |
 | `etl_canvas_preview.js` | Edge-click partial preview panel |
 | `etl_dsl.js` | Restricted DSL formula bar (recursive-descent parser + serializer) |
+| `toolkit_host.js` | ToolkitHost IIFE: reads `engine.json` toolkit declarations, fetches DB config, merges, calls `init(ctx)` in order; shared event bus + four-bucket state store |
 
 ## Frontend — Shared Grid Toolkit (`static/engine/js/grid/`)
 

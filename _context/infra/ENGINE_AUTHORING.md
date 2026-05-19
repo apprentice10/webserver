@@ -46,7 +46,7 @@ Convention: folder name is `<slug>_v<N>` (e.g. `sheet_v1`). The `slug` field in 
   "slug": "sheet",
   "description": "General purpose structured data sheet.",
   "icon": "📋",
-  "dashboard_uses": ["grid-api v1", "etl-api v1"],
+  "toolkits": [],
   "uses_utilities": ["etl"],
   "ai_prompt": "Plain-English description for the AI assistant.",
   "supports_template": false
@@ -61,7 +61,7 @@ Convention: folder name is `<slug>_v<N>` (e.g. `sheet_v1`). The `slug` field in 
 | `slug` | yes | Short identifier; used in DB (`type_slug`) and API prefix |
 | `description` | yes | Shown in the modal card |
 | `icon` | yes | Emoji or short string |
-| `dashboard_uses` | no | Declare which versioned toolkit APIs this engine relies on |
+| `toolkits` | no | Array of toolkit declarations (see **Toolkit system** section below) |
 | `uses_utilities` | no | Which utility categories this engine can activate |
 | `ai_prompt` | no | Context for the AI assistant (future feature) |
 | `utility_category` | no | Required when `type` is `"utility"` — groups utilities in `UTILITY_BY_CATEGORY` for fast lookup |
@@ -135,11 +135,89 @@ All three loops run at module import time (before the app starts serving). Dynam
 
 ---
 
-## Dashboard toolkit
+## Toolkit system
 
-Engines that declare `"dashboard_uses": ["grid-api v1"]` opt into the shared grid infrastructure. This is now an enforced declaration: any engine listing it must implement the full backend contract defined in `_context/grid/GRID_API_CONTRACT.md`.
+Toolkits are configurable behavior layers that sit on top of the fixed engine infrastructure (grid-api, etl-api, DB). They cannot create new backend routes or change DB structure directly — they compose existing APIs into higher-level behaviors.
 
-Engines that bring their own UI and do not use the grid or ETL can omit `dashboard_uses` entirely.
+### Declaring toolkits in engine.json
+
+```json
+"toolkits": [
+  { "id": "my-toolkit", "version": "1.0", "order": 1, "type": "frontend" }
+]
+```
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `id` | yes | Kebab-case identifier; also names the toolkit JS file |
+| `version` | yes | Semver string; used for future compatibility checks |
+| `order` | yes | Integer — toolkits are initialized in ascending order |
+| `type` | yes | `"frontend"` or `"backend+frontend"` |
+
+Toolkit JS is resolved by convention: `static/engine/js/toolkits/<id>/<id>.js`. Jinja2 renders the `<script>` tags from the `toolkits` array in `order`. No explicit `src` field — do not add one.
+
+### ToolkitHost API
+
+`ToolkitHost` is an IIFE defined in `static/engine/js/toolkit_host.js`. It is called explicitly by the template after all toolkit scripts are loaded:
+
+```js
+await ToolkitHost.init(window.__ENGINE_CONFIG__);
+```
+
+Public API surface:
+
+| Method / Property | Description |
+|-------------------|-------------|
+| `init(engineConfig)` | Async — fetch DB config, merge, call toolkit `init(ctx)` in order |
+| `emit(event, payload)` | Broadcast event on the shared bus |
+| `on(event, handler)` | Subscribe to an event |
+| `off(event, handler)` | Unsubscribe a handler |
+| `getState(bucket, key)` | Read from a state bucket (`engine`, `toolkits`, `filters`, `ui`) |
+| `setState(bucket, key, val)` | Write to a bucket; auto-emits `state:{bucket}:{key}` |
+| `getToolkit(id)` | Return a registered toolkit instance by id |
+| `config` | Read-only merged config (static defaults overridden by DB config) |
+| `engine` | Read-only engine context `{ slug, toolInstanceId, dbPath, endpointBase }` |
+
+### Writing a toolkit
+
+A toolkit is an IIFE that exports an `init(ctx)` function:
+
+```js
+const MyToolkit = (() => {
+    function init(ctx) {
+        // ctx.engine, ctx.config, ctx.emit, ctx.on, ctx.getState, ctx.setState, ctx.getToolkit
+        ctx.on('some:event', payload => { /* react */ });
+        return { /* optional public methods */ };
+    }
+    return { init };
+})();
+```
+
+Rules:
+- The global variable name must be `PascalCase(id)`. Id `"my-toolkit"` → global `MyToolkit`.
+- Toolkit file lives at `static/engine/js/toolkits/<id>/<id>.js`.
+- Cross-toolkit communication: only via `host.emit`/`host.on`. DOM CustomEvents are reserved for toolkit-internal behavior and existing grid internals.
+- Per-instance config is persisted in `_toolkit_config` table (project DB). Fetch via `GET /api/engines/{slug}/tools/{tool_id}/toolkit-config?db=...`.
+
+### window.__ENGINE_CONFIG__
+
+Injected by Jinja2 at render time. Shape:
+
+```js
+window.__ENGINE_CONFIG__ = {
+    slug: "sheet",           // engine slug from engine.json
+    toolInstanceId: "42",    // tool instance id (string)
+    dbPath: "/data/my.db",   // project DB path
+    endpointBase: "",        // API base (empty = same origin)
+    toolkits: [...],         // toolkits array from engine.json
+};
+```
+
+---
+
+## Dashboard toolkit (legacy)
+
+The `dashboard_uses` field has been replaced by the unified `toolkits` array (see above). Engines that declare grid-api or etl-api dependency now use `toolkits` instead. The shared grid infrastructure remains unchanged — only the declaration mechanism changed.
 
 ---
 
@@ -147,11 +225,15 @@ Engines that bring their own UI and do not use the grid or ETL can omit `dashboa
 
 ### 1. Declare intent in engine.json
 
+Add the grid toolkit to your `toolkits` array:
+
 ```json
-"dashboard_uses": ["grid-api v1"]
+"toolkits": [
+    { "id": "grid", "version": "1.0", "order": 1, "type": "frontend" }
+]
 ```
 
-This tells the dashboard loader that your engine depends on the shared grid toolkit.
+This tells the Host that your engine uses the shared grid toolkit.
 
 ### 2. Implement the backend contract
 
@@ -249,7 +331,7 @@ Features are enabled or disabled by the presence of the corresponding backend en
 ## Checklist for a new engine
 
 - [ ] Create `engines/<slug>_v<N>/` with `__init__.py`
-- [ ] Write `engine.json` with all required fields; add `"dashboard_uses": ["grid-api v1"]` if using the shared grid
+- [ ] Write `engine.json` with all required fields; add `toolkits` array entries if using toolkits (e.g. grid)
 - [ ] If backend needed: create `backend/__init__.py` and `backend/routes.py` with `router = APIRouter(prefix="/api/engines/<slug>", ...)`
 - [ ] If using the shared grid: implement the backend contract from `_context/grid/GRID_API_CONTRACT.md`; ensure all required system columns are returned in every row
 - [ ] If static files: create `static/js/` and/or `static/css/`; reference them in HTML as `/engines/<folder>/static/...`

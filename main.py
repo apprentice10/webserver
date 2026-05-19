@@ -1,4 +1,5 @@
 import importlib
+import json
 import jinja2
 from pathlib import Path
 
@@ -9,6 +10,8 @@ from fastapi.responses import HTMLResponse
 
 from core.routes import router as core_router, fs_router
 from dashboard.routes_etl import router as etl_router
+from dashboard.routes_toolkit import router as toolkit_router
+from dashboard.catalog import ENGINE_CATALOG
 
 app = FastAPI(
     title="Instrument Manager",
@@ -49,6 +52,7 @@ templates = Jinja2Templates(env=_jinja_env)
 app.include_router(core_router)
 app.include_router(fs_router)
 app.include_router(etl_router)
+app.include_router(toolkit_router)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -61,10 +65,20 @@ async def health_check():
     return {"status": "ok", "app": "Instrument Manager", "version": "0.4.0"}
 
 
+def _engine_toolkits(slug: str) -> list:
+    entry = next((e for e in ENGINE_CATALOG if e.get("slug") == slug), {})
+    return entry.get("toolkits", [])
+
+
 @app.get("/tool", response_class=HTMLResponse)
 async def tool_page(request: Request, db: str = Query(...), tool: int = Query(...)):
     return templates.TemplateResponse(
-        request, "table.html", {"db": db, "tool_id": tool}
+        request, "table.html", {
+            "db": db,
+            "tool_id": tool,
+            "engine_slug": "sheet",
+            "toolkits": _engine_toolkits("sheet"),
+        }
     )
 
 
@@ -92,5 +106,10 @@ async def etl_canvas_page(request: Request, db: str = Query(...), tool: int = Qu
 @app.get("/mto", response_class=HTMLResponse)
 async def mto_page(request: Request, db: str = Query(...), tool: int = Query(...)):
     return templates.TemplateResponse(
-        request, "mto_table.html", {"db": db, "tool_id": tool}
+        request, "mto_table.html", {
+            "db": db,
+            "tool_id": tool,
+            "engine_slug": "mto",
+            "toolkits": _engine_toolkits("mto"),
+        }
     )

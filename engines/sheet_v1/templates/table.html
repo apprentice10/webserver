@@ -268,7 +268,17 @@
 <script>
     const DB_PATH = {{ db | tojson }};
     const TOOL_ID = {{ tool_id }};
+    window.__ENGINE_CONFIG__ = {
+        slug: {{ engine_slug | tojson }},
+        toolInstanceId: String(TOOL_ID),
+        dbPath: DB_PATH,
+        endpointBase: "",
+        toolkits: {{ toolkits | tojson }},
+    };
 </script>
+<script src="/static/engine/js/toolkit_host.js"></script>
+{% for tk in toolkits %}<script src="/static/engine/js/toolkits/{{ tk.id }}/{{ tk.id }}.js"></script>
+{% endfor %}
 <script src="/static/engine/js/utils.js"></script>
 <script src="/static/engine/js/api.js"></script>
 <script src="/static/engine/js/grid/columns.js"></script>
@@ -697,6 +707,7 @@
         await ToolbarManager.init();
         await RevisionPicker.init();
         await GridManager.init({ endpointBase: '/api/engines/' + TOOL_ID });
+        await ToolkitHost.init(window.__ENGINE_CONFIG__);
     });
 </script>
 {% endblock %}

@@ -6,15 +6,15 @@ Implement the generic engine Host and the toolkit contract that all future toolk
 
 ## Steps
 
-- [ ] Step 1 — Add `toolkit_config` table to project DB schema (`project_db.py`): `(tool_id TEXT, toolkit_id TEXT, config_json TEXT, PRIMARY KEY (tool_id, toolkit_id))`
-- [ ] Step 2 — Add `GET /api/engines/{slug}/tools/{tool_id}/toolkit-config` endpoint: returns all rows for the tool instance as `{ [toolkit_id]: config_json_parsed }`
-- [ ] Step 3 — Write `static/engine/js/toolkit_host.js` IIFE: `init(engineConfig)`, `emit`, `on`, `off`, `getState`, `setState`, `getToolkit`, internal state store, event bus
-- [ ] Step 4 — Update `engine.json` format: replace `dashboard_uses` with unified `toolkits` array (`id`, `version`, `order`, `type`)
-- [ ] Step 5 — Update `engines/mto_v1/engine.json` to new format (migration of existing declaration)
-- [ ] Step 6 — Update Jinja2 base engine template to inject `window.__ENGINE_CONFIG__` and render toolkit `<script>` tags in `order`
-- [ ] Step 7 — Write `static/engine/js/toolkit_host.js.md` companion file
-- [ ] Step 8 — Update `ENGINE_AUTHORING.md` with toolkit contract, Host API surface, and `engine.json` new format
-- [ ] Step 9 — Update `MODULE_LAYOUT.md` with `toolkit_host.js` entry
+- [x] Step 1 — Add `toolkit_config` table to project DB schema (`project_db.py`): `(tool_id TEXT, toolkit_id TEXT, config_json TEXT, PRIMARY KEY (tool_id, toolkit_id))`
+- [x] Step 2 — Add `GET /api/engines/{slug}/tools/{tool_id}/toolkit-config` endpoint: returns all rows for the tool instance as `{ [toolkit_id]: config_json_parsed }`
+- [x] Step 3 — Write `static/engine/js/toolkit_host.js` IIFE: `init(engineConfig)`, `emit`, `on`, `off`, `getState`, `setState`, `getToolkit`, internal state store, event bus
+- [x] Step 4 — Update `engine.json` format: replace `dashboard_uses` with unified `toolkits` array (`id`, `version`, `order`, `type`)
+- [x] Step 5 — Update `engines/mto_v1/engine.json` to new format (migration of existing declaration)
+- [x] Step 6 — Update Jinja2 base engine template to inject `window.__ENGINE_CONFIG__` and render toolkit `<script>` tags in `order`
+- [x] Step 7 — Write `static/engine/js/toolkit_host.js.md` companion file
+- [x] Step 8 — Update `ENGINE_AUTHORING.md` with toolkit contract, Host API surface, and `engine.json` new format
+- [x] Step 9 — Update `MODULE_LAYOUT.md` with `toolkit_host.js` entry
 
 ## Decisions
 

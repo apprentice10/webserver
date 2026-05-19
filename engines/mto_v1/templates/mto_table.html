@@ -220,7 +220,17 @@
     const TOOL_ID  = {{ tool_id }};
     const MTO_DB   = DB_PATH;
     const MTO_TOOL = TOOL_ID;
+    window.__ENGINE_CONFIG__ = {
+        slug: {{ engine_slug | tojson }},
+        toolInstanceId: String(TOOL_ID),
+        dbPath: DB_PATH,
+        endpointBase: "",
+        toolkits: {{ toolkits | tojson }},
+    };
 </script>
+<script src="/static/engine/js/toolkit_host.js"></script>
+{% for tk in toolkits %}<script src="/static/engine/js/toolkits/{{ tk.id }}/{{ tk.id }}.js"></script>
+{% endfor %}
 <script src="/static/engine/js/utils.js"></script>
 <script src="/static/engine/js/api.js"></script>
 <script src="/static/engine/js/grid/columns.js"></script>
@@ -256,4 +266,9 @@
 <script src="/engines/mto_v1/static/js/mto_shell.js"></script>
 <script src="/engines/mto_v1/static/js/mto_import.js"></script>
 <script src="/engines/mto_v1/static/js/mto_export.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", async () => {
+        await ToolkitHost.init(window.__ENGINE_CONFIG__);
+    });
+</script>
 {% endblock %}

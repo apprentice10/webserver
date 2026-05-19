@@ -23,7 +23,7 @@ BACKUPS_DIR = DATA_DIR / "backups"
 
 # Bump this whenever DDL_SYSTEM_TABLES or any system table structure changes.
 # See engine/project_db.py.md for the full rule.
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 SYSTEM_COLUMNS = {"tag", "rev", "log"}
 INTERNAL_PREFIX = "__"
@@ -159,6 +159,13 @@ CREATE TABLE IF NOT EXISTS _revision_snapshots (
     tool_slug    TEXT NOT NULL,
     columns_json TEXT NOT NULL,
     rows_json    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS _toolkit_config (
+    tool_id    TEXT NOT NULL,
+    toolkit_id TEXT NOT NULL,
+    config_json TEXT NOT NULL DEFAULT '{}',
+    PRIMARY KEY (tool_id, toolkit_id)
 );
 """
 
@@ -425,11 +432,22 @@ def _migrate_to_v11(conn: sqlite3.Connection) -> None:
         )""")
 
 
+def _migrate_to_v12(conn: sqlite3.Connection) -> None:
+    """Add _toolkit_config table for per-instance toolkit configuration storage."""
+    existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "_toolkit_config" not in existing:
+        conn.execute("""CREATE TABLE _toolkit_config (
+            tool_id     TEXT NOT NULL,
+            toolkit_id  TEXT NOT NULL,
+            config_json TEXT NOT NULL DEFAULT '{}',
+            PRIMARY KEY (tool_id, toolkit_id))""")
+
+
 _MIGRATIONS: dict = {
     1: _migrate_to_v1, 2: _migrate_to_v2, 3: _migrate_to_v3,
     4: _migrate_to_v4, 5: _migrate_to_v5, 6: _migrate_to_v6,
     7: _migrate_to_v7, 8: _migrate_to_v8, 9: _migrate_to_v9,
-    10: _migrate_to_v10, 11: _migrate_to_v11,
+    10: _migrate_to_v10, 11: _migrate_to_v11, 12: _migrate_to_v12,
 }
 
 
