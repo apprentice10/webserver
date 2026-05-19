@@ -143,18 +143,42 @@ Toolkits are configurable behavior layers that sit on top of the fixed engine in
 
 ```json
 "toolkits": [
-  { "id": "my-toolkit", "version": "1.0", "order": 1, "type": "frontend" }
+  {
+    "id": "my-toolkit",
+    "type": "my-toolkit",
+    "version": "1",
+    "order": 1,
+    "config": { "someKey": "someValue" }
+  }
 ]
 ```
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `id` | yes | Kebab-case identifier; also names the toolkit JS file |
-| `version` | yes | Semver string; used for future compatibility checks |
-| `order` | yes | Integer — toolkits are initialized in ascending order |
-| `type` | yes | `"frontend"` or `"backend+frontend"` |
+| `id` | yes | Kebab-case instance identifier; used as the registration key in `host.getToolkit(id)` |
+| `type` | yes | Matches the toolkit JS file name — `static/engine/js/toolkits/<type>/<type>.js` |
+| `version` | yes | Semver string |
+| `order` | yes | Integer — toolkits are initialized in ascending order; a toolkit that depends on another must have a higher `order` |
+| `config` | no | Static defaults merged with DB config; available as `ctx.config[id]` inside the toolkit |
 
-Toolkit JS is resolved by convention: `static/engine/js/toolkits/<id>/<id>.js`. Jinja2 renders the `<script>` tags from the `toolkits` array in `order`. No explicit `src` field — do not add one.
+Toolkit JS is resolved by convention: `static/engine/js/toolkits/<type>/<type>.js`. The global name is `PascalCase(type)` (e.g. type `"my-toolkit"` → `window.MyToolkit`). ToolkitHost calls `window[PascalCase(type)].init(ctx, decl)`.
+
+**Grid Toolkit declaration** (D-SGT-09):
+
+```json
+{
+  "id": "grid",
+  "type": "grid",
+  "version": "1",
+  "order": 1,
+  "config": {
+    "endpointBase": "/api/engines/mto/{toolId}/materials",
+    "featureLevel": "extended"
+  }
+}
+```
+
+`endpointBase` supports `{placeholder}` tokens — resolved from `window.__ENGINE_CONFIG__` at init time. `{toolId}` is the common case; any key in `ctx.engine` is valid. `featureLevel` is optional — runtime detection wins (D-SGT-07).
 
 ### ToolkitHost API
 
@@ -180,12 +204,14 @@ Public API surface:
 
 ### Writing a toolkit
 
-A toolkit is an IIFE that exports an `init(ctx)` function:
+A toolkit is an IIFE that exports an `init(ctx, decl)` function:
 
 ```js
 const MyToolkit = (() => {
-    function init(ctx) {
-        // ctx.engine, ctx.config, ctx.emit, ctx.on, ctx.getState, ctx.setState, ctx.getToolkit
+    function init(ctx, decl) {
+        // decl.id — instance id (registration key)
+        // ctx.config[decl.id] — merged config for this instance
+        // ctx.engine — { slug, toolInstanceId, dbPath, endpointBase }
         ctx.on('some:event', payload => { /* react */ });
         return { /* optional public methods */ };
     }
@@ -302,25 +328,27 @@ See `engines/sheet_v1/templates/table.html` or `engines/mto_v1/templates/mto_tab
 
 ### 4. Initialize the grid
 
-Call `Grid.init(config)` after the DOM is ready. The only required field is `endpointBase`:
+**When using the Grid Toolkit adapter** (recommended for new engines): declare the toolkit in `engine.json` with `"type": "grid"` and set `config.endpointBase`. ToolkitHost will call `Grid.init(ctx, decl)` automatically — the adapter owns `PanelSystem.init()` and `GridManager.init()`. The page template must NOT call these directly.
 
-```js
-Grid.init({
-  endpointBase: `/api/engines/cable/${toolId}`,
-  db: currentDbPath,   // URL-encoded path to the SQLite file
-});
+```json
+{ "id": "grid", "type": "grid", "version": "1", "order": 1,
+  "config": { "endpointBase": "/api/engines/cable/{toolId}" } }
 ```
 
-**Sub-table grids** (a grid scoped to a child entity, e.g. materials inside a typical) encode the filter directly in `endpointBase`:
+After init, access the adapter via `ToolkitHost.getToolkit('grid')` to call `setGroupingFilter`, `setEndpointBase`, `getAllRows`, etc.
+
+**Sub-table grids** (grid scoped to a child entity, e.g. materials inside a typical): use `{toolId}` in the base `endpointBase` and call `setEndpointBase(newUrl)` when the user selects a different sub-entity:
 
 ```js
-Grid.init({
-  endpointBase: `/api/engines/mto/${toolId}/materials/${typicalId}`,
-  db: currentDbPath,
-});
+const grid = ToolkitHost.getToolkit('grid');
+await grid.setEndpointBase(`/api/engines/mto/${toolId}/materials/${typicalId}`);
 ```
 
-The grid has no knowledge of the filter — the backend routes handle scoping. See `engines/mto_v1/static/js/mto_shell.js` for a live example.
+`setEndpointBase` clears all filters, selection, and grouping state before reloading (D-SGT-04). Callers must assume the grid is fully reset.
+
+> **Performance note**: `getAllRows()` returns a full snapshot of the in-memory row array. For engines with very large datasets this will be slow — do not call in a tight loop. A paginated variant is a future extension point.
+
+**Sheet V1 (legacy path, no adapter)**: `GridManager.init({ endpointBase })` is called explicitly in the template's `DOMContentLoaded` block. This path remains valid — no forced migration.
 
 ### 5. Optional features
 

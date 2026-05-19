@@ -5,7 +5,18 @@
   "slug": "mto",
   "description": "Typical Assembly and Material Take-Off.",
   "icon": "🔩",
-  "toolkits": [],
+  "toolkits": [
+    {
+      "id": "grid",
+      "type": "grid",
+      "version": "1",
+      "order": 1,
+      "config": {
+        "endpointBase": "/api/engines/mto/{toolId}/materials",
+        "featureLevel": "extended"
+      }
+    }
+  ],
   "uses_utilities": ["etl"],
   "ai_prompt": "This engine manages typical assemblies for material take-off. Each typical is a reusable engineering design template with a materials table, an image, and ETL-driven utilities.",
   "supports_template": false

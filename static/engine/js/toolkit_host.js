@@ -113,7 +113,7 @@ const ToolkitHost = (() => {
                 continue;
             }
             try {
-                const instance = tk.init(ctx);
+                const instance = tk.init(ctx, decl);
                 _toolkits[decl.id] = instance ?? {};
             } catch (e) {
                 console.error("[ToolkitHost] init() failed for toolkit:", decl.id, e);

@@ -29,6 +29,7 @@
 | `_ctxColSlugLog` | `string\|null` | Col slug of any data cell for the cell-log sidebar action |
 | `_editingInput` | — | Moved to `CellKeyboard` (P4-G2); use `CellKeyboard.isEditing()` |
 | `_rafPending`    | `boolean`     | Virtual scroll: true while a `requestAnimationFrame` render is already queued; prevents RAF stacking on fast scroll |
+| `_initialized`   | `boolean`     | Set to `true` on first `init()` call; makes subsequent calls no-ops (prevents double-init when adapter + legacy code both call init) |
 
 > `_logSidebarCtx` removed in P4-H6 → moved to `HistoryPanel`.
 > `_doSaveCell`, `_updateLogCell` removed in P4-G7 → moved to `CellSave`.

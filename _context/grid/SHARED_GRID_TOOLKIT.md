@@ -48,23 +48,22 @@ undo/undo-manager.js, flags.js, sidebar.js
 ```
 Then `grid.js` last among grid modules (it orchestrates all the others).
 
-**Step 4 — call `GridManager.init` once, `GridManager.reloadData` on sub-entity switch:**
-```js
-// First load for this host page
-await GridManager.init({ endpointBase });
+**Step 4 — let the Grid Toolkit adapter own init (recommended):**
 
-// Switching to a different typical/sub-entity — no re-init
-ApiClient.configure({ endpointBase: newBase });
-await GridManager.reloadData();
+Declare `{ "id": "grid", "type": "grid", ... }` in `engine.json`. ToolkitHost will call `Grid.init(ctx, decl)`, which calls `PanelSystem.init()` then `GridManager.init()` in the correct order. The page template must NOT call these directly.
+
+For sub-entity switching, call:
+```js
+await ToolkitHost.getToolkit('grid').setEndpointBase(newUrl);
 ```
 
-`GridManager.init` is idempotent only in a fresh page load. Do not call it twice in the same page — use `reloadData` for subsequent loads.
+This clears filters, selection, and grouping state before reloading (D-SGT-04).
 
-**Step 5 — init PanelSystem before GridManager** if your page uses sidebars/floats:
-```js
-PanelSystem.init();
-await GridManager.init({ endpointBase });
-```
+**Auto-init guard (D-SGT-10):** `grid.js` checks `window.__ENGINE_CONFIG__` at load time. When present (any ToolkitHost page), `grid.js` does NOT register a DOMContentLoaded auto-start — init is delegated to the adapter. When absent (legacy/no-toolkit pages), `grid.js` auto-starts on DOMContentLoaded with an empty `endpointBase`. The guard is triggered by the presence of `window.__ENGINE_CONFIG__`, which is injected by Jinja2 before grid scripts load — verify template ordering if Sheet V1 breaks.
+
+`GridManager.init` has an `_initialized` guard: the second call in the same page load is a no-op. This prevents double-init during the transitional period when both mto_shell.js and the adapter may call it.
+
+**Step 5 — PanelSystem:** no longer needed when using the adapter — the adapter owns PanelSystem.init(). For the legacy explicit-call path: init PanelSystem before GridManager.
 
 ---
 
@@ -136,8 +135,8 @@ These are deliberately excluded so the grid stays reusable. See `GRID_API_CONTRA
 
 | Engine | endpointBase pattern | Feature level | Init location |
 |--------|---------------------|---------------|---------------|
-| Sheet V1 | `/api/engines/{toolId}` | Core + Extended + Optional | `table.html` (auto-init via `grid.js`) |
-| MTO V1 materials | `/api/engines/mto/{toolId}/materials/{typicalId}` | Core + Extended | `mto_shell.js::_loadMaterials()` |
+| Sheet V1 | `/api/engines/{toolId}` | Core + Extended + Optional | `table.html` explicit DOMContentLoaded call (no adapter — legacy path) |
+| MTO V1 materials | `/api/engines/mto/{toolId}/materials/{typicalId}` | Core + Extended | Grid Toolkit adapter (`engine.json` → ToolkitHost → `Grid.init`); `mto_shell.js._loadMaterials` blocked by `_initialized` guard during transition |
 
 ---
 

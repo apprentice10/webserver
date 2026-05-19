@@ -28,6 +28,7 @@ const GridManager = (() => {
     let _showDeleted  = false;  // Mostra righe eliminate?
     let _searchQuery  = "";     // Query ricerca corrente
     let _rafPending    = false; // virtual scroll: RAF throttle flag
+    let _initialized  = false; // guard: prevents double-init when adapter + template both call init()
     // _editingInput → CellKeyboard (P4-G2)
     // _ctxRowId/ColSlug/ColSlugLog/FlagsCache → ContextMenu (P4-G3)
 
@@ -37,6 +38,8 @@ const GridManager = (() => {
     // --------------------------------------------------------
 
     async function init({ endpointBase = '' } = {}) {
+        if (_initialized) return;
+        _initialized = true;
         ApiClient.configure({ endpointBase });
         try {
             await ColumnsManager.loadColumns();
@@ -621,6 +624,12 @@ const GridManager = (() => {
 
 })();
 
+
+// Auto-init guard: when ToolkitHost is present (__ENGINE_CONFIG__ defined), init is delegated to
+// the Grid Toolkit adapter. For pages without a toolkit runtime, auto-start on DOMContentLoaded.
+if (!window.__ENGINE_CONFIG__) {
+    document.addEventListener('DOMContentLoaded', () => GridManager.init());
+}
 
 // showToast — alias globale per compatibilità con chiamate dirette nei template
 const showToast = Utils.showToast;

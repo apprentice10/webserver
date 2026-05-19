@@ -245,3 +245,21 @@
 
 **Decision:** The `host` object passed to `init(ctx)` exposes exactly: `emit`, `on`, `off`, `getState`, `setState`, `getToolkit(name)`, `config` (read-only merged static+DB config), `engine` (read-only boot context). No other surface.
 **Rationale:** `getToolkit` enables controlled direct access between toolkits (e.g. request grid refresh) without abusing shared state. Keeping the surface minimal prevents toolkits from coupling to Host internals.
+
+## D31 — ToolkitHost passes `decl` as second arg to `tk.init(ctx, decl)` (Phase 3)
+
+**Decision:** `ToolkitHost` calls `tk.init(ctx, decl)` where `decl` is the full declaration object from `engine.json` (includes `id`, `type`, `config`, `version`, `order`). Toolkits use `decl.id` to read `ctx.config[decl.id]`.
+**Rationale:** Toolkits need their own instance id to find their config in the shared `ctx.config` map. Without `decl`, a toolkit would need to hardcode its id, breaking reusability.
+**Non-breaking:** Toolkits that only accept `ctx` simply ignore the second arg.
+
+## D32 — Grid Toolkit adapter owns PanelSystem + GridManager init (Phase 3)
+
+**Decision:** The Grid Toolkit adapter (`static/engine/js/toolkits/grid/grid.js`) is the sole caller of `PanelSystem.init()` and `GridManager.init()` on toolkit-aware pages. Page templates must NOT call these directly when a `"type": "grid"` toolkit is declared.
+**Rationale:** Centralizes init order (PanelSystem before GridManager, D-SGT-02). Prevents double-init — `GridManager._initialized` guard makes the second call a no-op as a safety net.
+**Legacy path:** Sheet V1 still calls `GridManager.init()` explicitly (no grid toolkit adapter declared). Both paths are valid.
+
+## D33 — `engine.json` toolkit `type` field drives JS module resolution (Phase 3)
+
+**Decision:** The `type` field in the toolkit declaration determines the JS file path: `static/engine/js/toolkits/<type>/<type>.js`. The `id` field is the registration key used in `host.getToolkit(id)` and cross-toolkit references. `id` and `type` are equal for single-instance toolkits (e.g. `id: "grid"`, `type: "grid"`).
+**Rationale:** Allows future multi-instance support (two grids with different ids but same type). Current product constraint: one grid per page.
+**Note:** ToolkitHost currently uses `_toPascalCase(decl.id)` for module lookup — safe because `id === type` for all current toolkits. If multi-instance is needed, ToolkitHost must be updated to use `type` for lookup.
